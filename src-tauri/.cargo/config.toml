@@ -1,0 +1,5 @@
+# 미리 빌드된 sherpa-onnx Windows 정적 라이브러리는 C 런타임을 정적(/MT)으로 넣었다.
+# Rust와 whisper.cpp도 /MT로 맞추지 않으면 msvcrt와 LIBCMT가 섞여 링크가 깨진다.
+# onnxruntime이 쓰는 ETW 로깅과 레지스트리 함수(advapi32)는 sherpa-rs가 링크하지 않아 직접 넣는다
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static", "-C", "link-arg=advapi32.lib"]
