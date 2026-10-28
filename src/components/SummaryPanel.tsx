@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { api, Provider, PROVIDER_LABEL, ProviderStatus, Summary } from "../api";
+import { useCommands } from "../shortcuts";
 
 interface Props {
   recordingId: string;
@@ -38,6 +39,11 @@ export function SummaryPanel({ recordingId, summary, onSummarized }: Props) {
       setRunning(false);
     }
   };
+
+  useCommands((command) => {
+    if (command === "summarize" && !running && provider) run();
+    if (command === "cancel" && running) api.cancelSummary(recordingId);
+  });
 
   const copy = async () => {
     if (!summary) return;

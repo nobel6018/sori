@@ -1,0 +1,66 @@
+{
+  "$schema": "https://www.raycast.com/schemas/extension.json",
+  "name": "sori",
+  "title": "sori",
+  "description": "sori 녹음의 전사를 검색하고, 요약과 전사를 마크다운으로 복사하고, 녹음을 켜고 끕니다",
+  "icon": "icon.png",
+  "author": "nobel6018",
+  "categories": ["Productivity"],
+  "license": "MIT",
+  "platforms": ["macOS"],
+  "commands": [
+    {
+      "name": "search-transcripts",
+      "title": "Search Transcripts",
+      "subtitle": "sori",
+      "description": "모든 녹음의 제목, 요약, 전사에서 찾습니다",
+      "mode": "view",
+      "keywords": ["전사 검색", "녹음 검색"]
+    },
+    {
+      "name": "recent-recordings",
+      "title": "Recent Recordings",
+      "subtitle": "sori",
+      "description": "최근 녹음의 요약과 전사를 미리 보고 마크다운으로 복사합니다",
+      "mode": "view",
+      "keywords": ["최근 녹음"]
+    },
+    {
+      "name": "toggle-recording",
+      "title": "Toggle Recording",
+      "subtitle": "sori",
+      "description": "녹음을 시작하거나 멈춥니다",
+      "mode": "no-view",
+      "keywords": ["녹음 시작", "녹음 멈춤"]
+    },
+    {
+      "name": "import-selected",
+      "title": "Import Selected Audio",
+      "subtitle": "sori",
+      "description": "Finder에서 고른 오디오를 sori로 가져와 바로 받아 적습니다",
+      "mode": "no-view",
+      "keywords": ["가져오기"]
+    },
+    {
+      "name": "recording-status",
+      "title": "Recording Status",
+      "subtitle": "sori",
+      "description": "메뉴 막대에 녹음 중인지와 경과 시간을 보여 줍니다",
+      "mode": "menu-bar",
+      "interval": "10s"
+    }
+  ],
+  "dependencies": {
+    "@raycast/api": "2.7.3"
+  },
+  "devDependencies": {
+    "@types/node": "22.13.10",
+    "@types/react": "19.1.8",
+    "typescript": "5.9.3"
+  },
+  "scripts": {
+    "build": "ray build -e dist",
+    "dev": "ray develop",
+    "lint": "ray lint"
+  }
+}

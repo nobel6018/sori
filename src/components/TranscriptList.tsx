@@ -1,13 +1,7 @@
 import { memo, useEffect, useRef } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { formatTime, Recording, speakerName, Utterance } from "../api";
-
-export interface Block {
-  speaker: number;
-  start: number;
-  end: number;
-  utterances: Utterance[];
-}
+import { formatTime, Recording, speakerName } from "../api";
+import { Block } from "../markdown";
 
 interface Props {
   blocks: Block[];
@@ -15,6 +9,8 @@ interface Props {
   currentTime: number;
   /** 재생 중이고 자동 스크롤이 켜져 있을 때만 true */
   follow: boolean;
+  /** 검색 결과로 열었을 때 한 번 옮겨 갈 시각 */
+  scrollTarget: { time: number; nonce: number } | null;
   onSeek: (time: number) => void;
 }
 
@@ -35,7 +31,7 @@ function findActive(blocks: Block[], time: number): number {
  * 화면에 보이는 블록만 그린다. 1시간 회의면 블록이 수백 개라,
  * 재생 중 0.25초마다 전부 다시 그리면 스크롤이 끊긴다
  */
-export function TranscriptList({ blocks, recording, currentTime, follow, onSeek }: Props) {
+export function TranscriptList({ blocks, recording, currentTime, follow, scrollTarget, onSeek }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const virtualizer = useVirtualizer({
     count: blocks.length,
@@ -51,6 +47,14 @@ export function TranscriptList({ blocks, recording, currentTime, follow, onSeek 
   useEffect(() => {
     if (follow && active >= 0) virtualizer.scrollToIndex(active, { align: "auto" });
   }, [active, follow, virtualizer]);
+
+  useEffect(() => {
+    if (!scrollTarget) return;
+    const index = findActive(blocks, scrollTarget.time);
+    // 발화 사이 빈 구간이면 그 뒤 첫 블록으로 간다
+    const target = index >= 0 ? index : blocks.findIndex((b) => b.start >= scrollTarget.time);
+    if (target >= 0) virtualizer.scrollToIndex(target, { align: "center" });
+  }, [scrollTarget, blocks, virtualizer]);
 
   if (blocks.length === 0) return <p className="muted">받아 적은 내용이 없습니다.</p>;
 

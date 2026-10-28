@@ -1,8 +1,10 @@
+mod actions;
 pub mod engine;
 pub mod download;
 pub mod models;
 mod recorder;
 pub mod store;
+pub mod search;
 pub mod summarize;
 
 use std::collections::HashMap;
@@ -37,6 +39,9 @@ struct AppState {
     summaries: Mutex<HashMap<String, tokio::sync::oneshot::Sender<()>>>,
     /// 모델 내려받기 중이면 취소 신호
     model_install: Mutex<Option<Arc<AtomicBool>>>,
+    search: search::Index,
+    /// 시작할 때 전역 단축키를 등록하지 못했으면 그 이유. 화면이 준비되면 알린다
+    shortcut_error: Mutex<Option<String>>,
 }
 
 impl AppState {
@@ -84,8 +89,42 @@ fn get_settings(state: State<AppState>) -> Settings {
 }
 
 #[tauri::command]
-fn save_settings(state: State<AppState>, settings: Settings) -> CmdResult<()> {
+fn save_settings(app: AppHandle, state: State<AppState>, settings: Settings) -> CmdResult<()> {
+    let previous = state.store.get_settings(&state.home);
+    if previous.shortcuts != settings.shortcuts {
+        // 등록에 실패하면 이전 단축키로 되돌리고 저장하지 않는다
+        actions::apply_shortcuts(&app, &settings.shortcuts, Some(&previous.shortcuts))?;
+        state.shortcut_error.lock().unwrap().take();
+    }
     state.store.save_settings(&settings).map_err(err)
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ReadyInfo {
+    pending: Vec<actions::Action>,
+    shortcut_error: Option<String>,
+}
+
+/// 화면이 app-action 이벤트를 구독한 뒤 부른다. 앱을 띄운 딥링크처럼 그 전에 들어온 요청을 넘겨준다
+#[tauri::command]
+fn frontend_ready(app: AppHandle, state: State<AppState>) -> ReadyInfo {
+    ReadyInfo {
+        pending: actions::take_pending(&app),
+        shortcut_error: state.shortcut_error.lock().unwrap().clone(),
+    }
+}
+
+#[tauri::command]
+async fn search_recordings(app: AppHandle, query: String) -> CmdResult<Vec<search::RecordingHits>> {
+    // 녹음이 많으면 파일을 읽는 데 시간이 걸리므로 화면 스레드를 막지 않는다
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        search::search(&state.store, &state.search, &query)
+    })
+    .await
+    .map_err(err)?
+    .map_err(|e| format!("{e:#}"))
 }
 
 #[tauri::command]
@@ -478,6 +517,30 @@ async fn process_recording(app: AppHandle, request: ProcessRequest) -> CmdResult
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // 다른 플러그인보다 먼저 등록해야 두 번째 실행을 가장 먼저 가로챈다
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            // 딥링크는 deep-link 플러그인이 넘겨받는다. 녹음 토글 링크로 창이 앞에 뜨지 않도록 여기서는 건드리지 않는다
+            if args.iter().any(|a| a.starts_with("sori:")) {
+                return;
+            }
+            let files = opened_files(args.iter().skip(1).map(PathBuf::from));
+            if files.is_empty() {
+                actions::show_main(app);
+            } else {
+                actions::dispatch(app, actions::Action::Import { paths: files, process: false });
+            }
+        }))
+        .plugin(tauri_plugin_deep_link::init())
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, shortcut, event| {
+                    if event.state() == tauri_plugin_global_shortcut::ShortcutState::Pressed {
+                        actions::on_shortcut(app, shortcut);
+                    }
+                })
+                .build(),
+        )
+        .manage(actions::Bus::new())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
@@ -512,7 +575,22 @@ pub fn run() {
                 recorder: Mutex::new(None),
                 summaries: Mutex::new(HashMap::new()),
                 model_install: Mutex::new(None),
+                search: search::Index::default(),
+                shortcut_error: Mutex::new(None),
             });
+
+            let handle = app.handle().clone();
+            let settings = app.state::<AppState>().store.get_settings(&home_dir(&handle));
+            if let Err(e) = actions::apply_shortcuts(&handle, &settings.shortcuts, None) {
+                *app.state::<AppState>().shortcut_error.lock().unwrap() = Some(e);
+            }
+
+            setup_deep_links(app)?;
+            // Windows는 파일을 sori로 열면 경로를 실행 인자로 넘긴다. macOS는 RunEvent::Opened로 온다
+            let files = opened_files(std::env::args_os().skip(1).map(PathBuf::from));
+            if !files.is_empty() {
+                actions::dispatch(&handle, actions::Action::Import { paths: files, process: false });
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -535,7 +613,60 @@ pub fn run() {
             default_summary_prompt,
             summarize_recording,
             cancel_summary,
+            frontend_ready,
+            search_recordings,
+            reveal_audio,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while running tauri application")
+        .run(|app, event| {
+            // Finder에서 "다음으로 열기 > sori"를 고르거나 Dock 아이콘에 파일을 끌어다 놓은 경우
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Opened { urls } = event {
+                let files = opened_files(urls.iter().filter_map(|u| u.to_file_path().ok()));
+                if !files.is_empty() {
+                    actions::dispatch(app, actions::Action::Import { paths: files, process: false });
+                }
+            }
+            #[cfg(not(target_os = "macos"))]
+            let _ = (app, event);
+        });
+}
+
+fn home_dir(app: &AppHandle) -> PathBuf {
+    app.path().home_dir().unwrap_or_default()
+}
+
+/// 실행 인자나 열기 요청 중 실제로 있는 파일만 고른다. 오디오인지는 가져올 때 화면이 거른다
+fn opened_files(paths: impl Iterator<Item = PathBuf>) -> Vec<PathBuf> {
+    paths.filter(|p| p.is_file()).collect()
+}
+
+fn setup_deep_links(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    use tauri_plugin_deep_link::DeepLinkExt;
+    // 설치 파일이 스킴을 등록한다. 개발 중(cargo run)인 Windows와 Linux만 직접 등록한다
+    #[cfg(all(debug_assertions, any(windows, target_os = "linux")))]
+    app.deep_link().register_all()?;
+
+    let handle = app.handle().clone();
+    app.deep_link().on_open_url(move |event| {
+        for url in event.urls() {
+            actions::handle_url(&handle, &url);
+        }
+    });
+    // 링크로 앱을 처음 띄운 경우. 화면이 준비되면 frontend_ready로 넘긴다
+    if let Some(urls) = app.deep_link().get_current()? {
+        for url in urls {
+            actions::handle_url(app.handle(), &url);
+        }
+    }
+    Ok(())
+}
+
+/// 녹음의 오디오 파일을 Finder(Windows는 탐색기)에서 보여 준다
+#[tauri::command]
+fn reveal_audio(state: State<AppState>, id: String) -> CmdResult<()> {
+    let recording = state.store.get(&id).map_err(err)?;
+    let path = state.store.audio_path(&recording).map_err(err)?;
+    tauri_plugin_opener::reveal_item_in_dir(path).map_err(err)
 }

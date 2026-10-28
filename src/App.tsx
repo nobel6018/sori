@@ -1,7 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open } from "@tauri-apps/plugin-dialog";
-import { api, AUDIO_EXTENSIONS, ModelCatalog, modelsReady, ProgressEvent, Recording } from "./api";
+import { api, AppAction, AUDIO_EXTENSIONS, ModelCatalog, modelsReady, ProgressEvent, Recording } from "./api";
+import { QuickOpen } from "./components/QuickOpen";
+import { ShortcutHelp } from "./components/ShortcutHelp";
+import { AppCommand, Command, matchShortcut, sendCommand } from "./shortcuts";
 import { ModelSetup } from "./components/ModelSetup";
 import { Recorder } from "./components/Recorder";
 import { Sidebar } from "./components/Sidebar";
@@ -18,24 +21,45 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [catalog, setCatalog] = useState<ModelCatalog | null>(null);
   const [setupLater, setSetupLater] = useState(false);
+  /** null이면 빠른 찾기 창을 닫은 상태. 문자열은 처음 넣을 검색어 */
+  const [quickOpen, setQuickOpen] = useState<string | null>(null);
+  const [helpOpen, setHelpOpen] = useState(false);
+  /** 링크나 검색 결과로 녹음을 열 때 옮겨 갈 재생 위치. nonce로 같은 시각을 다시 골라도 반영한다 */
+  const [seekTo, setSeekTo] = useState<{ id: string; time: number; nonce: number } | null>(null);
 
   const refresh = useCallback(async () => {
     setRecordings(await api.listRecordings());
   }, []);
 
   const importPaths = useCallback(
-    async (paths: string[]) => {
+    async (paths: string[]): Promise<Recording[]> => {
       const audio = paths.filter((p) => AUDIO_EXTENSIONS.includes(p.split(".").pop()?.toLowerCase() ?? ""));
       if (audio.length === 0) {
         setError("가져올 수 있는 오디오 파일이 없습니다");
-        return;
+        return [];
       }
       try {
         const imported = await api.importRecordings(audio);
         await refresh();
         setSelectedId(imported[0].id);
+        return imported;
       } catch (e) {
         setError(String(e));
+        return [];
+      }
+    },
+    [refresh],
+  );
+
+  /** 가져온 녹음을 기본 설정(언어는 설정값, 화자 수는 자동)으로 처리한다. 백엔드가 하나씩 차례로 처리한다 */
+  const processDefaults = useCallback(
+    async (recordings: Recording[]) => {
+      const settings = await api.getSettings();
+      for (const r of recordings) {
+        api
+          .processRecording(r.id, null, settings.defaultLanguages)
+          .catch((e) => setError(`${r.title}: ${e}`))
+          .finally(refresh);
       }
     },
     [refresh],
@@ -52,6 +76,100 @@ export default function App() {
   useEffect(() => {
     api.modelCatalog().then(setCatalog);
   }, []);
+
+  const clearSeek = useCallback(() => setSeekTo(null), []);
+
+  const openRecording = useCallback(
+    async (id: string, time: number | null) => {
+      await refresh();
+      setSelectedId(id);
+      setSeekTo(time == null ? null : { id, time, nonce: Date.now() });
+    },
+    [refresh],
+  );
+
+  const handleAction = useCallback(
+    async (a: AppAction) => {
+      switch (a.type) {
+        case "toggleRecording":
+          return sendCommand("toggle-recording");
+        case "startRecording":
+          return sendCommand("start-recording");
+        case "stopRecording":
+          return sendCommand("stop-recording");
+        case "showWindow":
+          return;
+        case "open":
+          return openRecording(a.id, a.time);
+        case "import": {
+          const imported = await importPaths(a.paths);
+          if (a.process) await processDefaults(imported);
+          return;
+        }
+        case "search":
+          return setQuickOpen(a.query);
+      }
+    },
+    [importPaths, openRecording, processDefaults],
+  );
+
+  // 전역 단축키와 sori:// 링크. 구독을 마친 뒤 그 전에 들어온 요청(링크로 앱을 띄운 경우)을 받아 처리한다
+  const actionRef = useRef(handleAction);
+  actionRef.current = handleAction;
+  useEffect(() => {
+    let cancelled = false;
+    const unlisten = api.onAction((a) => actionRef.current(a));
+    unlisten.then(async () => {
+      if (cancelled) return;
+      const ready = await api.frontendReady();
+      if (ready.shortcutError) setError(ready.shortcutError);
+      for (const a of ready.pending) await actionRef.current(a);
+    });
+    return () => {
+      cancelled = true;
+      unlisten.then((f) => f());
+    };
+  }, []);
+
+  const runCommand = (command: Command | AppCommand) => {
+    switch (command) {
+      case "import":
+        return pickFiles();
+      case "settings":
+        return setSettingsOpen(true);
+      case "search":
+        return setQuickOpen("");
+      case "help":
+        return setHelpOpen(true);
+      case "prev":
+      case "next": {
+        if (recordings.length === 0) return;
+        const index = recordings.findIndex((r) => r.id === selectedId);
+        const next = command === "next" ? Math.min(index + 1, recordings.length - 1) : Math.max(index - 1, 0);
+        return setSelectedId(recordings[index < 0 ? 0 : next].id);
+      }
+      default:
+        return sendCommand(command);
+    }
+  };
+
+  const modalOpen = settingsOpen || helpOpen || quickOpen !== null;
+  const commandRef = useRef(runCommand);
+  commandRef.current = runCommand;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      // 한글 조합 중 Enter, Space는 글자를 완성하는 키다
+      if (e.isComposing || e.keyCode === 229) return;
+      const shortcut = matchShortcut(e);
+      if (!shortcut || modalOpen) return;
+      // 재생기에 포커스가 있으면 재생기가 Space와 화살표를 직접 처리한다. 두 번 처리하면 재생이 바로 멈춘다
+      if (e.target instanceof HTMLMediaElement && [" ", "ArrowLeft", "ArrowRight"].includes(shortcut.key)) return;
+      e.preventDefault();
+      commandRef.current(shortcut.run);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [modalOpen]);
 
   useEffect(() => {
     refresh();
@@ -81,6 +199,7 @@ export default function App() {
         progress={progress}
         onSelect={setSelectedId}
         onImport={pickFiles}
+        onSearch={() => setQuickOpen("")}
         onOpenSettings={() => setSettingsOpen(true)}
         recorder={
           <Recorder
@@ -114,6 +233,8 @@ export default function App() {
             key={`${selected.id}-${selected.status}`}
             recording={selected}
             progress={progress[selected.id]}
+            seekTo={seekTo?.id === selected.id ? seekTo : null}
+            onSeekDone={clearSeek}
             onChanged={refresh}
             onDeleted={async () => {
               setSelectedId(null);
@@ -136,6 +257,17 @@ export default function App() {
           {error}
         </div>
       )}
+      {quickOpen !== null && (
+        <QuickOpen
+          initialQuery={quickOpen}
+          onClose={() => setQuickOpen(null)}
+          onOpen={(id, time) => {
+            setQuickOpen(null);
+            openRecording(id, time);
+          }}
+        />
+      )}
+      {helpOpen && <ShortcutHelp onClose={() => setHelpOpen(false)} />}
       {settingsOpen && (
         <SettingsDialog
           onClose={() => {

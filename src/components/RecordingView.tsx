@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { SummaryPanel } from "./SummaryPanel";
-import { Block, TranscriptList } from "./TranscriptList";
-import { api, formatTime, LANGUAGES, ProgressEvent, Recording, RecordingDetail, speakerName, Stage, Utterance } from "../api";
+import { TranscriptList } from "./TranscriptList";
+import { api, LANGUAGES, ProgressEvent, Recording, RecordingDetail, speakerName, Stage } from "../api";
+import { recordingMarkdown, toBlocks, transcriptMarkdown } from "../markdown";
+import { IS_MAC, useCommands } from "../shortcuts";
 
 const STAGE_LABEL: Record<Stage, string> = {
   decoding: "오디오 읽는 중",
@@ -13,26 +15,15 @@ const STAGE_LABEL: Record<Stage, string> = {
 interface Props {
   recording: Recording;
   progress?: ProgressEvent;
+  /** 검색 결과나 링크로 열었을 때 옮겨 갈 재생 위치 */
+  seekTo: { time: number; nonce: number } | null;
+  /** 재생 위치를 옮겼다. 다시 그려질 때 또 옮기지 않도록 App이 지운다 */
+  onSeekDone: () => void;
   onChanged: () => Promise<void>;
   onDeleted: () => Promise<void>;
 }
 
-/** 같은 화자가 이어서 말한 발화를 한 덩어리로 보여 준다 */
-function toBlocks(utterances: Utterance[]): Block[] {
-  const blocks: Block[] = [];
-  for (const u of utterances) {
-    const last = blocks[blocks.length - 1];
-    if (last && last.speaker === u.speaker) {
-      last.utterances.push(u);
-      last.end = u.end;
-    } else {
-      blocks.push({ speaker: u.speaker, start: u.start, end: u.end, utterances: [u] });
-    }
-  }
-  return blocks;
-}
-
-export function RecordingView({ recording, progress, onChanged, onDeleted }: Props) {
+export function RecordingView({ recording, progress, seekTo, onSeekDone, onChanged, onDeleted }: Props) {
   const [detail, setDetail] = useState<RecordingDetail | null>(null);
   const [numSpeakers, setNumSpeakers] = useState<string>(recording.numSpeakers?.toString() ?? "");
   const [languages, setLanguages] = useState<string[]>(recording.languages);
@@ -57,7 +48,7 @@ export function RecordingView({ recording, progress, onChanged, onDeleted }: Pro
       return !prev;
     });
   const [editingSpeaker, setEditingSpeaker] = useState<number | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<"text" | "markdown" | null>(null);
   const [tab, setTab] = useState<"transcript" | "summary">("transcript");
   const audioRef = useRef<HTMLAudioElement>(null);
 
@@ -123,14 +114,82 @@ export function RecordingView({ recording, progress, onChanged, onDeleted }: Pro
     audio.play();
   }, []);
 
-  const copyText = async () => {
-    const text = blocks
-      .map((b) => `[${formatTime(b.start)}] ${speakerName(rec, b.speaker)}: ${b.utterances.map((u) => u.text).join(" ")}`)
-      .join("\n\n");
+  const copy = async (what: "text" | "markdown") => {
+    if (!detail?.transcript) return;
+    const text = what === "markdown" ? recordingMarkdown(detail) : transcriptMarkdown(rec, detail.transcript.utterances);
     await navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+    setCopied(what);
+    setTimeout(() => setCopied(null), 1500);
   };
+
+  // 검색 결과에서 고른 문장으로 옮겨 간다. 재생은 사용자가 시작한다
+  const [scrollTarget, setScrollTarget] = useState<{ time: number; nonce: number } | null>(null);
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!seekTo || !audio) return;
+    const apply = () => {
+      audio.currentTime = seekTo.time;
+      setCurrentTime(seekTo.time);
+      setTab("transcript");
+      setScrollTarget(seekTo);
+      onSeekDone();
+    };
+    if (audio.readyState >= 1) apply();
+    else {
+      audio.addEventListener("loadedmetadata", apply, { once: true });
+      return () => audio.removeEventListener("loadedmetadata", apply);
+    }
+    // detail이 오면 재생기가 생기므로 그때 다시 본다
+  }, [seekTo, detail, onSeekDone]);
+
+  const togglePlay = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (audio.paused) audio.play();
+    else audio.pause();
+  };
+
+  const skip = (seconds: number) => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.currentTime = Math.min(Math.max(0, audio.currentTime + seconds), audio.duration || Infinity);
+  };
+
+  useCommands((command) => {
+    switch (command) {
+      case "process":
+        if (!running && rec.status !== "recording") start();
+        return;
+      case "cancel":
+        if (running) api.cancelProcessing(rec.id);
+        return;
+      case "tab-transcript":
+        if (transcript) setTab("transcript");
+        return;
+      case "tab-summary":
+        if (transcript) setTab("summary");
+        return;
+      case "summarize":
+        // 요약은 요약 패널이 같은 명령을 받아 시작한다. 여기서는 탭만 연다
+        if (transcript) setTab("summary");
+        return;
+      case "play-pause":
+        return togglePlay();
+      case "seek-back":
+        return skip(-5);
+      case "seek-forward":
+        return skip(5);
+      case "toggle-follow":
+        return toggleFollow();
+      case "copy-markdown":
+        return copy("markdown");
+      case "delete":
+        if (!running && rec.status !== "recording") remove();
+        return;
+      case "reveal":
+        return api.revealAudio(rec.id).catch((e) => setError(String(e)));
+    }
+  });
 
   const toggleLanguage = (code: string) =>
     setLanguages((prev) => (prev.includes(code) ? prev.filter((l) => l !== code) : [...prev, code]));
@@ -148,8 +207,16 @@ export function RecordingView({ recording, progress, onChanged, onDeleted }: Pro
           }}
         />
         <div className="header-actions">
+          <button onClick={() => api.revealAudio(rec.id).catch((e) => setError(String(e)))} title={IS_MAC ? "⇧⌘E" : "Ctrl+Shift+E"}>
+            {IS_MAC ? "Finder에서 보기" : "탐색기에서 보기"}
+          </button>
           {transcript && (
-            <button onClick={copyText}>{copied ? "복사했습니다" : "텍스트 복사"}</button>
+            <>
+              <button onClick={() => copy("text")}>{copied === "text" ? "복사했습니다" : "전사 복사"}</button>
+              <button onClick={() => copy("markdown")} title={IS_MAC ? "⇧⌘C" : "Ctrl+Shift+C"}>
+                {copied === "markdown" ? "복사했습니다" : "마크다운 복사"}
+              </button>
+            </>
           )}
           <button className="danger" onClick={remove} disabled={running || rec.status === "recording"}>
             삭제
@@ -289,7 +356,14 @@ export function RecordingView({ recording, progress, onChanged, onDeleted }: Pro
       )}
 
       {transcript && tab === "transcript" && (
-        <TranscriptList blocks={blocks} recording={rec} currentTime={currentTime} follow={playing && follow} onSeek={seek} />
+        <TranscriptList
+          blocks={blocks}
+          recording={rec}
+          currentTime={currentTime}
+          follow={playing && follow}
+          scrollTarget={scrollTarget}
+          onSeek={seek}
+        />
       )}
     </div>
   );

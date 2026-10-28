@@ -55,6 +55,37 @@ export interface Settings {
   captureSystemAudio: boolean;
   summaryProvider: Provider | null;
   summaryPrompt: string | null;
+  shortcuts: GlobalShortcuts;
+}
+
+/** Tauri 단축키 표기(CommandOrControl+Alt+Shift+R). 빈 문자열이면 끈다 */
+export interface GlobalShortcuts {
+  toggleRecording: string;
+  showWindow: string;
+}
+
+/** 전역 단축키와 sori:// 링크로 들어온 요청 */
+export type AppAction =
+  | { type: "toggleRecording" }
+  | { type: "startRecording" }
+  | { type: "stopRecording" }
+  | { type: "showWindow" }
+  | { type: "open"; id: string; time: number | null }
+  | { type: "import"; paths: string[]; process: boolean }
+  | { type: "search"; query: string };
+
+export interface SearchHit {
+  kind: "summary" | "utterance";
+  start: number | null;
+  speaker: number | null;
+  text: string;
+}
+
+export interface RecordingHits {
+  recording: Recording;
+  titleMatch: boolean;
+  hits: SearchHit[];
+  total: number;
 }
 
 export type Provider = "claude" | "codex";
@@ -157,6 +188,10 @@ export const api = {
   summarize: (id: string, provider: Provider) => invoke<Summary>("summarize_recording", { id, provider }),
   cancelSummary: (id: string) => invoke<void>("cancel_summary", { id }),
   onRecordingInterrupted: (handler: () => void) => listen("recording-interrupted", () => handler()),
+  frontendReady: () => invoke<{ pending: AppAction[]; shortcutError: string | null }>("frontend_ready"),
+  onAction: (handler: (a: AppAction) => void) => listen<AppAction>("app-action", (e) => handler(e.payload)),
+  searchRecordings: (query: string) => invoke<RecordingHits[]>("search_recordings", { query }),
+  revealAudio: (id: string) => invoke<void>("reveal_audio", { id }),
   onProgress: (handler: (e: ProgressEvent) => void) =>
     listen<ProgressEvent>("progress", (e) => handler(e.payload)),
 };

@@ -54,6 +54,15 @@ Windows (PowerShell):
 
 화자 분리 모델(pyannote segmentation 3.0, 3D-Speaker ERes2Net)은 항상 함께 받습니다. 받는 곳은 macOS `~/Library/Application Support/com.nobel6018.sori/models`, Windows `%APPDATA%\com.nobel6018.sori\models`입니다. 앱은 이 폴더를 먼저 보고, 예전 공용 위치(`~/whisper-models`, `~/sherpa-onnx/models`)도 찾습니다(`src-tauri/src/models.rs`).
 
+## 단축키, 링크, Raycast
+
+- 전역 단축키: 녹음 시작/멈춤 ⌥⇧⌘R(Windows Ctrl+Alt+Shift+R), 창 앞으로 ⌥⇧⌘S. 설정에서 바꿉니다
+- 앱 안 단축키: ⌘K 빠른 찾기(미리 보기, 마크다운 복사), ⌘O 가져오기, ⌘↩ 처리, Space 재생 등. ⌘/로 전체 목록을 봅니다
+- 녹음 파일 바로 열기: Finder에서 "다음으로 열기 > sori", 또는 Dock 아이콘에 끌어다 놓기
+- `sori://` 링크: 녹음 토글, 특정 시각 열기, 가져오기, 검색. Raycast 확장(`raycast/`)이 이 링크를 씁니다
+
+자세한 내용은 [docs/shortcuts-and-deep-links.md](docs/shortcuts-and-deep-links.md)와 [raycast/README.md](raycast/README.md)에 있습니다.
+
 ## 개발
 
 ```bash

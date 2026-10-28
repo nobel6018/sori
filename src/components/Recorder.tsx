@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, formatTime, Recording } from "../api";
+import { useCommands } from "../shortcuts";
 
 interface Props {
   onStarted: (recording: Recording) => void;
@@ -67,6 +68,14 @@ export function Recorder({ onStarted, onStopped, onError }: Props) {
       setBusy(false);
     }
   };
+
+  // 전역 단축키와 sori://record 링크. 누르는 사이 앞 요청이 진행 중이면 무시한다
+  useCommands((command) => {
+    if (busy) return;
+    if (command === "toggle-recording") active ? stop() : start();
+    else if (command === "start-recording" && !active) start();
+    else if (command === "stop-recording" && active) stop();
+  });
 
   if (!active) {
     return (

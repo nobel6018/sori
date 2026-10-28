@@ -6,6 +6,7 @@ use chrono::{DateTime, Utc};
 use eyre::{eyre, Result, WrapErr};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
+use crate::actions::Shortcuts;
 use crate::engine::{ModelPaths, Transcript};
 use crate::summarize::{Provider, Summary};
 
@@ -62,6 +63,9 @@ pub struct Settings {
     /// None이면 기본 요약 지시문을 쓴다
     #[serde(default)]
     pub summary_prompt: Option<String>,
+    /// 앱이 앞에 없어도 동작하는 단축키
+    #[serde(default)]
+    pub shortcuts: Shortcuts,
 }
 
 impl Settings {
@@ -73,6 +77,7 @@ impl Settings {
             capture_system_audio: false,
             summary_provider: None,
             summary_prompt: None,
+            shortcuts: Shortcuts::default(),
         }
     }
 }
@@ -184,6 +189,11 @@ impl Store {
             return Ok(None);
         }
         read_json(&path).map(Some)
+    }
+
+    /// 전사 파일의 수정 시각. 없으면 None
+    pub fn transcript_modified(&self, id: &str) -> Option<std::time::SystemTime> {
+        fs::metadata(self.dir(id).ok()?.join("transcript.json")).ok()?.modified().ok()
     }
 
     pub fn save_transcript(&self, id: &str, transcript: &Transcript) -> Result<()> {

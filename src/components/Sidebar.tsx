@@ -1,5 +1,6 @@
 import { ReactNode } from "react";
 import { formatTime, ProgressEvent, Recording, Status } from "../api";
+import { IS_MAC } from "../shortcuts";
 
 const STATUS_LABEL: Record<Status, string> = {
   recording: "녹음 중",
@@ -15,11 +16,12 @@ interface Props {
   progress: Record<string, ProgressEvent>;
   onSelect: (id: string) => void;
   onImport: () => void;
+  onSearch: () => void;
   onOpenSettings: () => void;
   recorder: ReactNode;
 }
 
-export function Sidebar({ recordings, selectedId, progress, onSelect, onImport, onOpenSettings, recorder }: Props) {
+export function Sidebar({ recordings, selectedId, progress, onSelect, onImport, onSearch, onOpenSettings, recorder }: Props) {
   return (
     <aside className="sidebar">
       <header className="sidebar-header">
@@ -27,7 +29,14 @@ export function Sidebar({ recordings, selectedId, progress, onSelect, onImport, 
           <img src="/favicon.svg" width="24" height="24" alt="" />
           sori
         </span>
-        <button onClick={onImport}>가져오기</button>
+        <div className="sidebar-actions">
+          <button onClick={onSearch} title={`빠른 찾기 (${IS_MAC ? "⌘K" : "Ctrl+K"})`}>
+            찾기
+          </button>
+          <button onClick={onImport} title={`가져오기 (${IS_MAC ? "⌘O" : "Ctrl+O"})`}>
+            가져오기
+          </button>
+        </div>
       </header>
       {recorder}
       <ul className="recording-list">

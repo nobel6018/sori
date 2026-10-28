@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
-import { api, formatBytes, InputDevice, installCommand, LANGUAGES, ModelCatalog, Settings } from "../api";
+import { api, formatBytes, GlobalShortcuts, InputDevice, installCommand, LANGUAGES, ModelCatalog, Settings } from "../api";
+import { acceleratorFromEvent, acceleratorLabel } from "../shortcuts";
 import { useModelInstall } from "../useModelInstall";
 import { InstallProgress } from "./InstallProgress";
 
@@ -20,6 +21,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const refreshCatalog = () => api.modelCatalog().then(setCatalog);
   const install = useModelInstall();
   const [installing, setInstalling] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     api.getSettings().then(setSettings);
@@ -27,6 +29,12 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
     refreshCatalog();
     api.listInputDevices().then(setDevices).catch(() => setDevices([]));
   }, []);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
 
   if (!settings) return null;
 
@@ -64,10 +72,20 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
 
   const save = async () => {
     setSaving(true);
-    await api.saveSettings(settings);
-    setSaving(false);
-    onClose();
+    setSaveError(null);
+    try {
+      await api.saveSettings(settings);
+      onClose();
+    } catch (e) {
+      // 다른 앱이 쓰는 단축키면 등록이 실패한다. 창을 닫지 않고 고칠 수 있게 둔다
+      setSaveError(String(e));
+    } finally {
+      setSaving(false);
+    }
   };
+
+  const setShortcut = (key: keyof GlobalShortcuts, value: string) =>
+    setSettings({ ...settings, shortcuts: { ...settings.shortcuts, [key]: value } });
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -211,6 +229,17 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
             }
           />
         </div>
+        <div className="setting-row">
+          <div className="setting-label">
+            <span>전역 단축키</span>
+            <span className="muted">sori가 앞에 없어도 동작합니다. 칸을 누르고 새 조합을 누르세요</span>
+          </div>
+          <div className="shortcut-settings">
+            <ShortcutInput label="녹음 시작/멈춤" value={settings.shortcuts.toggleRecording} onChange={(v) => setShortcut("toggleRecording", v)} />
+            <ShortcutInput label="sori 창 앞으로" value={settings.shortcuts.showWindow} onChange={(v) => setShortcut("showWindow", v)} />
+          </div>
+        </div>
+        {saveError && <div className="error">{saveError}</div>}
         <div className="modal-actions">
           <button onClick={onClose}>닫기</button>
           <button className="primary" onClick={save} disabled={saving}>
@@ -219,5 +248,38 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
         </div>
       </div>
     </div>
+  );
+}
+
+/** 누른 키 조합을 받아 적는 칸. Backspace는 단축키를 끄고, Esc는 받기를 그만둔다 */
+function ShortcutInput({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  const [listening, setListening] = useState(false);
+  return (
+    <label className="shortcut-input">
+      <span>{label}</span>
+      <button
+        className={`shortcut-capture ${listening ? "listening" : ""}`}
+        onFocus={() => setListening(true)}
+        onBlur={() => setListening(false)}
+        onKeyDown={(e) => {
+          if (e.key === "Tab") return;
+          e.preventDefault();
+          // 설정 창의 Esc 닫기까지 가지 않게 여기서 멈춘다
+          e.stopPropagation();
+          if (e.key === "Escape") return e.currentTarget.blur();
+          if (e.key === "Backspace" || e.key === "Delete") {
+            onChange("");
+            return e.currentTarget.blur();
+          }
+          const accelerator = acceleratorFromEvent(e.nativeEvent);
+          if (accelerator) {
+            onChange(accelerator);
+            e.currentTarget.blur();
+          }
+        }}
+      >
+        {listening ? "키 조합을 누르세요" : <kbd>{acceleratorLabel(value)}</kbd>}
+      </button>
+    </label>
   );
 }

@@ -113,3 +113,20 @@ jobs:
           $src = Get-Content -Raw -Encoding utf8 .\scripts\install-models.ps1
           & ([scriptblock]::Create($src)) -Whisper none -Dir $dir
           if (-not (Test-Path (Join-Path $dir 'pyannote-segmentation-3-0.onnx'))) { throw 'missing segmentation model' }
+
+  raycast:
+    runs-on: macos-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: raycast
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: raycast/package-lock.json
+      - run: npm ci
+      # 타입 검사와 묶기까지 한다. ray lint는 author가 Raycast 계정이 아니라 실패하므로 돌리지 않는다
+      - run: npx ray build -e dist

@@ -1,0 +1,29 @@
+{
+  "bundle": {
+    "fileAssociations": [
+      {
+        "ext": [
+          "m4a",
+          "mp3",
+          "wav",
+          "aac",
+          "flac",
+          "ogg",
+          "mp4",
+          "mov",
+          "mkv",
+          "webm",
+          "caf"
+        ],
+        "name": "오디오",
+        "description": "sori로 가져와 받아 적기",
+        "role": "Viewer",
+        "rank": "Alternate",
+        "contentTypes": [
+          "public.audio",
+          "public.movie"
+        ]
+      }
+    ]
+  }
+}
