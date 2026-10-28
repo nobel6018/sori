@@ -1,6 +1,7 @@
 pub mod engine;
 mod recorder;
-mod store;
+pub mod store;
+pub mod summarize;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -30,6 +31,8 @@ struct AppState {
     pipeline: tokio::sync::Mutex<()>,
     /// 녹음은 한 번에 하나만. 녹음 id와 녹음 스레드 핸들
     recorder: Mutex<Option<(String, recorder::ActiveRecording)>>,
+    /// 요약 중인 녹음 id → 취소 신호
+    summaries: Mutex<HashMap<String, tokio::sync::oneshot::Sender<()>>>,
 }
 
 impl AppState {
@@ -60,6 +63,7 @@ struct RecordingDetail {
     recording: Recording,
     audio_path: PathBuf,
     transcript: Option<Transcript>,
+    summary: Option<summarize::Summary>,
 }
 
 #[derive(Deserialize)]
@@ -96,6 +100,7 @@ fn get_recording(state: State<AppState>, id: String) -> CmdResult<RecordingDetai
     Ok(RecordingDetail {
         audio_path: state.store.audio_path(&recording).map_err(err)?,
         transcript: state.store.get_transcript(&id).map_err(err)?,
+        summary: state.store.get_summary(&id).map_err(err)?,
         recording,
     })
 }
@@ -250,6 +255,65 @@ async fn stop_recording(app: AppHandle) -> CmdResult<Recording> {
 }
 
 #[tauri::command]
+async fn summary_providers() -> Vec<summarize::ProviderStatus> {
+    // 로그인 셸을 띄워 PATH를 알아내므로 메인 스레드를 막지 않게 async로 둔다
+    tauri::async_runtime::spawn_blocking(summarize::statuses).await.unwrap_or_default()
+}
+
+#[tauri::command]
+fn default_summary_prompt() -> &'static str {
+    summarize::DEFAULT_PROMPT
+}
+
+#[tauri::command]
+async fn summarize_recording(
+    app: AppHandle,
+    id: String,
+    provider: summarize::Provider,
+) -> CmdResult<summarize::Summary> {
+    let state = app.state::<AppState>();
+    let recording = state.store.get(&id).map_err(err)?;
+    let transcript = state
+        .store
+        .get_transcript(&id)
+        .map_err(err)?
+        .ok_or("먼저 전사를 끝내 주세요")?;
+    let mut settings = state.store.get_settings(&state.home);
+    let instructions = settings.summary_prompt.clone().unwrap_or_else(|| summarize::DEFAULT_PROMPT.to_string());
+    let prompt = summarize::build_prompt(&instructions, &recording, &transcript);
+
+    let (cancel_tx, cancel_rx) = tokio::sync::oneshot::channel();
+    {
+        let mut summaries = state.summaries.lock().unwrap();
+        if summaries.contains_key(&id) {
+            return Err("이미 요약하는 중입니다".into());
+        }
+        summaries.insert(id.clone(), cancel_tx);
+    }
+    let result = summarize::run(provider, prompt, cancel_rx).await;
+    state.summaries.lock().unwrap().remove(&id);
+
+    let markdown = result.map_err(|e| format!("{e:#}"))?;
+    let summary = summarize::Summary {
+        provider,
+        created_at: chrono::Utc::now(),
+        markdown,
+    };
+    state.store.save_summary(&id, &summary).map_err(err)?;
+    // 다음 요약에서 같은 CLI를 미리 고르도록 기억한다
+    settings.summary_provider = Some(provider);
+    let _ = state.store.save_settings(&settings);
+    Ok(summary)
+}
+
+#[tauri::command]
+fn cancel_summary(state: State<AppState>, id: String) {
+    if let Some(tx) = state.summaries.lock().unwrap().remove(&id) {
+        let _ = tx.send(());
+    }
+}
+
+#[tauri::command]
 async fn process_recording(app: AppHandle, request: ProcessRequest) -> CmdResult<Transcript> {
     let state = app.state::<AppState>();
     let id = request.id.clone();
@@ -355,6 +419,7 @@ pub fn run() {
                 cancels: Mutex::new(HashMap::new()),
                 pipeline: tokio::sync::Mutex::new(()),
                 recorder: Mutex::new(None),
+                summaries: Mutex::new(HashMap::new()),
             });
             Ok(())
         })
@@ -371,6 +436,10 @@ pub fn run() {
             list_input_devices,
             start_recording,
             stop_recording,
+            summary_providers,
+            default_summary_prompt,
+            summarize_recording,
+            cancel_summary,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

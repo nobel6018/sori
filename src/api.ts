@@ -43,6 +43,7 @@ export interface RecordingDetail {
   recording: Recording;
   audioPath: string;
   transcript: Transcript | null;
+  summary: Summary | null;
 }
 
 export interface Settings {
@@ -50,7 +51,27 @@ export interface Settings {
   defaultLanguages: string[];
   inputDeviceId: string | null;
   captureSystemAudio: boolean;
+  summaryProvider: Provider | null;
+  summaryPrompt: string | null;
 }
+
+export type Provider = "claude" | "codex";
+
+export interface ProviderStatus {
+  provider: Provider;
+  path: string | null;
+}
+
+export interface Summary {
+  provider: Provider;
+  createdAt: string;
+  markdown: string;
+}
+
+export const PROVIDER_LABEL: Record<Provider, string> = {
+  claude: "Claude (claude CLI)",
+  codex: "ChatGPT (codex CLI)",
+};
 
 export interface InputDevice {
   id: string;
@@ -80,6 +101,10 @@ export const api = {
   stopRecording: () => invoke<Recording>("stop_recording"),
   onLevel: (handler: (levels: number[]) => void) =>
     listen<{ id: string; levels: number[] }>("recording-level", (e) => handler(e.payload.levels)),
+  summaryProviders: () => invoke<ProviderStatus[]>("summary_providers"),
+  defaultSummaryPrompt: () => invoke<string>("default_summary_prompt"),
+  summarize: (id: string, provider: Provider) => invoke<Summary>("summarize_recording", { id, provider }),
+  cancelSummary: (id: string) => invoke<void>("cancel_summary", { id }),
   onRecordingInterrupted: (handler: () => void) => listen("recording-interrupted", () => handler()),
   onProgress: (handler: (e: ProgressEvent) => void) =>
     listen<ProgressEvent>("progress", (e) => handler(e.payload)),

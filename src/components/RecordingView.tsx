@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
+import { SummaryPanel } from "./SummaryPanel";
 import { api, formatTime, LANGUAGES, ProgressEvent, Recording, RecordingDetail, speakerName, Stage, Utterance } from "../api";
 
 const STAGE_LABEL: Record<Stage, string> = {
@@ -46,6 +47,7 @@ export function RecordingView({ recording, progress, onChanged, onDeleted }: Pro
   const [currentTime, setCurrentTime] = useState(0);
   const [editingSpeaker, setEditingSpeaker] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
+  const [tab, setTab] = useState<"transcript" | "summary">("transcript");
   const audioRef = useRef<HTMLAudioElement>(null);
 
   const load = useCallback(async () => {
@@ -215,7 +217,22 @@ export function RecordingView({ recording, progress, onChanged, onDeleted }: Pro
 
       {error && !running && <div className="error">{error}</div>}
 
-      {transcript && speakers.length > 0 && (
+      {transcript && (
+        <div className="tabs" role="tablist">
+          <button role="tab" aria-selected={tab === "transcript"} className={tab === "transcript" ? "on" : ""} onClick={() => setTab("transcript")}>
+            전사
+          </button>
+          <button role="tab" aria-selected={tab === "summary"} className={tab === "summary" ? "on" : ""} onClick={() => setTab("summary")}>
+            요약{detail?.summary ? "" : " (없음)"}
+          </button>
+        </div>
+      )}
+
+      {transcript && tab === "summary" && (
+        <SummaryPanel recordingId={rec.id} summary={detail?.summary ?? null} onSummarized={load} />
+      )}
+
+      {transcript && tab === "transcript" && speakers.length > 0 && (
         <section className="speakers">
           {speakers.map((s) =>
             editingSpeaker === s ? (
@@ -243,7 +260,7 @@ export function RecordingView({ recording, progress, onChanged, onDeleted }: Pro
         </section>
       )}
 
-      {transcript && (
+      {transcript && tab === "transcript" && (
         <section className="transcript">
           {blocks.length === 0 && <p className="muted">받아 적은 내용이 없습니다.</p>}
           {blocks.map((b) => {

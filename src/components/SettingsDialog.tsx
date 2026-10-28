@@ -12,9 +12,11 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [saving, setSaving] = useState(false);
   const [devices, setDevices] = useState<InputDevice[]>([]);
+  const [defaultPrompt, setDefaultPrompt] = useState("");
 
   useEffect(() => {
     api.getSettings().then(setSettings);
+    api.defaultSummaryPrompt().then(setDefaultPrompt);
     api.listInputDevices().then(setDevices).catch(() => setDevices([]));
   }, []);
 
@@ -104,6 +106,26 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
               </button>
             ))}
           </div>
+        </div>
+        <div className="setting-row">
+          <div className="setting-label">
+            <span>요약 지시문</span>
+            <button
+              className="ghost"
+              disabled={settings.summaryPrompt === null}
+              onClick={() => setSettings({ ...settings, summaryPrompt: null })}
+            >
+              기본값으로
+            </button>
+          </div>
+          <textarea
+            className="prompt-input"
+            rows={8}
+            value={settings.summaryPrompt ?? defaultPrompt}
+            onChange={(e) =>
+              setSettings({ ...settings, summaryPrompt: e.target.value === defaultPrompt ? null : e.target.value })
+            }
+          />
         </div>
         <div className="modal-actions">
           <button onClick={onClose}>닫기</button>

@@ -7,6 +7,7 @@ use eyre::{eyre, Result, WrapErr};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use crate::engine::{ModelPaths, Transcript};
+use crate::summarize::{Provider, Summary};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -55,6 +56,12 @@ pub struct Settings {
     /// 마이크와 함께 시스템 소리(통화 상대 목소리 등)도 녹음한다
     #[serde(default)]
     pub capture_system_audio: bool,
+    /// 마지막으로 고른 요약 CLI
+    #[serde(default)]
+    pub summary_provider: Option<Provider>,
+    /// None이면 기본 요약 지시문을 쓴다
+    #[serde(default)]
+    pub summary_prompt: Option<String>,
 }
 
 impl Settings {
@@ -75,6 +82,8 @@ impl Settings {
             default_languages: Vec::new(),
             input_device_id: None,
             capture_system_audio: false,
+            summary_provider: None,
+            summary_prompt: None,
         }
     }
 }
@@ -186,6 +195,18 @@ impl Store {
 
     pub fn save_transcript(&self, id: &str, transcript: &Transcript) -> Result<()> {
         write_json(&self.dir(id)?.join("transcript.json"), transcript)
+    }
+
+    pub fn get_summary(&self, id: &str) -> Result<Option<Summary>> {
+        let path = self.dir(id)?.join("summary.json");
+        if !path.exists() {
+            return Ok(None);
+        }
+        read_json(&path).map(Some)
+    }
+
+    pub fn save_summary(&self, id: &str, summary: &Summary) -> Result<()> {
+        write_json(&self.dir(id)?.join("summary.json"), summary)
     }
 
     pub fn delete(&self, id: &str) -> Result<()> {

@@ -43,6 +43,16 @@ cargo run --release --example pipeline -- <오디오 파일> [화자 수|auto] [
 - macOS에서는 녹음하는 동안 App Nap과 잠자기를 막습니다. 앱이 뒤에 가려져 있어도 녹음 스레드가 느려지지 않게 하려는 것입니다
 - 장치가 빠지면 녹음을 마무리하고 화면에 알립니다. 버퍼 오버런 같은 일시 경고로는 멈추지 않습니다
 
+## 요약
+
+`src-tauri/src/summarize.rs`
+
+- 이 컴퓨터에 설치되고 로그인된 `claude` 또는 `codex` CLI를 하위 프로세스로 불러 요약합니다. 구독(Claude Pro/Max, ChatGPT Plus 등)에는 API 키가 없어서 HTTP API 대신 CLI를 씁니다
+- 전사 텍스트만 보내고 녹음 파일은 보내지 않습니다
+- 도구를 끄고(`claude --tools ""`, `codex --sandbox read-only`) 빈 임시 폴더에서 실행해 다른 파일에 손대지 않게 합니다
+- Finder에서 연 macOS 앱은 터미널 PATH를 물려받지 못하므로, 로그인 셸에 PATH를 한 번 물어 CLI를 찾습니다
+- 요약 지시문은 설정에서 바꿀 수 있습니다
+
 ## 처리 방식
 
 `src-tauri/src/engine/`

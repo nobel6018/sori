@@ -105,7 +105,7 @@ export default function App() {
         ) : (
           <div className="empty">
             <p className="empty-title">녹음 파일을 끌어다 놓거나 가져오세요</p>
-            <p className="muted">m4a, mp3, wav, flac, ogg, mp4 등. 모든 처리는 이 컴퓨터 안에서만 이뤄집니다.</p>
+            <p className="muted">m4a, mp3, wav, flac, ogg, mp4 등. 받아 적기와 화자 분리는 이 컴퓨터 안에서만 이뤄집니다.</p>
             <button className="primary" onClick={pickFiles}>
               파일 가져오기
             </button>

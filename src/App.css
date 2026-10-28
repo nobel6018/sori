@@ -91,7 +91,8 @@ button.danger {
 }
 
 input,
-select {
+select,
+textarea {
   font: inherit;
   color: var(--text);
   background: var(--panel);
@@ -557,4 +558,74 @@ button:focus-visible {
 .setting-toggle .muted {
   display: block;
   font-size: 12px;
+}
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+}
+.tabs button {
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: none;
+  padding: 8px 12px;
+  min-height: 40px;
+  color: var(--muted);
+}
+.tabs button.on {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+.summary {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.summary-controls {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.summary-body {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 4px 20px 12px;
+  font-size: 15px;
+  line-height: 1.7;
+}
+.summary-body h2 {
+  font-size: 16px;
+  margin: 18px 0 6px;
+}
+.summary-body ul {
+  padding-left: 20px;
+  margin: 4px 0;
+}
+.summary-body table {
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.summary-body th,
+.summary-body td {
+  border: 1px solid var(--border);
+  padding: 4px 8px;
+}
+.summary-meta {
+  font-size: 12px;
+  margin: 16px 0 0;
+}
+.prompt-input {
+  width: 100%;
+  font-size: 13px;
+  line-height: 1.5;
+  resize: vertical;
+}
+.modal {
+  max-height: 90vh;
+  max-height: 90dvh;
+  overflow-y: auto;
 }
