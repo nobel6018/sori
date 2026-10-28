@@ -23,7 +23,10 @@ export function Sidebar({ recordings, selectedId, progress, onSelect, onImport, 
   return (
     <aside className="sidebar">
       <header className="sidebar-header">
-        <span className="brand">sori</span>
+        <span className="brand">
+          <img src="/favicon.svg" width="24" height="24" alt="" />
+          sori
+        </span>
         <button onClick={onImport}>가져오기</button>
       </header>
       {recorder}
