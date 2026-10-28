@@ -30,7 +30,7 @@ jobs:
         with:
           workspaces: src-tauri
           # C 런타임 설정을 바꾸면 예전 /MD로 빌드된 whisper.cpp 캐시를 쓰지 않게 키를 올린다
-          prefix-key: v2-msvc-mt
+          prefix-key: v3-msvc-mt
       - run: pnpm install --frozen-lockfile
       # 프론트 빌드 결과(dist)가 있어야 tauri::generate_context!가 컴파일된다
       - run: pnpm build

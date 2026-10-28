@@ -31,7 +31,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
-          prefix-key: v2-msvc-mt
+          prefix-key: v3-msvc-mt
       - run: pnpm install --frozen-lockfile
       - run: pnpm tauri build
       - uses: actions/upload-artifact@v4
