@@ -73,4 +73,5 @@ jobs:
           ## 모델
           앱을 처음 켜면 모델 설치 화면이 뜹니다. 버튼을 누르면 받아 적기 모델(1.6GB)과 화자 분리 모델을 받습니다.
           NOTES
-          gh release create "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --title "sori $TAG" --notes-file notes.md --prerelease
+          # 아티팩트는 msi/, nsis/, dmg/ 하위 폴더째 받아지므로 파일만 골라 올린다
+          find dist -type f \( -name '*.dmg' -o -name '*.msi' -o -name '*-setup.exe' \) -print0 | xargs -0 gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --title "sori $TAG" --notes-file notes.md --prerelease
