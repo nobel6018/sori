@@ -4,6 +4,8 @@ name: release
 on:
   push:
     tags: ["v*"]
+  # 태그 없이 설치 파일 빌드만 시험할 때. 게시는 하지 않는다
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -43,8 +45,8 @@ jobs:
 
   publish:
     needs: build
-    # 한쪽이 실패해도 성공한 쪽 파일은 올린다
-    if: ${{ !cancelled() }}
+    # 한쪽이 실패해도 성공한 쪽 파일은 올린다. 수동 실행(태그 아님)에서는 올리지 않는다
+    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/') }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -73,5 +75,9 @@ jobs:
           ## 모델
           앱을 처음 켜면 모델 설치 화면이 뜹니다. 버튼을 누르면 받아 적기 모델(1.6GB)과 화자 분리 모델을 받습니다.
           NOTES
-          # 아티팩트는 msi/, nsis/, dmg/ 하위 폴더째 받아지므로 파일만 골라 올린다
-          find dist -type f \( -name '*.dmg' -o -name '*.msi' -o -name '*-setup.exe' \) -print0 | xargs -0 gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --title "sori $TAG" --notes-file notes.md --prerelease
+          # 아티팩트는 msi/, nsis/, dmg/ 하위 폴더째 받아지므로 파일만 골라 올린다.
+          # 하나도 없으면 빈 Release를 만들지 않고 실패한다
+          mapfile -d '' files < <(find dist -type f \( -name '*.dmg' -o -name '*.msi' -o -name '*-setup.exe' \) -print0)
+          if [ "${#files[@]}" -eq 0 ]; then echo "올릴 설치 파일이 없습니다"; exit 1; fi
+          printf '%s\n' "${files[@]}"
+          gh release create "$TAG" "${files[@]}" --repo "$GITHUB_REPOSITORY" --title "sori $TAG" --notes-file notes.md --prerelease

@@ -46,6 +46,25 @@ jobs:
       - name: cargo build
         working-directory: src-tauri
         run: cargo build --locked --bins --examples
+      # 엔진 전체(디코딩, 화자 분리, 전사)를 실제 OS에서 돌려 본다. 작은 tiny 모델과 40초 3개 언어 녹음을 쓴다
+      - uses: actions/cache@v4
+        with:
+          path: smoke-models
+          key: smoke-models-v1
+      - name: smoke 모델 받기
+        shell: bash
+        run: |
+          mkdir -p smoke-models && cd smoke-models
+          get() { [ -s "$2" ] || curl -fsSL --retry 3 -o "$2" "$1"; }
+          get https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin ggml-tiny.bin
+          get https://huggingface.co/csukuangfj/sherpa-onnx-pyannote-segmentation-3-0/resolve/main/model.onnx pyannote-segmentation-3-0.onnx
+          get https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx 3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx
+          ls -la
+      - name: smoke (엔진 전체 실행)
+        shell: bash
+        working-directory: src-tauri
+        timeout-minutes: 10
+        run: cargo run --locked --example smoke -- ../smoke-models
 
   # 모델 설치 스크립트를 실제 OS에서 돌려 본다. 큰 Whisper 모델(1.6GB)은 빼고 화자 분리 모델만 받는다
   install-models:
