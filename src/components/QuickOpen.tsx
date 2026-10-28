@@ -100,13 +100,15 @@ export function QuickOpen({ initialQuery, onClose, onOpen }: Props) {
     setTimeout(() => setCopied(null), 1500);
   };
 
-  const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.nativeEvent.isComposing) return;
+  // 창 전체에서 키를 받는다. 복사 버튼을 누른 뒤에도 Esc와 방향키가 동작해야 한다
+  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    // WebKit은 한글 조합을 확정하는 Enter를 isComposing 없이 keyCode 229로 보낸다
+    if (e.nativeEvent.isComposing || e.keyCode === 229) return;
     const mod = IS_MAC ? e.metaKey : e.ctrlKey;
     if (e.key === "Escape") onClose();
     else if (e.key === "ArrowDown") setCursor((c) => Math.min(c + 1, rows.length - 1));
     else if (e.key === "ArrowUp") setCursor((c) => Math.max(c - 1, 0));
-    else if (e.key === "Enter" && row) onOpen(row.group.recording.id, hitTime(row));
+    else if (e.key === "Enter" && !mod && !e.shiftKey && row) onOpen(row.group.recording.id, hitTime(row));
     else if (mod && e.shiftKey && e.key.toLowerCase() === "c") copy("markdown");
     else if (mod && e.shiftKey && e.key.toLowerCase() === "s") copy("summary");
     else if (mod && e.shiftKey && e.key.toLowerCase() === "t") copy("transcript");
@@ -116,14 +118,13 @@ export function QuickOpen({ initialQuery, onClose, onOpen }: Props) {
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="quick-open" role="dialog" aria-label="빠른 찾기" onClick={(e) => e.stopPropagation()}>
+      <div className="quick-open" role="dialog" aria-label="빠른 찾기" onClick={(e) => e.stopPropagation()} onKeyDown={onKeyDown}>
         <input
           className="quick-input"
           autoFocus
           placeholder="녹음 제목, 요약, 전사에서 찾기"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={onKeyDown}
           aria-label="검색어"
         />
         <div className="quick-body">

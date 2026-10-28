@@ -116,8 +116,12 @@ fn find_hits(transcript: Option<&Transcript>, summary: Option<&str>, needle: &st
 /// 요약 한 줄에서 제목, 목록, 강조 표시를 뗀다
 fn strip_markdown(line: &str) -> String {
     let t = line.trim().trim_start_matches(['#', '>', '-', '*', '+', ' ']);
-    let t = t.trim_start_matches(|c: char| c.is_ascii_digit());
-    let t = t.strip_prefix(". ").unwrap_or(t);
+    // "12. 할 일"의 번호만 뗀다. "3명이 참석"의 숫자는 내용이다
+    let digits = t.trim_start_matches(|c: char| c.is_ascii_digit());
+    let t = match digits.strip_prefix(". ") {
+        Some(rest) if digits.len() < t.len() => rest,
+        _ => t,
+    };
     t.replace("**", "").replace('`', "").trim().to_string()
 }
 
@@ -171,5 +175,7 @@ mod tests {
     #[test]
     fn 번호_목록의_번호를_뗀다() {
         assert_eq!(strip_markdown("12. 테스트 먼저"), "테스트 먼저");
+        assert_eq!(strip_markdown("- 3명이 참석"), "3명이 참석");
+        assert_eq!(strip_markdown("2026-10-29 회의"), "2026-10-29 회의");
     }
 }

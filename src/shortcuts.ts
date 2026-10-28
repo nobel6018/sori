@@ -119,7 +119,13 @@ export function shortcutLabel(s: Shortcut): string {
 export function acceleratorLabel(accelerator: string): string {
   if (!accelerator) return "끔";
   const parts = accelerator.split("+");
-  const key = parts.pop() ?? "";
+  const raw = parts.pop() ?? "";
+  const named: Record<string, string> = {
+    Space: "Space", ArrowUp: "↑", ArrowDown: "↓", ArrowLeft: "←", ArrowRight: "→", Enter: "↩",
+    Backquote: "`", Minus: "-", Equal: "=", Comma: ",", Period: ".", Slash: "/", Semicolon: ";",
+    Quote: "'", BracketLeft: "[", BracketRight: "]", Backslash: "\\",
+  };
+  const key = named[raw] ?? raw.replace(/^Key(?=[A-Z]$)/, "").replace(/^Digit(?=[0-9]$)/, "");
   if (IS_MAC) {
     const symbol: Record<string, string> = { Control: "⌃", Alt: "⌥", Option: "⌥", Shift: "⇧", CommandOrControl: "⌘", Command: "⌘", Super: "⌘", Cmd: "⌘", CmdOrCtrl: "⌘" };
     const order = ["⌃", "⌥", "⇧", "⌘"];
@@ -145,6 +151,8 @@ export function acceleratorFromEvent(e: KeyboardEvent): string | null {
   else if (/^Digit[0-9]$/.test(code)) key = code.slice(5);
   else if (/^F([1-9]|1[0-9]|2[0-4])$/.test(code)) key = code;
   else if (["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Enter", "Backquote", "Minus", "Equal", "Comma", "Period", "Slash", "Semicolon", "Quote", "BracketLeft", "BracketRight", "Backslash"].includes(code)) key = code;
-  if (!key || mods.length === 0) return null;
+  // Shift나 Alt만 붙인 조합은 전역으로 등록하면 다른 앱에서 대문자, 특수 문자 입력을 빼앗는다
+  const primary = mods.some((m) => m === "CommandOrControl" || m === "Control" || m === "Super");
+  if (!key || !primary) return null;
   return [...mods, key].join("+");
 }

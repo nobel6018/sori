@@ -115,6 +115,21 @@ fn frontend_ready(app: AppHandle, state: State<AppState>) -> ReadyInfo {
     }
 }
 
+/// 설정에서 단축키를 새로 받는 동안 전역 단축키를 잠시 끈다. 끄지 않으면 OS가 키를 먼저 가로채
+/// 받기 칸에 오지 않고, 녹음 토글 조합이면 녹음이 시작된다
+#[tauri::command]
+fn suspend_shortcuts(app: AppHandle) {
+    use tauri_plugin_global_shortcut::GlobalShortcutExt;
+    let _ = app.global_shortcut().unregister_all();
+}
+
+/// 저장된 설정대로 전역 단축키를 다시 등록한다
+#[tauri::command]
+fn resume_shortcuts(app: AppHandle, state: State<AppState>) -> CmdResult<()> {
+    let settings = state.store.get_settings(&state.home);
+    actions::apply_shortcuts(&app, &settings.shortcuts, None)
+}
+
 #[tauri::command]
 async fn search_recordings(app: AppHandle, query: String) -> CmdResult<Vec<search::RecordingHits>> {
     // 녹음이 많으면 파일을 읽는 데 시간이 걸리므로 화면 스레드를 막지 않는다
@@ -580,6 +595,8 @@ pub fn run() {
             });
 
             let handle = app.handle().clone();
+            // 링크를 처리하기 전에 읽어야 링크로 앱을 띄운 경우도 확인할 수 있다
+            actions::load_token(&handle, &app.path().app_data_dir()?)?;
             let settings = app.state::<AppState>().store.get_settings(&home_dir(&handle));
             if let Err(e) = actions::apply_shortcuts(&handle, &settings.shortcuts, None) {
                 *app.state::<AppState>().shortcut_error.lock().unwrap() = Some(e);
@@ -615,6 +632,8 @@ pub fn run() {
             cancel_summary,
             frontend_ready,
             search_recordings,
+            suspend_shortcuts,
+            resume_shortcuts,
             reveal_audio,
         ])
         .build(tauri::generate_context!())
@@ -637,9 +656,9 @@ fn home_dir(app: &AppHandle) -> PathBuf {
     app.path().home_dir().unwrap_or_default()
 }
 
-/// 실행 인자나 열기 요청 중 실제로 있는 파일만 고른다. 오디오인지는 가져올 때 화면이 거른다
+/// 실행 인자나 열기 요청 중 가져올 수 있는 오디오 파일만 고른다
 fn opened_files(paths: impl Iterator<Item = PathBuf>) -> Vec<PathBuf> {
-    paths.filter(|p| p.is_file()).collect()
+    actions::audio_files(paths)
 }
 
 fn setup_deep_links(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {

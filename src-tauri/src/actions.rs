@@ -2,7 +2,8 @@
 //! 녹음 상태와 처리 화면은 프론트가 들고 있으므로, 여기서는 할 일을 정해 이벤트로 넘기기만 한다.
 //! @see docs/shortcuts-and-deep-links.md
 
-use std::path::PathBuf;
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
@@ -23,6 +24,8 @@ pub enum Action {
     /// process가 true면 가져온 뒤 기본 설정으로 바로 처리한다
     Import { paths: Vec<PathBuf>, process: bool },
     Search { query: String },
+    /// 토큰 없는 녹음, 가져오기 링크를 막았다. 화면에 알린다
+    Blocked { message: String },
 }
 
 impl Action {
@@ -56,6 +59,8 @@ pub struct Bus {
     pending: Mutex<Option<Vec<Action>>>,
     /// 등록한 단축키 id → 할 일
     shortcuts: Mutex<Vec<(u32, Action)>>,
+    /// 녹음, 가져오기 링크가 함께 보내야 하는 값. 데이터 폴더의 link-token 파일에 있다
+    token: Mutex<String>,
 }
 
 impl Bus {
@@ -63,8 +68,51 @@ impl Bus {
         Self {
             pending: Mutex::new(Some(Vec::new())),
             shortcuts: Mutex::new(Vec::new()),
+            token: Mutex::new(String::new()),
         }
     }
+}
+
+/// sori가 가져올 수 있는 확장자. src/api.ts AUDIO_EXTENSIONS와 같다
+const AUDIO_EXTENSIONS: [&str; 11] = ["m4a", "mp3", "wav", "aac", "flac", "ogg", "mp4", "mov", "mkv", "webm", "caf"];
+
+/// 링크 토큰을 읽고, 없으면 만든다.
+/// 웹 페이지도 sori:// 링크를 열 수 있어서, 녹음을 켜거나 파일을 가져오는 링크는 이 값을 함께 보내야 한다.
+/// 이 컴퓨터의 사용자 권한으로 도는 프로그램(Raycast 등)만 파일을 읽을 수 있다
+pub fn load_token(app: &AppHandle, data_dir: &Path) -> std::io::Result<()> {
+    let path = data_dir.join("link-token");
+    let token = match fs::read_to_string(&path) {
+        Ok(t) if t.trim().len() >= 32 => t.trim().to_string(),
+        _ => {
+            let t = uuid::Uuid::new_v4().simple().to_string();
+            fs::create_dir_all(data_dir)?;
+            fs::write(&path, &t)?;
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                fs::set_permissions(&path, fs::Permissions::from_mode(0o600))?;
+            }
+            t
+        }
+    };
+    *app.state::<Bus>().token.lock().unwrap() = token;
+    Ok(())
+}
+
+/// 가져와도 되는 파일만 남긴다. 절대 경로의 실제 오디오 파일만 받고,
+/// Windows 네트워크 경로(\\server\share)는 열기만 해도 인증 정보가 서버로 가므로 막는다
+pub fn audio_files(paths: impl IntoIterator<Item = PathBuf>) -> Vec<PathBuf> {
+    paths
+        .into_iter()
+        .filter(|p| {
+            let s = p.to_string_lossy();
+            let network = s.starts_with("\\\\") || s.starts_with("//");
+            let audio = p
+                .extension()
+                .is_some_and(|e| AUDIO_EXTENSIONS.contains(&e.to_string_lossy().to_lowercase().as_str()));
+            p.is_absolute() && !network && audio && p.is_file()
+        })
+        .collect()
 }
 
 pub fn dispatch(app: &AppHandle, action: Action) {
@@ -95,10 +143,36 @@ pub fn show_main(app: &AppHandle) {
 }
 
 pub fn handle_url(app: &AppHandle, url: &Url) {
-    match parse_url(url) {
-        Some(action) => dispatch(app, action),
-        None => eprintln!("알 수 없는 sori 링크: {url}"),
+    let Some(action) = parse_url(url) else {
+        eprintln!("알 수 없는 sori 링크: {url}");
+        return;
+    };
+    let action = match action {
+        Action::Import { paths, process } => Action::Import { paths: audio_files(paths), process },
+        a => a,
+    };
+    if needs_token(&action) {
+        let expected = app.state::<Bus>().token.lock().unwrap().clone();
+        let given = url.query_pairs().find(|(k, _)| k == "token").map(|(_, v)| v.into_owned());
+        if expected.is_empty() || given.as_deref() != Some(expected.as_str()) {
+            dispatch(
+                app,
+                Action::Blocked {
+                    message: "확인되지 않은 sori 링크가 녹음이나 가져오기를 요청해 막았습니다. 웹 페이지가 연 링크일 수 있습니다".into(),
+                },
+            );
+            return;
+        }
     }
+    dispatch(app, action);
+}
+
+/// 마이크를 켜거나 이 컴퓨터의 파일을 읽는 요청. 열기, 검색, 창 앞으로는 토큰 없이 받는다
+fn needs_token(action: &Action) -> bool {
+    matches!(
+        action,
+        Action::ToggleRecording | Action::StartRecording | Action::StopRecording | Action::Import { .. }
+    )
 }
 
 /// sori://record/toggle, sori://open?id=..&t=12.5, sori://import?path=..&path=..&process=1, sori://search?q=..
@@ -229,6 +303,34 @@ mod tests {
                 process: true,
             })
         );
+    }
+
+    #[test]
+    fn 녹음과_가져오기만_토큰이_필요하다() {
+        assert!(needs_token(&Action::StartRecording));
+        assert!(needs_token(&Action::Import { paths: vec![], process: false }));
+        assert!(!needs_token(&Action::Search { query: String::new() }));
+    }
+
+    #[test]
+    fn 네트워크_경로와_상대_경로와_오디오가_아닌_파일은_가져오지_않는다() {
+        let dir = std::env::temp_dir().join(format!("sori-actions-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        let audio = dir.join("a.m4a");
+        let text = dir.join("a.txt");
+        fs::write(&audio, b"x").unwrap();
+        fs::write(&text, b"x").unwrap();
+
+        let kept = audio_files([
+            audio.clone(),
+            text,
+            PathBuf::from("a.m4a"),
+            PathBuf::from("\\\\server\\share\\a.m4a"),
+            PathBuf::from("//server/share/a.m4a"),
+        ]);
+
+        assert_eq!(kept, vec![audio]);
+        fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]

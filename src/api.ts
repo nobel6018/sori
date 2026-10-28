@@ -72,7 +72,8 @@ export type AppAction =
   | { type: "showWindow" }
   | { type: "open"; id: string; time: number | null }
   | { type: "import"; paths: string[]; process: boolean }
-  | { type: "search"; query: string };
+  | { type: "search"; query: string }
+  | { type: "blocked"; message: string };
 
 export interface SearchHit {
   kind: "summary" | "utterance";
@@ -191,6 +192,8 @@ export const api = {
   frontendReady: () => invoke<{ pending: AppAction[]; shortcutError: string | null }>("frontend_ready"),
   onAction: (handler: (a: AppAction) => void) => listen<AppAction>("app-action", (e) => handler(e.payload)),
   searchRecordings: (query: string) => invoke<RecordingHits[]>("search_recordings", { query }),
+  suspendShortcuts: () => invoke<void>("suspend_shortcuts"),
+  resumeShortcuts: () => invoke<void>("resume_shortcuts"),
   revealAudio: (id: string) => invoke<void>("reveal_audio", { id }),
   onProgress: (handler: (e: ProgressEvent) => void) =>
     listen<ProgressEvent>("progress", (e) => handler(e.payload)),

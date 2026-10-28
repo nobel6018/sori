@@ -44,18 +44,27 @@ sori가 앞에 없어도 동작합니다. 설정에서 바꾸고, Backspace로 �
 
 | 링크 | 동작 | 창을 앞으로 |
 |---|---|---|
-| `sori://record/toggle` | 녹음 시작/멈춤 | 아니요 |
-| `sori://record/start`, `sori://record/stop` | 녹음 시작, 멈춤 | 아니요 |
+| `sori://record/toggle?token=<토큰>` | 녹음 시작/멈춤 | 아니요 |
+| `sori://record/start?token=..`, `sori://record/stop?token=..` | 녹음 시작, 멈춤 | 아니요 |
 | `sori://show` | 창 앞으로 | 예 |
 | `sori://open?id=<녹음 id>&t=<초>` | 녹음을 열고 그 시각으로 이동. `t`는 생략 가능 | 예 |
-| `sori://import?path=<경로>&path=<경로>&process=1` | 파일을 가져옴. `process=1`이면 기본 설정으로 바로 처리 | 예 |
+| `sori://import?path=<경로>&path=<경로>&process=1&token=<토큰>` | 파일을 가져옴. `process=1`이면 기본 설정으로 바로 처리 | 예 |
 | `sori://search?q=<검색어>` | 빠른 찾기 창을 그 검색어로 엶 | 예 |
 
 링크로 앱을 처음 띄우면 화면이 준비되기 전에 링크가 도착합니다. Rust가 요청을 보관해 두었다가, 화면이 이벤트 구독을 마치고 `frontend_ready`를 부를 때 넘깁니다.
 
 macOS에서는 설치된 앱(.app)만 링크를 받습니다. `pnpm tauri dev`로는 시험할 수 없습니다. `pnpm tauri build --debug --bundles app`으로 묶은 뒤 `open -a <경로>/sori.app "sori://search?q=회의"`로 시험합니다.
 
-웹 페이지도 `sori://record/start`를 열 수 있습니다. 브라우저가 "sori를 여시겠습니까?"를 먼저 묻고, 녹음이 시작되면 macOS 메뉴 막대에 마이크 사용 표시가 뜹니다. 링크로 녹음을 지우거나 파일을 밖으로 보내는 동작은 만들지 않았습니다.
+### 링크 토큰
+
+웹 페이지도 `sori://` 링크를 열 수 있습니다. 브라우저의 "sori를 여시겠습니까?" 확인창에서 "항상 허용"을 고른 사용자라면, 아무 웹 페이지나 몰래 녹음을 켤 수 있게 됩니다. 그래서 마이크를 켜는 링크(`record/*`)와 이 컴퓨터의 파일을 읽는 링크(`import`)는 `token`을 함께 보내야 합니다(`actions::needs_token`).
+
+- sori는 처음 실행할 때 데이터 폴더에 `link-token` 파일을 만듭니다(macOS `~/Library/Application Support/com.nobel6018.sori/link-token`, 권한 600). 이 컴퓨터의 사용자 권한으로 도는 프로그램만 읽을 수 있고, 웹 페이지는 읽지 못합니다
+- 토큰이 없거나 틀리면 요청을 버리고 창을 띄워 막았다고 알립니다
+- 열기, 검색, 창 앞으로는 토큰 없이 받습니다. 화면을 보여 줄 뿐 데이터를 바꾸거나 내보내지 않습니다
+- 가져오기 경로는 절대 경로의 실제 오디오 파일만 받습니다. Windows 네트워크 경로(`\\server\share`)는 여는 순간 로그인 정보가 그 서버로 가므로 거부합니다(`actions::audio_files`)
+
+링크로 녹음을 지우거나 파일을 밖으로 보내는 동작은 만들지 않았습니다.
 
 ## 녹음 파일 바로 열기
 

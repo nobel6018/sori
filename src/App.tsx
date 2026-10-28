@@ -22,7 +22,12 @@ export default function App() {
   const [catalog, setCatalog] = useState<ModelCatalog | null>(null);
   const [setupLater, setSetupLater] = useState(false);
   /** null이면 빠른 찾기 창을 닫은 상태. 문자열은 처음 넣을 검색어 */
-  const [quickOpen, setQuickOpen] = useState<string | null>(null);
+  const [quickOpen, setQuickOpenState] = useState<{ query: string; nonce: number } | null>(null);
+  // 이미 열려 있어도 새 검색어로 다시 열리도록 매번 새 값을 만든다
+  const setQuickOpen = useCallback(
+    (query: string | null) => setQuickOpenState(query === null ? null : { query, nonce: Date.now() }),
+    [],
+  );
   const [helpOpen, setHelpOpen] = useState(false);
   /** 링크나 검색 결과로 녹음을 열 때 옮겨 갈 재생 위치. nonce로 같은 시각을 다시 골라도 반영한다 */
   const [seekTo, setSeekTo] = useState<{ id: string; time: number; nonce: number } | null>(null);
@@ -108,9 +113,11 @@ export default function App() {
         }
         case "search":
           return setQuickOpen(a.query);
+        case "blocked":
+          return setError(a.message);
       }
     },
-    [importPaths, openRecording, processDefaults],
+    [importPaths, openRecording, processDefaults, setQuickOpen],
   );
 
   // 전역 단축키와 sori:// 링크. 구독을 마친 뒤 그 전에 들어온 요청(링크로 앱을 띄운 경우)을 받아 처리한다
@@ -160,10 +167,14 @@ export default function App() {
     const onKey = (e: KeyboardEvent) => {
       // 한글 조합 중 Enter, Space는 글자를 완성하는 키다
       if (e.isComposing || e.keyCode === 229) return;
+      // 빠른 찾기 같은 창이 이미 처리한 키다. 창이 닫히며 같은 키를 또 받는 경우를 막는다
+      if (e.defaultPrevented) return;
       const shortcut = matchShortcut(e);
       if (!shortcut || modalOpen) return;
       // 재생기에 포커스가 있으면 재생기가 Space와 화살표를 직접 처리한다. 두 번 처리하면 재생이 바로 멈춘다
       if (e.target instanceof HTMLMediaElement && [" ", "ArrowLeft", "ArrowRight"].includes(shortcut.key)) return;
+      // Space를 누르고 있으면 재생과 멈춤이 빠르게 반복된다
+      if (e.repeat && shortcut.key === " ") return;
       e.preventDefault();
       commandRef.current(shortcut.run);
     };
@@ -259,7 +270,8 @@ export default function App() {
       )}
       {quickOpen !== null && (
         <QuickOpen
-          initialQuery={quickOpen}
+          key={quickOpen.nonce}
+          initialQuery={quickOpen.query}
           onClose={() => setQuickOpen(null)}
           onOpen={(id, time) => {
             setQuickOpen(null);

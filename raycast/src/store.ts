@@ -100,7 +100,13 @@ export function formatTime(seconds: number): string {
  * sori:// 링크를 연다. -g로 열어 녹음 토글처럼 창이 필요 없는 요청에 sori가 앞으로 나오지 않게 한다.
  * 창이 필요한 요청(열기, 가져오기)은 sori가 스스로 창을 앞으로 가져온다
  */
-export function openSori(path: string, params: [string, string][] = []): Promise<void> {
+export async function openSori(path: string, params: [string, string][] = []): Promise<void> {
+  // 녹음과 가져오기 링크는 sori가 만든 토큰이 있어야 받는다. 웹 페이지가 녹음을 켜지 못하게 하는 장치다
+  if (path.startsWith("record/") || path === "import") {
+    const token = await readFile(join(DATA_DIR, "..", "link-token"), "utf8").catch(() => null);
+    if (!token) throw new Error("sori를 한 번 실행한 뒤 다시 시도하세요");
+    params = [...params, ["token", token.trim()]];
+  }
   const query = params.map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join("&");
   const url = `sori://${path}${query ? `?${query}` : ""}`;
   return new Promise((resolve, reject) => {

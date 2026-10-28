@@ -30,6 +30,14 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
     api.listInputDevices().then(setDevices).catch(() => setDevices([]));
   }, []);
 
+  // 단축키를 받는 도중 창을 닫으면 받기 칸의 blur가 오지 않을 수 있다. 꺼 둔 전역 단축키를 다시 켠다
+  useEffect(
+    () => () => {
+      api.resumeShortcuts().catch(() => {});
+    },
+    [],
+  );
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
@@ -259,8 +267,15 @@ function ShortcutInput({ label, value, onChange }: { label: string; value: strin
       <span>{label}</span>
       <button
         className={`shortcut-capture ${listening ? "listening" : ""}`}
-        onFocus={() => setListening(true)}
-        onBlur={() => setListening(false)}
+        onFocus={() => {
+          setListening(true);
+          api.suspendShortcuts();
+        }}
+        onBlur={() => {
+          setListening(false);
+          // 받기를 마치면 저장된 단축키를 다시 켠다. 새 조합은 저장할 때 등록한다
+          api.resumeShortcuts().catch(() => {});
+        }}
         onKeyDown={(e) => {
           if (e.key === "Tab") return;
           e.preventDefault();

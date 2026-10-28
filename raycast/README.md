@@ -23,7 +23,7 @@ npm run dev   # Raycast에 확장을 불러옵니다. 한 번 불러오면 dev�
 ## 동작 방식
 
 - 읽기: sori가 저장한 파일(`~/Library/Application Support/com.nobel6018.sori/recordings/`)을 직접 읽습니다. sori가 꺼져 있어도 검색과 복사가 됩니다(`src/store.ts`)
-- 동작: 녹음, 열기, 가져오기는 `open -g sori://...`로 sori에 넘깁니다. 링크 목록은 [../docs/shortcuts-and-deep-links.md](../docs/shortcuts-and-deep-links.md)에 있습니다
+- 동작: 녹음, 열기, 가져오기는 `open -g sori://...`로 sori에 넘깁니다. 녹음과 가져오기 링크에는 sori 데이터 폴더의 `link-token`을 붙입니다. 웹 페이지가 녹음을 켜지 못하게 하는 장치라, sori를 한 번도 실행하지 않았으면 이 두 명령은 동작하지 않습니다. 링크 목록은 [../docs/shortcuts-and-deep-links.md](../docs/shortcuts-and-deep-links.md)에 있습니다
 - 마크다운 형식은 앱의 `src/markdown.ts`와 같습니다. 한쪽을 바꾸면 다른 쪽도 바꿉니다
 
 스토어에 올리려면 `package.json`의 `author`를 Raycast 계정 이름으로 바꿔야 합니다. 지금 값(nobel6018)은 Raycast 계정이 아니라 `ray lint`에서 걸립니다.

@@ -1,6 +1,8 @@
-import { Icon, launchCommand, LaunchType, MenuBarExtra } from "@raycast/api";
+import { Icon, launchCommand, LaunchType, MenuBarExtra, showHUD } from "@raycast/api";
 import { useEffect, useState } from "react";
-import { formatTime, listRecordings, openSori, Recording } from "./store";
+import { formatTime, listRecordings, openSori as open, Recording } from "./store";
+
+const openSori = (path: string) => open(path).catch((e) => showHUD(e instanceof Error ? e.message : String(e)));
 
 // 10초마다 다시 그린다(package.json interval). 녹음 중이면 경과 시간을 보여 준다
 export default function Command() {
