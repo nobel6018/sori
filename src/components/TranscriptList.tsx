@@ -13,7 +13,8 @@ interface Props {
   blocks: Block[];
   recording: Recording;
   currentTime: number;
-  playing: boolean;
+  /** 재생 중이고 자동 스크롤이 켜져 있을 때만 true */
+  follow: boolean;
   onSeek: (time: number) => void;
 }
 
@@ -34,7 +35,7 @@ function findActive(blocks: Block[], time: number): number {
  * 화면에 보이는 블록만 그린다. 1시간 회의면 블록이 수백 개라,
  * 재생 중 0.25초마다 전부 다시 그리면 스크롤이 끊긴다
  */
-export function TranscriptList({ blocks, recording, currentTime, playing, onSeek }: Props) {
+export function TranscriptList({ blocks, recording, currentTime, follow, onSeek }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const virtualizer = useVirtualizer({
     count: blocks.length,
@@ -48,8 +49,8 @@ export function TranscriptList({ blocks, recording, currentTime, playing, onSeek
 
   // 재생 중 말하는 블록이 화면 밖으로 나가면 따라간다. 화면 안이면 움직이지 않는다
   useEffect(() => {
-    if (playing && active >= 0) virtualizer.scrollToIndex(active, { align: "auto" });
-  }, [active, playing, virtualizer]);
+    if (follow && active >= 0) virtualizer.scrollToIndex(active, { align: "auto" });
+  }, [active, follow, virtualizer]);
 
   if (blocks.length === 0) return <p className="muted">받아 적은 내용이 없습니다.</p>;
 

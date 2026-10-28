@@ -40,6 +40,22 @@ export function RecordingView({ recording, progress, onChanged, onDeleted }: Pro
   const [error, setError] = useState<string | null>(recording.error);
   const [currentTime, setCurrentTime] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const [follow, setFollow] = useState(() => {
+    try {
+      return localStorage.getItem("sori.follow") !== "off";
+    } catch {
+      return true;
+    }
+  });
+  const toggleFollow = () =>
+    setFollow((prev) => {
+      try {
+        localStorage.setItem("sori.follow", prev ? "off" : "on");
+      } catch {
+        // 저장이 안 되면 이번 실행 동안만 유지한다
+      }
+      return !prev;
+    });
   const [editingSpeaker, setEditingSpeaker] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
   const [tab, setTab] = useState<"transcript" | "summary">("transcript");
@@ -234,6 +250,14 @@ export function RecordingView({ recording, progress, onChanged, onDeleted }: Pro
 
       {transcript && tab === "transcript" && speakers.length > 0 && (
         <section className="speakers">
+          <button
+            className={`follow-toggle ${follow ? "on" : ""}`}
+            aria-pressed={follow}
+            title="재생 중 지금 말하는 부분으로 전사를 자동 스크롤합니다"
+            onClick={toggleFollow}
+          >
+            자동 스크롤 {follow ? "켬" : "끔"}
+          </button>
           {speakers.map((s) =>
             editingSpeaker === s ? (
               <input
@@ -264,7 +288,7 @@ export function RecordingView({ recording, progress, onChanged, onDeleted }: Pro
       )}
 
       {transcript && tab === "transcript" && (
-        <TranscriptList blocks={blocks} recording={rec} currentTime={currentTime} playing={playing} onSeek={seek} />
+        <TranscriptList blocks={blocks} recording={rec} currentTime={currentTime} follow={playing && follow} onSeek={seek} />
       )}
     </div>
   );
