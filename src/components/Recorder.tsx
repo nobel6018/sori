@@ -11,11 +11,11 @@ export function Recorder({ onStarted, onStopped, onError }: Props) {
   const [active, setActive] = useState<Recording | null>(null);
   const [startedAt, setStartedAt] = useState(0);
   const [elapsed, setElapsed] = useState(0);
-  const [level, setLevel] = useState(0);
+  const [levels, setLevels] = useState<number[]>([]);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    const unlisten = api.onLevel(setLevel);
+    const unlisten = api.onLevel(setLevels);
     return () => {
       unlisten.then((f) => f());
     };
@@ -58,7 +58,7 @@ export function Recorder({ onStarted, onStopped, onError }: Props) {
     try {
       const recording = await api.stopRecording();
       setActive(null);
-      setLevel(0);
+      setLevels([]);
       onStopped(recording);
     } catch (e) {
       onError(String(e));
@@ -87,9 +87,25 @@ export function Recorder({ onStarted, onStopped, onError }: Props) {
           멈추기
         </button>
       </div>
-      <div className="level-track" role="meter" aria-label="입력 음량" aria-valuemin={0} aria-valuemax={1} aria-valuenow={level}>
-        <div className="level-bar" style={{ width: `${level * 100}%` }} />
-      </div>
+      {active.tracks.map((track, i) => {
+        const label = track.startsWith("system") ? "시스템" : "마이크";
+        const level = levels[i] ?? 0;
+        return (
+          <div key={track} className="level-row">
+            <span className="level-label">{label}</span>
+            <div
+              className="level-track"
+              role="meter"
+              aria-label={`${label} 음량`}
+              aria-valuemin={0}
+              aria-valuemax={1}
+              aria-valuenow={level}
+            >
+              <div className="level-bar" style={{ width: `${level * 100}%` }} />
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

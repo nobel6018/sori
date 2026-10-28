@@ -16,6 +16,7 @@ export interface Recording {
   speakerNames: Record<string, string>;
   numSpeakers: number | null;
   languages: string[];
+  tracks: string[];
 }
 
 export interface SpeakerTurn {
@@ -48,6 +49,7 @@ export interface Settings {
   models: { whisper: string; segmentation: string; embedding: string };
   defaultLanguages: string[];
   inputDeviceId: string | null;
+  captureSystemAudio: boolean;
 }
 
 export interface InputDevice {
@@ -76,8 +78,8 @@ export const api = {
   listInputDevices: () => invoke<InputDevice[]>("list_input_devices"),
   startRecording: () => invoke<Recording>("start_recording"),
   stopRecording: () => invoke<Recording>("stop_recording"),
-  onLevel: (handler: (level: number) => void) =>
-    listen<{ id: string; level: number }>("recording-level", (e) => handler(e.payload.level)),
+  onLevel: (handler: (levels: number[]) => void) =>
+    listen<{ id: string; levels: number[] }>("recording-level", (e) => handler(e.payload.levels)),
   onRecordingInterrupted: (handler: () => void) => listen("recording-interrupted", () => handler()),
   onProgress: (handler: (e: ProgressEvent) => void) =>
     listen<ProgressEvent>("progress", (e) => handler(e.payload)),

@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
@@ -33,8 +33,23 @@ pub fn list_input_devices() -> Result<Vec<InputDevice>> {
     Ok(devices)
 }
 
+/// 녹음할 소리. 마이크와 시스템 소리는 각자 트랙 파일로 따로 저장한다
+#[derive(Debug, Clone)]
+pub enum Source {
+    /// None이면 시스템 기본 마이크
+    Mic(Option<String>),
+    /// 기본 출력 장치로 나가는 소리(통화 상대 목소리 등). macOS 14.6 이상은 Core Audio 탭, Windows는 WASAPI 루프백
+    System,
+}
+
+#[derive(Debug, Clone)]
+pub struct Track {
+    pub source: Source,
+    pub path: PathBuf,
+}
+
 enum Event {
-    Samples(Vec<f32>),
+    Samples(usize, Vec<f32>),
     StreamError(String),
 }
 
@@ -45,7 +60,6 @@ pub struct ActiveRecording {
 }
 
 pub struct Finished {
-    pub duration: f32,
     /// 장치가 빠지는 등 녹음 도중 끊긴 이유. 그 전까지의 녹음은 파일에 남아 있다
     pub interrupted: Option<String>,
 }
@@ -74,21 +88,20 @@ const FLUSH_INTERVAL: Duration = Duration::from_secs(2);
 /// 레벨 미터 이벤트 간격
 const LEVEL_INTERVAL: Duration = Duration::from_millis(66);
 
-/// 장치 기본 샘플레이트 그대로 16비트 모노 WAV로 녹음한다.
-/// 리샘플링은 전사할 때 한 번만 하면 되므로 녹음 중에는 하지 않는다
+type Writer = hound::WavWriter<std::io::BufWriter<std::fs::File>>;
+
+/// 트랙마다 장치 기본 샘플레이트 그대로 16비트 모노 WAV로 녹음한다.
+/// 리샘플링은 트랙을 섞거나 전사할 때 하면 되므로 녹음 중에는 하지 않는다
 pub fn start(
-    device_id: Option<&str>,
-    path: &Path,
-    on_level: impl Fn(f32) + Send + 'static,
+    tracks: Vec<Track>,
+    on_level: impl Fn(Vec<f32>) + Send + 'static,
     on_interrupted: impl FnOnce(String) + Send + 'static,
 ) -> Result<ActiveRecording> {
     let (stop_tx, stop_rx) = mpsc::channel::<()>();
     let (ready_tx, ready_rx) = mpsc::channel::<Result<()>>();
-    let device_id = device_id.map(str::to_string);
-    let path = path.to_path_buf();
 
     // cpal 스트림은 macOS에서 다른 스레드로 옮길 수 없어서, 만들고 끝낼 때까지 한 스레드가 소유한다
-    let handle = std::thread::spawn(move || run(device_id, path, stop_rx, ready_tx, on_level, on_interrupted));
+    let handle = std::thread::spawn(move || run(tracks, stop_rx, ready_tx, on_level, on_interrupted));
 
     match ready_rx.recv() {
         Ok(Ok(())) => Ok(ActiveRecording {
@@ -104,40 +117,40 @@ pub fn start(
 }
 
 fn run(
-    device_id: Option<String>,
-    path: PathBuf,
+    tracks: Vec<Track>,
     stop_rx: mpsc::Receiver<()>,
     ready_tx: mpsc::Sender<Result<()>>,
-    on_level: impl Fn(f32),
+    on_level: impl Fn(Vec<f32>),
     on_interrupted: impl FnOnce(String),
 ) -> Result<Finished> {
     let (tx, rx) = mpsc::channel::<Event>();
-    let setup = || -> Result<(cpal::Stream, hound::WavWriter<std::io::BufWriter<std::fs::File>>, u32)> {
-        let device = open_device(device_id.as_deref())?;
-        let config = device.default_input_config().wrap_err("입력 장치 설정을 읽지 못했습니다")?;
-        let rate = config.sample_rate();
-        let channels = config.channels() as usize;
-        let stream = match config.sample_format() {
-            SampleFormat::F32 => build::<f32>(&device, config.into(), channels, tx.clone())?,
-            SampleFormat::I16 => build::<i16>(&device, config.into(), channels, tx.clone())?,
-            SampleFormat::I32 => build::<i32>(&device, config.into(), channels, tx.clone())?,
-            SampleFormat::U16 => build::<u16>(&device, config.into(), channels, tx.clone())?,
-            other => return Err(eyre!("지원하지 않는 샘플 형식입니다: {other}")),
-        };
-        let writer = hound::WavWriter::create(
-            &path,
-            hound::WavSpec {
-                channels: 1,
-                sample_rate: rate,
-                bits_per_sample: 16,
-                sample_format: hound::SampleFormat::Int,
-            },
-        )?;
-        stream.play().wrap_err("녹음을 시작하지 못했습니다. 마이크 권한을 확인해 주세요")?;
-        Ok((stream, writer, rate))
+    let setup = || -> Result<(Vec<cpal::Stream>, Vec<Writer>)> {
+        let mut streams = Vec::new();
+        let mut writers = Vec::new();
+        for (index, track) in tracks.iter().enumerate() {
+            let (stream, rate) = open_stream(&track.source, index, tx.clone())?;
+            writers.push(hound::WavWriter::create(
+                &track.path,
+                hound::WavSpec {
+                    channels: 1,
+                    sample_rate: rate,
+                    bits_per_sample: 16,
+                    sample_format: hound::SampleFormat::Int,
+                },
+            )?);
+            streams.push(stream);
+        }
+        // 트랙 사이 시작 시점 차이를 줄이려고 장치를 다 연 뒤 한꺼번에 시작한다
+        for (stream, track) in streams.iter().zip(&tracks) {
+            stream.play().wrap_err_with(|| match track.source {
+                Source::Mic(_) => "마이크 녹음을 시작하지 못했습니다. 마이크 권한을 확인해 주세요",
+                Source::System => "시스템 소리 녹음을 시작하지 못했습니다. 시스템 오디오 녹음 권한을 확인해 주세요",
+            })?;
+        }
+        Ok((streams, writers))
     };
 
-    let (stream, mut writer, rate) = match setup() {
+    let (streams, mut writers) = match setup() {
         Ok(v) => {
             let _ = ready_tx.send(Ok(()));
             v
@@ -150,10 +163,10 @@ fn run(
     };
 
     let _awake = KeepAwake::begin();
-    let mut written: u64 = 0;
+    let mut written = vec![0u64; writers.len()];
+    let mut peaks = vec![0.0f32; writers.len()];
     let mut last_flush = Instant::now();
     let mut last_level = Instant::now();
-    let mut peak = 0.0f32;
     let mut interrupted = None;
 
     loop {
@@ -161,12 +174,10 @@ fn run(
             break;
         }
         match rx.recv_timeout(Duration::from_millis(50)) {
-            Ok(Event::Samples(samples)) => {
-                for s in &samples {
-                    writer.write_sample(i16::from_sample(s.clamp(-1.0, 1.0)))?;
-                    peak = peak.max(s.abs());
-                }
-                written += samples.len() as u64;
+            Ok(Event::Samples(i, samples)) => {
+                write_samples(&mut writers[i], &samples)?;
+                peaks[i] = samples.iter().fold(peaks[i], |p, s| p.max(s.abs()));
+                written[i] += samples.len() as u64;
             }
             Ok(Event::StreamError(e)) => {
                 interrupted = Some(e);
@@ -176,53 +187,96 @@ fn run(
             Err(RecvTimeoutError::Disconnected) => break,
         }
         if last_level.elapsed() >= LEVEL_INTERVAL {
-            on_level(level(peak));
-            peak = 0.0;
+            on_level(peaks.iter().map(|p| level(*p)).collect());
+            peaks.iter_mut().for_each(|p| *p = 0.0);
             last_level = Instant::now();
         }
         if last_flush.elapsed() >= FLUSH_INTERVAL {
-            writer.flush()?;
+            for w in &mut writers {
+                w.flush()?;
+            }
             last_flush = Instant::now();
         }
     }
 
     // 스트림을 먼저 멈춘 뒤 채널에 남은 샘플까지 받아 적는다
-    drop(stream);
-    while let Ok(Event::Samples(samples)) = rx.try_recv() {
-        for s in &samples {
-            writer.write_sample(i16::from_sample(s.clamp(-1.0, 1.0)))?;
+    drop(streams);
+    while let Ok(event) = rx.try_recv() {
+        if let Event::Samples(i, samples) = event {
+            write_samples(&mut writers[i], &samples)?;
+            written[i] += samples.len() as u64;
         }
-        written += samples.len() as u64;
     }
-    writer.finalize()?;
-    on_level(0.0);
+    for w in writers {
+        w.finalize()?;
+    }
+    on_level(vec![0.0; written.len()]);
     // 사용자가 멈추기를 누르지 않았는데 끝났으면 화면에 알려 멈추기 처리를 하게 한다
     if let Some(reason) = &interrupted {
         on_interrupted(reason.clone());
     }
 
-    Ok(Finished {
-        duration: written as f32 / rate as f32,
-        interrupted,
-    })
+    Ok(Finished { interrupted })
 }
 
-fn open_device(device_id: Option<&str>) -> Result<cpal::Device> {
+fn write_samples(writer: &mut Writer, samples: &[f32]) -> Result<()> {
+    for s in samples {
+        writer.write_sample(i16::from_sample(s.clamp(-1.0, 1.0)))?;
+    }
+    Ok(())
+}
+
+fn open_stream(source: &Source, index: usize, tx: mpsc::Sender<Event>) -> Result<(cpal::Stream, u32)> {
     let host = cpal::default_host();
-    let device = match device_id {
-        Some(id) => {
-            let id = id.parse().map_err(|e| eyre!("잘못된 장치 id입니다: {e}"))?;
-            host.device_by_id(&id)
+    let (device, config) = match source {
+        Source::Mic(device_id) => {
+            let device = match device_id {
+                Some(id) => {
+                    let id = id.parse().map_err(|e| eyre!("잘못된 장치 id입니다: {e}"))?;
+                    host.device_by_id(&id)
+                }
+                None => host.default_input_device(),
+            }
+            .ok_or_else(|| eyre!("마이크를 찾을 수 없습니다"))?;
+            let config = device.default_input_config().wrap_err("마이크 설정을 읽지 못했습니다")?;
+            (device, config)
         }
-        None => host.default_input_device(),
+        Source::System => {
+            let device = host
+                .default_output_device()
+                .ok_or_else(|| eyre!("소리를 내보내는 출력 장치를 찾을 수 없습니다"))?;
+            // cpal은 macOS에서 입력도 되는 출력 장치(일부 헤드셋)를 루프백 대신 그 장치의 마이크로 연다.
+            // 그러면 시스템 소리 대신 마이크 소리가 녹음되므로 미리 막는다
+            if cfg!(target_os = "macos") && device.supports_input() {
+                let name = device.description().map(|d| d.name().to_string()).unwrap_or_default();
+                return Err(eyre!(
+                    "지금 출력 장치({name})는 시스템 소리 녹음을 지원하지 않습니다. 출력을 다른 장치로 바꾸거나 시스템 소리 녹음을 꺼 주세요"
+                ));
+            }
+            let config = device
+                .default_output_config()
+                .wrap_err("출력 장치 설정을 읽지 못했습니다")?;
+            (device, config)
+        }
     };
-    device.ok_or_else(|| eyre!("마이크를 찾을 수 없습니다"))
+
+    let rate = config.sample_rate();
+    let channels = config.channels() as usize;
+    let stream = match config.sample_format() {
+        SampleFormat::F32 => build::<f32>(&device, config.into(), channels, index, tx)?,
+        SampleFormat::I16 => build::<i16>(&device, config.into(), channels, index, tx)?,
+        SampleFormat::I32 => build::<i32>(&device, config.into(), channels, index, tx)?,
+        SampleFormat::U16 => build::<u16>(&device, config.into(), channels, index, tx)?,
+        other => return Err(eyre!("지원하지 않는 샘플 형식입니다: {other}")),
+    };
+    Ok((stream, rate))
 }
 
 fn build<T>(
     device: &cpal::Device,
     config: cpal::StreamConfig,
     channels: usize,
+    index: usize,
     tx: mpsc::Sender<Event>,
 ) -> Result<cpal::Stream>
 where
@@ -237,7 +291,7 @@ where
                 .chunks_exact(channels)
                 .map(|frame| frame.iter().map(|s| s.to_sample::<f32>()).sum::<f32>() / channels as f32)
                 .collect();
-            let _ = tx.send(Event::Samples(mono));
+            let _ = tx.send(Event::Samples(index, mono));
         },
         move |err: cpal::Error| match err.kind() {
             // 몇 ms가 빠지는 경고라 녹음은 계속한다. 앱이 백그라운드에서 느려질 때 자주 난다

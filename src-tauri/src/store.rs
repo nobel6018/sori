@@ -37,6 +37,9 @@ pub struct Recording {
     pub num_speakers: Option<i32>,
     #[serde(default)]
     pub languages: Vec<String>,
+    /// 앱에서 녹음한 경우 소리별 트랙 파일 이름(mic.wav, system.wav). 섞은 결과가 audio_file이다
+    #[serde(default)]
+    pub tracks: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -49,6 +52,9 @@ pub struct Settings {
     /// None이면 시스템 기본 마이크
     #[serde(default)]
     pub input_device_id: Option<String>,
+    /// 마이크와 함께 시스템 소리(통화 상대 목소리 등)도 녹음한다
+    #[serde(default)]
+    pub capture_system_audio: bool,
 }
 
 impl Settings {
@@ -68,6 +74,7 @@ impl Settings {
             },
             default_languages: Vec::new(),
             input_device_id: None,
+            capture_system_audio: false,
         }
     }
 }
@@ -131,9 +138,17 @@ impl Store {
         Ok(recording)
     }
 
-    /// 앱에서 녹음할 새 항목을 만든다. 오디오 파일은 녹음기가 채운다
-    pub fn create_for_recording(&self, title: String) -> Result<Recording> {
-        self.create(title, "마이크 녹음".to_string(), "audio.wav".to_string(), Status::Recording)
+    /// 앱에서 녹음할 새 항목을 만든다. 트랙 파일은 녹음기가 채우고, 멈출 때 audio.wav로 섞는다
+    pub fn create_for_recording(&self, title: String, source_name: String, tracks: Vec<String>) -> Result<Recording> {
+        let mut recording = self.create(title, source_name, "audio.wav".to_string(), Status::Recording)?;
+        recording.tracks = tracks;
+        self.save(&recording)?;
+        Ok(recording)
+    }
+
+    pub fn track_paths(&self, recording: &Recording) -> Result<Vec<PathBuf>> {
+        let dir = self.dir(&recording.id)?;
+        Ok(recording.tracks.iter().map(|t| dir.join(t)).collect())
     }
 
     fn create(&self, title: String, source_name: String, audio_file: String, status: Status) -> Result<Recording> {
@@ -151,6 +166,7 @@ impl Store {
             speaker_names: BTreeMap::new(),
             num_speakers: None,
             languages: Vec::new(),
+            tracks: Vec::new(),
         };
         self.save(&recording)?;
         Ok(recording)

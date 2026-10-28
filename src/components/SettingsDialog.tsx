@@ -76,6 +76,17 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
             ))}
           </select>
         </div>
+        <label className="setting-toggle">
+          <input
+            type="checkbox"
+            checked={settings.captureSystemAudio}
+            onChange={(e) => setSettings({ ...settings, captureSystemAudio: e.target.checked })}
+          />
+          <span>
+            시스템 소리도 함께 녹음
+            <span className="muted"> 화상 회의, 통화 상대 목소리처럼 이 컴퓨터에서 나오는 소리. macOS는 14.6 이상, 처음 녹음할 때 권한을 묻습니다</span>
+          </span>
+        </label>
         <div className="setting-row">
           <div className="setting-label">
             <span>기본 녹음 언어</span>

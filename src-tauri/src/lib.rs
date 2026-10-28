@@ -143,7 +143,8 @@ fn list_input_devices() -> CmdResult<Vec<recorder::InputDevice>> {
 #[serde(rename_all = "camelCase")]
 struct LevelEvent {
     id: String,
-    level: f32,
+    /// 트랙 순서(마이크, 시스템 소리)대로 0..1
+    levels: Vec<f32>,
 }
 
 #[derive(Serialize, Clone)]
@@ -161,18 +162,36 @@ async fn start_recording(app: AppHandle, state: State<'_, AppState>) -> CmdResul
         return Err("이미 녹음 중입니다".into());
     }
     let settings = state.store.get_settings(&state.home);
+    let mut sources = vec![("mic.wav", recorder::Source::Mic(settings.input_device_id.clone()))];
+    if settings.capture_system_audio {
+        sources.push(("system.wav", recorder::Source::System));
+    }
     let title = format!("녹음 {}", chrono::Local::now().format("%Y-%m-%d %H:%M"));
-    let recording = state.store.create_for_recording(title).map_err(err)?;
-    let path = state.store.audio_path(&recording).map_err(err)?;
+    let source_name = if settings.capture_system_audio { "마이크 + 시스템 소리" } else { "마이크 녹음" };
+    let recording = state
+        .store
+        .create_for_recording(
+            title,
+            source_name.to_string(),
+            sources.iter().map(|(f, _)| f.to_string()).collect(),
+        )
+        .map_err(err)?;
+    let tracks = state
+        .store
+        .track_paths(&recording)
+        .map_err(err)?
+        .into_iter()
+        .zip(sources)
+        .map(|(path, (_, source))| recorder::Track { source, path })
+        .collect();
 
     let id = recording.id.clone();
     let level_app = app.clone();
     let interrupted_id = recording.id.clone();
     let started = recorder::start(
-        settings.input_device_id.as_deref(),
-        &path,
-        move |level| {
-            let _ = level_app.emit("recording-level", LevelEvent { id: id.clone(), level });
+        tracks,
+        move |levels| {
+            let _ = level_app.emit("recording-level", LevelEvent { id: id.clone(), levels });
         },
         move |reason| {
             let _ = app.emit("recording-interrupted", InterruptedEvent { id: interrupted_id, reason });
@@ -191,21 +210,41 @@ async fn start_recording(app: AppHandle, state: State<'_, AppState>) -> CmdResul
     }
 }
 
+/// 트랙을 섞어 재생과 전사에 쓸 audio.wav를 만든다. 녹음 길이(초)를 돌려준다
+fn finalize_tracks(store: &Store, recording: &Recording) -> eyre::Result<f32> {
+    let tracks = store.track_paths(recording)?;
+    let existing: Vec<PathBuf> = tracks.into_iter().filter(|p| p.exists()).collect();
+    engine::audio::mix_wav_tracks(&existing, &store.audio_path(recording)?)
+}
+
 #[tauri::command]
-async fn stop_recording(state: State<'_, AppState>) -> CmdResult<Recording> {
+async fn stop_recording(app: AppHandle) -> CmdResult<Recording> {
+    let state = app.state::<AppState>();
     let (id, active) = state.recorder.lock().unwrap().take().ok_or("녹음 중이 아닙니다")?;
     let result = active.stop();
+
+    let worker_app = app.clone();
+    let worker_id = id.clone();
+    // 1시간 녹음이면 트랙을 섞는 데 몇 초 걸리므로 블로킹 스레드에서 한다
+    let mixed = tauri::async_runtime::spawn_blocking(move || {
+        let state = worker_app.state::<AppState>();
+        let recording = state.store.get(&worker_id)?;
+        finalize_tracks(&state.store, &recording)
+    })
+    .await
+    .map_err(err)?;
+
     let mut recording = state.store.get(&id).map_err(err)?;
     recording.status = Status::New;
-    match result {
-        Ok(finished) => {
-            recording.duration = Some(finished.duration);
-            recording.error = finished
-                .interrupted
-                .map(|e| format!("녹음 장치 오류로 중간에 멈췄습니다. 그 전까지는 저장됐습니다: {e}"));
-        }
-        Err(e) => recording.error = Some(format!("녹음을 마무리하지 못했습니다: {e:#}")),
-    }
+    recording.error = match (&result, &mixed) {
+        (Err(e), _) => Some(format!("녹음을 마무리하지 못했습니다: {e:#}")),
+        (_, Err(e)) => Some(format!("트랙을 합치지 못했습니다: {e:#}")),
+        (Ok(f), Ok(_)) => f
+            .interrupted
+            .as_ref()
+            .map(|e| format!("녹음 장치 오류로 중간에 멈췄습니다. 그 전까지는 저장됐습니다: {e}")),
+    };
+    recording.duration = mixed.ok();
     state.store.save(&recording).map_err(err)?;
     Ok(recording)
 }
@@ -301,6 +340,7 @@ pub fn run() {
                     // WAV 헤더를 2초마다 갱신하므로 마지막 2초 정도만 빠지고 나머지는 재생된다
                     Status::Recording => {
                         r.status = Status::New;
+                        r.duration = finalize_tracks(&store, &r).ok();
                         r.error = Some("녹음 도중 앱이 종료됐습니다. 마지막 몇 초가 빠졌을 수 있습니다".into());
                     }
                     _ => continue,
