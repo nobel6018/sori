@@ -724,3 +724,83 @@ button:focus-visible {
   font-size: 12px;
   margin: 0;
 }
+
+.setup {
+  min-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px;
+}
+.setup-card {
+  width: min(560px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.setup-card h1 {
+  font-size: 22px;
+  margin: 0;
+}
+.setup-card p {
+  margin: 0;
+  line-height: 1.6;
+}
+.setup-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.setup-actions button,
+.setup-banner button {
+  min-height: 40px;
+}
+.model-option-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+label.model-option {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  cursor: pointer;
+}
+.model-desc {
+  margin-left: 26px;
+  font-size: 12px;
+}
+.setup-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 12px 28px 0;
+  padding: 10px 14px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: var(--accent-soft);
+  font-size: 13px;
+}
+.install-inline {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 8px 0 0 26px;
+}
+.install-inline > button {
+  align-self: flex-start;
+}
+.install-inline .install-row {
+  margin: 6px 0 0;
+}
+.install-inline summary {
+  font-size: 12px;
+  cursor: pointer;
+}
+.install-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}

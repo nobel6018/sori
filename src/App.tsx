@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open } from "@tauri-apps/plugin-dialog";
-import { api, AUDIO_EXTENSIONS, ProgressEvent, Recording } from "./api";
+import { api, AUDIO_EXTENSIONS, ModelCatalog, modelsReady, ProgressEvent, Recording } from "./api";
+import { ModelSetup } from "./components/ModelSetup";
 import { Recorder } from "./components/Recorder";
 import { Sidebar } from "./components/Sidebar";
 import { RecordingView } from "./components/RecordingView";
@@ -15,6 +16,8 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [catalog, setCatalog] = useState<ModelCatalog | null>(null);
+  const [setupLater, setSetupLater] = useState(false);
 
   const refresh = useCallback(async () => {
     setRecordings(await api.listRecordings());
@@ -45,6 +48,10 @@ export default function App() {
     });
     if (picked) await importPaths(picked);
   }, [importPaths]);
+
+  useEffect(() => {
+    api.modelCatalog().then(setCatalog);
+  }, []);
 
   useEffect(() => {
     refresh();
@@ -90,7 +97,17 @@ export default function App() {
         }
       />
       <main className="main">
-        {selected ? (
+        {catalog && !modelsReady(catalog) && setupLater && (
+          <div className="setup-banner" role="status">
+            모델이 없어 받아 적기를 할 수 없습니다.
+            <button className="primary" onClick={() => setSetupLater(false)}>
+              모델 설치
+            </button>
+          </div>
+        )}
+        {catalog && !modelsReady(catalog) && !setupLater ? (
+          <ModelSetup catalog={catalog} onInstalled={setCatalog} onLater={() => setSetupLater(true)} />
+        ) : selected ? (
           <RecordingView
             // 녹음이 끝나면 화면을 새로 만들어 재생기와 처리 패널을 띄운다
             key={`${selected.id}-${selected.status === "recording"}`}
@@ -118,7 +135,15 @@ export default function App() {
           {error}
         </div>
       )}
-      {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} />}
+      {settingsOpen && (
+        <SettingsDialog
+          onClose={() => {
+            setSettingsOpen(false);
+            // 설정에서 모델을 받았을 수 있으니 다시 확인한다
+            api.modelCatalog().then(setCatalog);
+          }}
+        />
+      )}
     </div>
   );
 }

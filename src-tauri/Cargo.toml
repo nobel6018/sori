@@ -1,6 +1,6 @@
 [package]
 name = "sori"
-version = "0.1.0"
+version = "0.2.0"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2024"
@@ -34,6 +34,7 @@ tauri-plugin-dialog = "2"
 chrono = { version = "0.4.45", features = ["serde"] }
 tokio = { version = "1", features = ["sync", "process", "io-util", "time", "macros", "rt"] }
 cpal = "0.18"
+ureq = "2.12"
 
 # whisper.cpp GPU 백엔드는 플랫폼마다 다르다. macOS는 Metal을 항상 켜고,
 # 윈도우와 리눅스는 기본 CPU로 빌드하되 빌드 머신에 SDK가 있으면 아래 기능으로 켠다

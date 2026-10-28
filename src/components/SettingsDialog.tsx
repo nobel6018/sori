@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
-import { api, InputDevice, installCommand, LANGUAGES, ModelCatalog, Settings } from "../api";
+import { api, formatBytes, InputDevice, installCommand, LANGUAGES, ModelCatalog, Settings } from "../api";
+import { useModelInstall } from "../useModelInstall";
+import { InstallProgress } from "./InstallProgress";
 
 const MODEL_FIELDS: { key: keyof Settings["models"]; label: string; hint: string }[] = [
   { key: "whisper", label: "Whisper 모델", hint: "ggml 형식 .bin (예: ggml-large-v3-turbo.bin)" },
@@ -16,6 +18,8 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const [catalog, setCatalog] = useState<ModelCatalog | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const refreshCatalog = () => api.modelCatalog().then(setCatalog);
+  const install = useModelInstall();
+  const [installing, setInstalling] = useState<string | null>(null);
 
   useEffect(() => {
     api.getSettings().then(setSettings);
@@ -29,6 +33,19 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const pick = async (key: keyof Settings["models"]) => {
     const path = await open({ multiple: false, defaultPath: settings.models[key] });
     if (path) setSettings({ ...settings, models: { ...settings.models, [key]: path } });
+  };
+
+  const installWhisper = async (id: string) => {
+    setInstalling(id);
+    const next = await install.start([id]);
+    if (next) {
+      setCatalog(next);
+      // 받은 모델로 바로 바꾼다. 설치 후 백엔드가 고친 다른 경로도 함께 읽어 온다
+      const path = next.whisper.find((w) => w.id === id)?.path;
+      const saved = await api.getSettings();
+      setSettings({ ...saved, models: { ...saved.models, whisper: path ?? saved.models.whisper } });
+    }
+    setInstalling(null);
   };
 
   const copyCommand = async (arg: string) => {
@@ -77,14 +94,30 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
                       onChange={() => m.path && setSettings({ ...settings, models: { ...settings.models, whisper: m.path } })}
                     />
                     <span className="model-name">{m.label}</span>
-                    <span className="muted">{(m.sizeBytes / 1e9).toFixed(1)}GB</span>
+                    <span className="muted">{formatBytes(m.sizeBytes)}</span>
                     <span className={`badge ${m.path ? "badge-done" : ""}`}>{m.path ? "설치됨" : "설치 안 됨"}</span>
                   </label>
                   <p className="muted">{m.description}</p>
                   {m.path === null && (
-                    <div className="install-row">
-                      <code>{installCommand(m.scriptArg)}</code>
-                      <button onClick={() => copyCommand(m.scriptArg)}>{copied === m.scriptArg ? "복사했습니다" : "명령 복사"}</button>
+                    <div className="install-inline">
+                      {installing === m.id && install.running ? (
+                        <>
+                          <InstallProgress state={install} />
+                          <button onClick={install.cancel}>멈추기</button>
+                        </>
+                      ) : (
+                        <button className="primary" disabled={install.running} onClick={() => installWhisper(m.id)}>
+                          {installing === m.id && install.error ? "이어서 받기" : `설치 (${formatBytes(m.sizeBytes)})`}
+                        </button>
+                      )}
+                      {installing === m.id && install.error && !install.running && <div className="error">{install.error}</div>}
+                      <details>
+                        <summary className="muted">터미널로 받기</summary>
+                        <div className="install-row">
+                          <code>{installCommand(m.scriptArg)}</code>
+                          <button onClick={() => copyCommand(m.scriptArg)}>{copied === m.scriptArg ? "복사했습니다" : "명령 복사"}</button>
+                        </div>
+                      </details>
                     </div>
                   )}
                 </div>
@@ -93,7 +126,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
           </div>
           {catalog && (
             <p className="muted small">
-              터미널{navigator.userAgent.includes("Windows") ? "(PowerShell)" : ""}에 명령을 붙여 넣으면 화자 분리 모델까지 함께 받습니다. 받는 곳: {catalog.modelsDir}
+              설치하면 없는 화자 분리 모델도 함께 받습니다. 받는 곳: {catalog.modelsDir}
             </p>
           )}
         </div>

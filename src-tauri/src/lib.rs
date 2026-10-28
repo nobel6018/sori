@@ -1,5 +1,6 @@
 pub mod engine;
-mod models;
+pub mod download;
+pub mod models;
 mod recorder;
 pub mod store;
 pub mod summarize;
@@ -34,6 +35,8 @@ struct AppState {
     recorder: Mutex<Option<(String, recorder::ActiveRecording)>>,
     /// 요약 중인 녹음 id → 취소 신호
     summaries: Mutex<HashMap<String, tokio::sync::oneshot::Sender<()>>>,
+    /// 모델 내려받기 중이면 취소 신호
+    model_install: Mutex<Option<Arc<AtomicBool>>>,
 }
 
 impl AppState {
@@ -88,6 +91,61 @@ fn save_settings(state: State<AppState>, settings: Settings) -> CmdResult<()> {
 #[tauri::command]
 fn model_catalog(state: State<AppState>) -> models::Catalog {
     models::catalog(&state.store.models_dir, &state.home)
+}
+
+/// 고른 Whisper 모델과 없는 화자 분리 모델을 받는다. 진행률은 model-download 이벤트로 보낸다
+#[tauri::command]
+async fn install_models(app: AppHandle, whisper: Vec<String>) -> CmdResult<models::Catalog> {
+    let state = app.state::<AppState>();
+    let cancel = Arc::new(AtomicBool::new(false));
+    {
+        let mut slot = state.model_install.lock().unwrap();
+        if slot.is_some() {
+            return Err("이미 모델을 받는 중입니다".into());
+        }
+        *slot = Some(cancel.clone());
+    }
+    let worker = app.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let state = worker.state::<AppState>();
+        let plan = models::install_plan(&state.store.models_dir, &state.home, &whisper).map_err(|e| eyre::eyre!(e))?;
+        download::download_all(&plan, &cancel, |p| {
+            let _ = worker.emit("model-download", p);
+        })
+    })
+    .await
+    .map_err(err);
+    state.model_install.lock().unwrap().take();
+    result?.map_err(|e| format!("{e:#}"))?;
+
+    // 설정이 없는 파일을 가리키고 있을 때만 새로 받은 파일로 바꾼다. 사용자가 고른 경로는 두고
+    let catalog = models::catalog(&state.store.models_dir, &state.home);
+    let mut settings = state.store.get_settings(&state.home);
+    let m = &mut settings.models;
+    if !m.whisper.is_file() {
+        if let Some(p) = catalog.whisper.iter().find_map(|w| w.path.clone()) {
+            m.whisper = p;
+        }
+    }
+    if !m.segmentation.is_file() {
+        if let Some(p) = catalog.segmentation.clone() {
+            m.segmentation = p;
+        }
+    }
+    if !m.embedding.is_file() {
+        if let Some(p) = catalog.embedding.clone() {
+            m.embedding = p;
+        }
+    }
+    state.store.save_settings(&settings).map_err(err)?;
+    Ok(catalog)
+}
+
+#[tauri::command]
+fn cancel_model_install(state: State<AppState>) {
+    if let Some(flag) = state.model_install.lock().unwrap().as_ref() {
+        flag.store(true, Ordering::Relaxed);
+    }
 }
 
 #[tauri::command]
@@ -442,6 +500,7 @@ pub fn run() {
                 pipeline: tokio::sync::Mutex::new(()),
                 recorder: Mutex::new(None),
                 summaries: Mutex::new(HashMap::new()),
+                model_install: Mutex::new(None),
             });
             Ok(())
         })
@@ -449,6 +508,8 @@ pub fn run() {
             get_settings,
             save_settings,
             model_catalog,
+            install_models,
+            cancel_model_install,
             list_recordings,
             import_recordings,
             get_recording,

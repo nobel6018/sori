@@ -89,6 +89,24 @@ export interface ModelCatalog {
   whisper: WhisperOption[];
   segmentation: string | null;
   embedding: string | null;
+  diarizationBytes: number;
+}
+
+export interface DownloadProgress {
+  file: string;
+  index: number;
+  count: number;
+  received: number;
+  total: number;
+}
+
+/** 받아 적기와 화자 분리를 바로 할 수 있는지 */
+export function modelsReady(c: ModelCatalog): boolean {
+  return c.whisper.some((w) => w.path) && c.segmentation !== null && c.embedding !== null;
+}
+
+export function formatBytes(n: number): string {
+  return n >= 1e9 ? `${(n / 1e9).toFixed(1)}GB` : `${Math.round(n / 1e6)}MB`;
 }
 
 const REPO_RAW = "https://raw.githubusercontent.com/nobel6018/sori/main/scripts";
@@ -117,6 +135,10 @@ export const api = {
   getSettings: () => invoke<Settings>("get_settings"),
   saveSettings: (settings: Settings) => invoke<void>("save_settings", { settings }),
   modelCatalog: () => invoke<ModelCatalog>("model_catalog"),
+  installModels: (whisper: string[]) => invoke<ModelCatalog>("install_models", { whisper }),
+  cancelModelInstall: () => invoke<void>("cancel_model_install"),
+  onModelDownload: (handler: (p: DownloadProgress) => void) =>
+    listen<DownloadProgress>("model-download", (e) => handler(e.payload)),
   listRecordings: () => invoke<Recording[]>("list_recordings"),
   importRecordings: (paths: string[]) => invoke<Recording[]>("import_recordings", { paths }),
   getRecording: (id: string) => invoke<RecordingDetail>("get_recording", { id }),

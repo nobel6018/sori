@@ -3849,7 +3849,7 @@ dependencies = [
 
 [[package]]
 name = "sori"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "chrono",
  "cpal",
@@ -3868,6 +3868,7 @@ dependencies = [
  "tauri-plugin-opener",
  "thiserror 2.0.21",
  "tokio",
+ "ureq",
  "uuid",
  "whisper-rs",
  "windows-sys 0.61.2",
@@ -4981,6 +4982,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "02d1a66277ed75f640d608235660df48c8e3c19f3b4edb6a263315626cc3c01d"
 dependencies = [
  "base64 0.22.1",
+ "flate2",
  "log",
  "once_cell",
  "rustls",
