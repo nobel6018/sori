@@ -1,0 +1,35 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: pnpm install --frozen-lockfile
+      # 프론트 빌드 결과(dist)가 있어야 tauri::generate_context!가 컴파일된다
+      - run: pnpm build
+      - name: cargo test
+        working-directory: src-tauri
+        run: cargo test --locked
+      # whisper.cpp와 onnxruntime 정적 링크가 실제 실행 파일에서 깨지지 않는지 확인한다
+      - name: cargo build
+        working-directory: src-tauri
+        run: cargo build --locked --bins --examples
