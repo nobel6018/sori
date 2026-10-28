@@ -5,6 +5,11 @@ on:
     branches: [main]
   pull_request:
 
+# 같은 브랜치에 새 커밋이 오면 이전 실행을 취소한다. 푸시마다 Windows 빌드가 겹쳐 쌓이지 않게 한다
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     strategy:
@@ -12,6 +17,7 @@ jobs:
       matrix:
         os: [macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -28,9 +34,14 @@ jobs:
       - run: pnpm install --frozen-lockfile
       # 프론트 빌드 결과(dist)가 있어야 tauri::generate_context!가 컴파일된다
       - run: pnpm build
-      - name: cargo test
+      # 빌드와 실행을 나눠, 멈추면 컴파일인지 테스트 실행인지 바로 구분한다
+      - name: cargo test (build)
         working-directory: src-tauri
-        run: cargo test --locked
+        run: cargo test --locked --lib --no-run
+      - name: cargo test (run)
+        working-directory: src-tauri
+        timeout-minutes: 10
+        run: cargo test --locked --lib -- --test-threads=1 --nocapture
       # whisper.cpp와 onnxruntime 정적 링크가 실제 실행 파일에서 깨지지 않는지 확인한다
       - name: cargo build
         working-directory: src-tauri
