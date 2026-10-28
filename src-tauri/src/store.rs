@@ -65,20 +65,9 @@ pub struct Settings {
 }
 
 impl Settings {
-    pub fn defaults(home: &Path) -> Self {
+    pub fn defaults(models: ModelPaths) -> Self {
         Self {
-            models: ModelPaths {
-                whisper: home.join("whisper-models").join("ggml-large-v3-turbo.bin"),
-                segmentation: home
-                    .join("sherpa-onnx")
-                    .join("models")
-                    .join("sherpa-onnx-pyannote-segmentation-3-0")
-                    .join("model.onnx"),
-                embedding: home
-                    .join("sherpa-onnx")
-                    .join("models")
-                    .join("3dspeaker_eres2net_base_zh-cn_16k.onnx"),
-            },
+            models,
             default_languages: Vec::new(),
             input_device_id: None,
             capture_system_audio: false,
@@ -92,6 +81,8 @@ impl Settings {
 pub struct Store {
     root: PathBuf,
     settings_path: PathBuf,
+    /// scripts/install-models가 모델을 받는 폴더
+    pub models_dir: PathBuf,
 }
 
 impl Store {
@@ -101,11 +92,13 @@ impl Store {
         Ok(Self {
             root,
             settings_path: data_dir.join("settings.json"),
+            models_dir: data_dir.join("models"),
         })
     }
 
     pub fn get_settings(&self, home: &Path) -> Settings {
-        read_json(&self.settings_path).unwrap_or_else(|_| Settings::defaults(home))
+        read_json(&self.settings_path)
+            .unwrap_or_else(|_| Settings::defaults(crate::models::default_paths(&self.models_dir, home)))
     }
 
     pub fn save_settings(&self, settings: &Settings) -> Result<()> {

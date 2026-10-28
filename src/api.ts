@@ -75,6 +75,32 @@ export const PROVIDER_LABEL: Record<Provider, string> = {
   codex: "ChatGPT (codex CLI)",
 };
 
+export interface WhisperOption {
+  id: string;
+  label: string;
+  description: string;
+  sizeBytes: number;
+  scriptArg: string;
+  path: string | null;
+}
+
+export interface ModelCatalog {
+  modelsDir: string;
+  whisper: WhisperOption[];
+  segmentation: string | null;
+  embedding: string | null;
+}
+
+const REPO_RAW = "https://raw.githubusercontent.com/nobel6018/sori/main/scripts";
+
+/** 이 OS에서 모델 설치 스크립트를 한 줄로 실행하는 명령 */
+export function installCommand(scriptArg: string): string {
+  if (navigator.userAgent.includes("Windows")) {
+    return `& ([scriptblock]::Create((irm ${REPO_RAW}/install-models.ps1))) -Whisper ${scriptArg}`;
+  }
+  return `curl -fsSL ${REPO_RAW}/install-models.sh | bash -s -- --whisper ${scriptArg}`;
+}
+
 export interface InputDevice {
   id: string;
   name: string;
@@ -90,6 +116,7 @@ export interface ProgressEvent {
 export const api = {
   getSettings: () => invoke<Settings>("get_settings"),
   saveSettings: (settings: Settings) => invoke<void>("save_settings", { settings }),
+  modelCatalog: () => invoke<ModelCatalog>("model_catalog"),
   listRecordings: () => invoke<Recording[]>("list_recordings"),
   importRecordings: (paths: string[]) => invoke<Recording[]>("import_recordings", { paths }),
   getRecording: (id: string) => invoke<RecordingDetail>("get_recording", { id }),

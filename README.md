@@ -2,15 +2,32 @@
 
 녹음 파일을 이 컴퓨터 안에서만 받아 적고(whisper.cpp) 화자를 나누는(sherpa-onnx) 데스크탑 앱입니다. Tauri 2 + React.
 
-## 준비물
+## 모델 설치
 
-모델은 앱에 넣지 않고 경로로 가리킵니다. 기본 경로는 아래와 같고, 앱의 설정 화면에서 바꿀 수 있습니다.
+모델은 앱에 넣지 않고 따로 받습니다. 스크립트 한 줄로 받을 수 있고, 이미 받은 파일은 건너뛰며 끊기면 이어서 받습니다.
 
-| 모델 | 기본 경로 |
-|---|---|
-| Whisper (ggml) | `~/whisper-models/ggml-large-v3-turbo.bin` |
-| 화자 구간 (pyannote segmentation 3.0) | `~/sherpa-onnx/models/sherpa-onnx-pyannote-segmentation-3-0/model.onnx` |
-| 화자 임베딩 (3D-Speaker) | `~/sherpa-onnx/models/3dspeaker_eres2net_base_zh-cn_16k.onnx` |
+macOS, Linux:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/nobel6018/sori/main/scripts/install-models.sh | bash -s -- --whisper turbo
+```
+
+Windows (PowerShell):
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/nobel6018/sori/main/scripts/install-models.ps1))) -Whisper turbo
+```
+
+`--whisper`(`-Whisper`)로 받아 적기 모델을 고릅니다. 받은 모델은 앱의 설정에서 고를 수 있습니다.
+
+| 값 | 모델 | 크기 | 특징 |
+|---|---|---|---|
+| `turbo` (기본값) | ggml-large-v3-turbo | 1.6GB | 빠르고 정확도도 충분함 |
+| `large-v3` | ggml-large-v3 | 3.1GB | 조금 더 정확하지만 느림 |
+| `all` | 둘 다 | 4.7GB | |
+| `none` | 받지 않음 | | 화자 분리 모델만 받을 때 |
+
+화자 분리 모델(pyannote segmentation 3.0, 3D-Speaker ERes2Net)은 항상 함께 받습니다. 받는 곳은 macOS `~/Library/Application Support/com.nobel6018.sori/models`, Windows `%APPDATA%\com.nobel6018.sori\models`입니다. 앱은 이 폴더를 먼저 보고, 예전 공용 위치(`~/whisper-models`, `~/sherpa-onnx/models`)도 찾습니다(`src-tauri/src/models.rs`).
 
 ## 개발
 

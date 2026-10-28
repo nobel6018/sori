@@ -1,4 +1,5 @@
 pub mod engine;
+mod models;
 mod recorder;
 pub mod store;
 pub mod summarize;
@@ -82,6 +83,11 @@ fn get_settings(state: State<AppState>) -> Settings {
 #[tauri::command]
 fn save_settings(state: State<AppState>, settings: Settings) -> CmdResult<()> {
     state.store.save_settings(&settings).map_err(err)
+}
+
+#[tauri::command]
+fn model_catalog(state: State<AppState>) -> models::Catalog {
+    models::catalog(&state.store.models_dir, &state.home)
 }
 
 #[tauri::command]
@@ -317,6 +323,8 @@ fn cancel_summary(state: State<AppState>, id: String) {
 async fn process_recording(app: AppHandle, request: ProcessRequest) -> CmdResult<Transcript> {
     let state = app.state::<AppState>();
     let id = request.id.clone();
+    // 모델이 없으면 whisper.cpp의 알아보기 힘든 오류 대신 설치 방법을 알려 준다
+    models::check(&state.store.get_settings(&state.home).models)?;
 
     let mut recording = state.store.get(&id).map_err(err)?;
     recording.status = Status::Processing;
@@ -440,6 +448,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_settings,
             save_settings,
+            model_catalog,
             list_recordings,
             import_recordings,
             get_recording,

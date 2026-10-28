@@ -1,5 +1,6 @@
 //! 앱 없이 엔진만 돌려 보는 확인용 실행 파일
 //! cargo run --release --example pipeline -- <오디오 파일> [화자 수|auto] [ko,zh]
+//! SORI_WHISPER=<ggml 모델 경로>로 Whisper 모델을 바꿀 수 있다
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
@@ -15,7 +16,10 @@ fn main() -> eyre::Result<()> {
 
     let home = PathBuf::from(std::env::var("HOME")?);
     let models = ModelPaths {
-        whisper: home.join("whisper-models/ggml-large-v3-turbo.bin"),
+        // SORI_WHISPER로 다른 Whisper 모델(예: ggml-large-v3.bin)을 시험한다
+        whisper: std::env::var("SORI_WHISPER")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| home.join("whisper-models/ggml-large-v3-turbo.bin")),
         segmentation: home.join("sherpa-onnx/models/sherpa-onnx-pyannote-segmentation-3-0/model.onnx"),
         embedding: home.join("sherpa-onnx/models/3dspeaker_eres2net_base_zh-cn_16k.onnx"),
     };

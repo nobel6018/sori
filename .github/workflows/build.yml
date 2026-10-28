@@ -46,3 +46,45 @@ jobs:
       - name: cargo build
         working-directory: src-tauri
         run: cargo build --locked --bins --examples
+
+  # 모델 설치 스크립트를 실제 OS에서 돌려 본다. 큰 Whisper 모델(1.6GB)은 빼고 화자 분리 모델만 받는다
+  install-models:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: macOS 스크립트 (기본 폴더)
+        if: runner.os == 'macOS'
+        run: |
+          ./scripts/install-models.sh --whisper none
+          D="$HOME/Library/Application Support/com.nobel6018.sori/models"
+          test -s "$D/pyannote-segmentation-3-0.onnx"
+          test -s "$D/3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx"
+          # 두 번째 실행은 이미 있는 파일을 건너뛴다
+          ./scripts/install-models.sh --whisper none | grep -c "이미 있음" | grep -qx 2
+      - name: macOS 스크립트 (curl | bash)
+        if: runner.os == 'macOS'
+        run: cat scripts/install-models.sh | bash -s -- --whisper none --dir "$RUNNER_TEMP/piped"
+      # Windows에 기본으로 들어 있는 PowerShell 5.1로 돌린다. BOM이 없으면 여기서 한글이 깨진다
+      - name: Windows 스크립트 (PowerShell 5.1, 기본 폴더)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          .\scripts\install-models.ps1 -Whisper none
+          $D = Join-Path $env:APPDATA 'com.nobel6018.sori\models'
+          if (-not (Test-Path (Join-Path $D 'pyannote-segmentation-3-0.onnx'))) { throw '화자 구간 모델이 없습니다' }
+          if (-not (Test-Path (Join-Path $D '3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx'))) { throw '임베딩 모델이 없습니다' }
+          $again = .\scripts\install-models.ps1 -Whisper none 6>&1 | Out-String
+          if (($again | Select-String -AllMatches '이미 있음').Matches.Count -ne 2) { throw "두 번째 실행이 파일을 건너뛰지 않았습니다: $again" }
+      # README의 한 줄 설치 명령과 같은 방식(문자열로 받아 실행)으로 돌린다
+      - name: Windows 스크립트 (irm 방식, PowerShell 7)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $src = Get-Content -Raw -Encoding utf8 .\scripts\install-models.ps1
+          & ([scriptblock]::Create($src)) -Whisper none -Dir (Join-Path $env:RUNNER_TEMP 'piped')
+          if (-not (Test-Path (Join-Path $env:RUNNER_TEMP 'piped\pyannote-segmentation-3-0.onnx'))) { throw '화자 구간 모델이 없습니다' }
