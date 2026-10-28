@@ -4,8 +4,11 @@
 [target.x86_64-pc-windows-msvc]
 rustflags = ["-C", "target-feature=+crt-static", "-C", "link-arg=advapi32.lib"]
 
-# whisper.cpp의 CMake는 CMP0091 정책이라 /MT 플래그가 아니라 이 변수로 런타임을 정한다.
+# whisper.cpp도 sherpa-onnx와 같은 정적 릴리스 런타임(/MT)으로 빌드한다.
+# whisper.cpp는 cmake_minimum_required(3.5)라 CMP0091 정책이 꺼져 있어 CMAKE_MSVC_RUNTIME_LIBRARY를
+# 무시한다. 정하지 않은 정책의 기본값을 NEW로 바꿔 이 변수가 먹게 한다.
 # whisper-rs-sys가 CMAKE_로 시작하는 환경 변수를 CMake에 그대로 넘긴다.
 # MSVC가 아닌 컴파일러(macOS clang)에서는 CMake가 이 값을 쓰지 않는다
 [env]
+CMAKE_POLICY_DEFAULT_CMP0091 = "NEW"
 CMAKE_MSVC_RUNTIME_LIBRARY = "MultiThreaded"
