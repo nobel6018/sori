@@ -1,0 +1,158 @@
+use std::path::Path;
+
+use eyre::Result;
+use sherpa_rs::speaker_id::{EmbeddingExtractor, ExtractorConfig};
+
+use super::audio::SAMPLE_RATE;
+use super::diarize::SpeakerTurn;
+
+/// 이보다 긴 구간만 묶음을 만드는 데 쓴다. 짧은 구간의 임베딩은 흔들린다
+const CLUSTER_MIN_SECS: f32 = 1.0;
+/// 이보다 짧은 구간은 임베딩을 뽑지 않고 시간상 가장 가까운 구간을 따른다
+const EMBED_MIN_SECS: f32 = 0.5;
+/// 긴 구간은 가운데 이만큼만 쓴다. 1시간 회의에서도 몇 초 안에 끝나게 한다
+const EMBED_MAX_SECS: f32 = 15.0;
+
+/// sherpa-onnx는 10초 창 안에서 "창 속 화자"를 먼저 정한 뒤 그 묶음의 임베딩으로 군집화한다.
+/// 번갈아 말하는 비슷한 목소리 둘이 창 안에서 한 묶음이 되면 임베딩이 둘의 중간값이 되어,
+/// 화자 수를 지정해도 다시 나뉘지 않는다(3개 언어 TTS 회의에서 두 여성 목소리가 이렇게 합쳐졌다).
+/// 구간 경계는 sherpa 결과를 그대로 쓰고, 구간마다 임베딩을 따로 뽑아 지정한 화자 수로 다시 묶는다
+pub fn recluster(turns: &[SpeakerTurn], samples: &[f32], embedding_model: &Path, k: usize) -> Result<Vec<SpeakerTurn>> {
+    let mut extractor = EmbeddingExtractor::new(ExtractorConfig {
+        model: embedding_model.to_string_lossy().into_owned(),
+        num_threads: Some(std::thread::available_parallelism().map_or(2, |n| n.get())),
+        ..Default::default()
+    })?;
+
+    let embeddings: Vec<Option<Vec<f32>>> = turns
+        .iter()
+        .map(|t| {
+            let dur = t.end - t.start;
+            if dur < EMBED_MIN_SECS {
+                return Ok(None);
+            }
+            let mid = (t.start + t.end) / 2.0;
+            let half = dur.min(EMBED_MAX_SECS) / 2.0;
+            let from = (((mid - half) * SAMPLE_RATE as f32) as usize).min(samples.len());
+            let to = (((mid + half) * SAMPLE_RATE as f32) as usize).min(samples.len());
+            let v = extractor.compute_speaker_embedding(samples[from..to].to_vec(), SAMPLE_RATE)?;
+            Ok(Some(normalize(v)))
+        })
+        .collect::<Result<_>>()?;
+
+    let anchors: Vec<usize> = (0..turns.len())
+        .filter(|&i| embeddings[i].is_some() && turns[i].end - turns[i].start >= CLUSTER_MIN_SECS)
+        .collect();
+    if anchors.len() < k {
+        return Ok(turns.to_vec());
+    }
+    let anchor_vecs: Vec<&[f32]> = anchors.iter().map(|&i| embeddings[i].as_deref().unwrap()).collect();
+    let anchor_labels = cluster(&anchor_vecs, k);
+
+    let mut centroids = vec![vec![0.0f32; anchor_vecs[0].len()]; k];
+    for (v, &label) in anchor_vecs.iter().zip(&anchor_labels) {
+        centroids[label].iter_mut().zip(v.iter()).for_each(|(c, x)| *c += x);
+    }
+    let centroids: Vec<Vec<f32>> = centroids.into_iter().map(normalize).collect();
+
+    let mut labels: Vec<Option<usize>> = vec![None; turns.len()];
+    for (&i, &label) in anchors.iter().zip(&anchor_labels) {
+        labels[i] = Some(label);
+    }
+    // 묶음에 안 쓴 0.5~1초 구간은 가장 비슷한 묶음 중심에 붙인다
+    for i in 0..turns.len() {
+        if labels[i].is_none() {
+            if let Some(v) = &embeddings[i] {
+                labels[i] = (0..k).max_by(|&a, &b| dot(v, &centroids[a]).total_cmp(&dot(v, &centroids[b])));
+            }
+        }
+    }
+    // 0.5초 미만 구간은 시간상 가장 가까운 구간의 화자를 따른다
+    let known: Vec<usize> = (0..turns.len()).filter(|&i| labels[i].is_some()).collect();
+    for i in 0..turns.len() {
+        if labels[i].is_none() {
+            let nearest = known.iter().min_by(|&&a, &&b| gap(&turns[i], &turns[a]).total_cmp(&gap(&turns[i], &turns[b])));
+            labels[i] = nearest.and_then(|&j| labels[j]);
+        }
+    }
+
+    // 먼저 말한 사람이 화자 1이 되도록 번호를 다시 매긴다
+    let mut order: Vec<usize> = Vec::new();
+    for l in labels.iter().flatten() {
+        if !order.contains(l) {
+            order.push(*l);
+        }
+    }
+    Ok(turns
+        .iter()
+        .zip(&labels)
+        .map(|(t, l)| SpeakerTurn {
+            speaker: l.and_then(|l| order.iter().position(|&o| o == l)).unwrap_or(0) as i32,
+            ..t.clone()
+        })
+        .collect())
+}
+
+/// 평균 연결 군집화. 묶음이 k개가 될 때까지 평균 코사인 유사도가 가장 높은 두 묶음을 합친다
+fn cluster(vecs: &[&[f32]], k: usize) -> Vec<usize> {
+    let n = vecs.len();
+    let sim: Vec<Vec<f32>> = (0..n).map(|i| (0..n).map(|j| dot(vecs[i], vecs[j])).collect()).collect();
+    let mut groups: Vec<Vec<usize>> = (0..n).map(|i| vec![i]).collect();
+    while groups.len() > k {
+        let mut best = (0, 1, f32::MIN);
+        for a in 0..groups.len() {
+            for b in a + 1..groups.len() {
+                let total: f32 = groups[a].iter().flat_map(|&i| groups[b].iter().map(move |&j| (i, j))).map(|(i, j)| sim[i][j]).sum();
+                let avg = total / (groups[a].len() * groups[b].len()) as f32;
+                if avg > best.2 {
+                    best = (a, b, avg);
+                }
+            }
+        }
+        let merged = groups.remove(best.1);
+        groups[best.0].extend(merged);
+    }
+    let mut labels = vec![0; n];
+    for (label, g) in groups.iter().enumerate() {
+        for &i in g {
+            labels[i] = label;
+        }
+    }
+    labels
+}
+
+fn normalize(mut v: Vec<f32>) -> Vec<f32> {
+    let norm = v.iter().map(|x| x * x).sum::<f32>().sqrt().max(f32::EPSILON);
+    v.iter_mut().for_each(|x| *x /= norm);
+    v
+}
+
+fn dot(a: &[f32], b: &[f32]) -> f32 {
+    a.iter().zip(b).map(|(x, y)| x * y).sum()
+}
+
+fn gap(a: &SpeakerTurn, b: &SpeakerTurn) -> f32 {
+    (a.start - b.end).max(b.start - a.end).max(0.0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn 비슷한_벡터끼리_k개로_묶는다() {
+        let a1 = normalize(vec![1.0, 0.1, 0.0]);
+        let a2 = normalize(vec![0.9, 0.2, 0.0]);
+        let b1 = normalize(vec![0.0, 1.0, 0.1]);
+        let c1 = normalize(vec![0.0, 0.1, 1.0]);
+        let c2 = normalize(vec![0.1, 0.0, 0.9]);
+
+        let labels = cluster(&[&a1, &b1, &a2, &c1, &c2], 3);
+
+        assert_eq!(labels[0], labels[2]);
+        assert_eq!(labels[3], labels[4]);
+        assert_ne!(labels[0], labels[1]);
+        assert_ne!(labels[0], labels[3]);
+        assert_ne!(labels[1], labels[3]);
+    }
+}

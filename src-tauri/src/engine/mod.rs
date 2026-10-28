@@ -1,6 +1,7 @@
 pub mod audio;
 pub mod diarize;
 pub mod origin;
+pub mod recluster;
 pub mod transcribe;
 
 use std::path::{Path, PathBuf};
@@ -78,6 +79,12 @@ pub fn process(
         },
         move |p| progress(Stage::Diarizing, p),
     )?;
+    // 화자 수를 알면 구간마다 임베딩을 다시 뽑아 그 수로 묶는다. 자동 모드는 기준값이
+    // 녹음 환경마다 크게 흔들려(회의실 녹음이 65명으로 쪼개졌다) sherpa 결과를 그대로 둔다
+    let turns = match options.num_speakers {
+        Some(k) if k >= 2 => recluster::recluster(&turns, &samples, &models.embedding, k as usize)?,
+        _ => turns,
+    };
 
     let threads = std::thread::available_parallelism().map_or(4, |n| n.get() as i32);
     let utterances = transcribe::transcribe(
