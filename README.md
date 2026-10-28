@@ -2,6 +2,18 @@
 
 녹음 파일을 이 컴퓨터 안에서만 받아 적고(whisper.cpp) 화자를 나누는(sherpa-onnx) 데스크탑 앱입니다. Tauri 2 + React.
 
+## 설치
+
+[Releases](https://github.com/nobel6018/sori/releases/latest)에서 받습니다. macOS(Apple Silicon)는 `.dmg`, Windows는 `.msi` 또는 `-setup.exe`입니다.
+
+코드 서명을 하지 않은 빌드라 macOS는 처음 한 번 격리 표시를 지워야 합니다. dmg에서 `sori.app`을 응용 프로그램 폴더로 옮긴 뒤 터미널에서 실행합니다.
+
+```sh
+xattr -cr /Applications/sori.app
+```
+
+지우지 않으면 "손상되었기 때문에 열 수 없습니다"라는 경고가 뜨고 앱이 열리지 않습니다. Windows는 SmartScreen 경고가 뜨면 "추가 정보"를 눌러 "실행"을 누릅니다.
+
 ## 모델 설치
 
 모델은 설치 파일에 넣지 않고 따로 받습니다. 앱을 처음 켜면 모델이 없을 때 설치 화면이 뜨고, 버튼 하나로 받습니다. 설정에서도 Whisper 모델을 고르고 받을 수 있습니다(`src-tauri/src/download.rs`).

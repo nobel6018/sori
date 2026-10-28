@@ -69,7 +69,11 @@ jobs:
           - Windows: `.msi` 또는 `-setup.exe`
 
           코드 서명을 하지 않은 빌드입니다.
-          - macOS: 처음 열 때 "확인되지 않은 개발자" 경고가 뜨면 Finder에서 앱을 우클릭해 "열기"를 누릅니다
+          - macOS: dmg에서 `sori.app`을 응용 프로그램 폴더로 옮긴 뒤 터미널에서 아래 명령을 한 번 실행합니다. 브라우저로 받은 파일에 붙는 격리 표시를 지워, "손상되었기 때문에 열 수 없습니다" 경고 없이 열립니다
+
+            ```sh
+            xattr -cr /Applications/sori.app
+            ```
           - Windows: SmartScreen 경고가 뜨면 "추가 정보"를 눌러 "실행"을 누릅니다
 
           ## 모델
@@ -80,4 +84,4 @@ jobs:
           mapfile -d '' files < <(find dist -type f \( -name '*.dmg' -o -name '*.msi' -o -name '*-setup.exe' \) -print0)
           if [ "${#files[@]}" -eq 0 ]; then echo "올릴 설치 파일이 없습니다"; exit 1; fi
           printf '%s\n' "${files[@]}"
-          gh release create "$TAG" "${files[@]}" --repo "$GITHUB_REPOSITORY" --title "sori $TAG" --notes-file notes.md --prerelease
+          gh release create "$TAG" "${files[@]}" --repo "$GITHUB_REPOSITORY" --title "sori $TAG" --notes-file notes.md
