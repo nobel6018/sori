@@ -31,6 +31,15 @@ cargo run --release --example pipeline -- <오디오 파일> [화자 수|auto] [
 - macOS: whisper.cpp를 Metal로 빌드합니다
 - Windows: 기본은 CPU 빌드입니다. 빌드 PC에 SDK가 있으면 `pnpm tauri build -- --features vulkan` 또는 `--features cuda`
 
+## 녹음
+
+`src-tauri/src/recorder.rs`
+
+- 설정에서 고른 마이크(기본값은 시스템 기본 마이크)로 장치 기본 샘플레이트의 16비트 모노 WAV를 녹음합니다. 1시간에 약 170MB(24kHz)에서 345MB(48kHz)입니다
+- 2초마다 WAV 헤더를 갱신해, 앱이 비정상 종료돼도 그때까지의 녹음은 재생됩니다
+- macOS에서는 녹음하는 동안 App Nap과 잠자기를 막습니다. 앱이 뒤에 가려져 있어도 녹음 스레드가 느려지지 않게 하려는 것입니다
+- 장치가 빠지면 녹음을 마무리하고 화면에 알립니다. 버퍼 오버런 같은 일시 경고로는 멈추지 않습니다
+
 ## 처리 방식
 
 `src-tauri/src/engine/`

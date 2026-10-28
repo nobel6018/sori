@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open } from "@tauri-apps/plugin-dialog";
 import { api, AUDIO_EXTENSIONS, ProgressEvent, Recording } from "./api";
+import { Recorder } from "./components/Recorder";
 import { Sidebar } from "./components/Sidebar";
 import { RecordingView } from "./components/RecordingView";
 import { SettingsDialog } from "./components/SettingsDialog";
@@ -74,11 +75,25 @@ export default function App() {
         onSelect={setSelectedId}
         onImport={pickFiles}
         onOpenSettings={() => setSettingsOpen(true)}
+        recorder={
+          <Recorder
+            onStarted={async (r) => {
+              await refresh();
+              setSelectedId(r.id);
+            }}
+            onStopped={async (r) => {
+              await refresh();
+              setSelectedId(r.id);
+            }}
+            onError={setError}
+          />
+        }
       />
       <main className="main">
         {selected ? (
           <RecordingView
-            key={selected.id}
+            // 녹음이 끝나면 화면을 새로 만들어 재생기와 처리 패널을 띄운다
+            key={`${selected.id}-${selected.status === "recording"}`}
             recording={selected}
             progress={progress[selected.id]}
             onChanged={refresh}

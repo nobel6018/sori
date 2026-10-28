@@ -11,6 +11,7 @@ use crate::engine::{ModelPaths, Transcript};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Status {
+    Recording,
     New,
     Processing,
     Done,
@@ -45,6 +46,9 @@ pub struct Settings {
     /// 녹음 처리 화면의 기본값
     #[serde(default)]
     pub default_languages: Vec<String>,
+    /// None이면 시스템 기본 마이크
+    #[serde(default)]
+    pub input_device_id: Option<String>,
 }
 
 impl Settings {
@@ -63,6 +67,7 @@ impl Settings {
                     .join("3dspeaker_eres2net_base_zh-cn_16k.onnx"),
             },
             default_languages: Vec::new(),
+            input_device_id: None,
         }
     }
 }
@@ -109,26 +114,38 @@ impl Store {
     }
 
     pub fn import(&self, source: &Path) -> Result<Recording> {
-        let id = uuid::Uuid::new_v4().to_string();
-        let dir = self.root.join(&id);
-        fs::create_dir_all(&dir)?;
-
         let source_name = source
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())
             .ok_or_else(|| eyre!("파일 이름이 없습니다: {}", source.display()))?;
         let ext = source.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
         let audio_file = if ext.is_empty() { "audio".to_string() } else { format!("audio.{ext}") };
-        fs::copy(source, dir.join(&audio_file)).wrap_err_with(|| format!("파일을 복사하지 못했습니다: {}", source.display()))?;
-
         let title = source.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_else(|| source_name.clone());
+
+        let recording = self.create(title, source_name, audio_file, Status::New)?;
+        let dest = self.audio_path(&recording)?;
+        if let Err(e) = fs::copy(source, &dest) {
+            let _ = self.delete(&recording.id);
+            return Err(e).wrap_err_with(|| format!("파일을 복사하지 못했습니다: {}", source.display()));
+        }
+        Ok(recording)
+    }
+
+    /// 앱에서 녹음할 새 항목을 만든다. 오디오 파일은 녹음기가 채운다
+    pub fn create_for_recording(&self, title: String) -> Result<Recording> {
+        self.create(title, "마이크 녹음".to_string(), "audio.wav".to_string(), Status::Recording)
+    }
+
+    fn create(&self, title: String, source_name: String, audio_file: String, status: Status) -> Result<Recording> {
+        let id = uuid::Uuid::new_v4().to_string();
+        fs::create_dir_all(self.root.join(&id))?;
         let recording = Recording {
             id,
             title,
             created_at: Utc::now(),
             source_name,
             audio_file,
-            status: Status::New,
+            status,
             error: None,
             duration: None,
             speaker_names: BTreeMap::new(),

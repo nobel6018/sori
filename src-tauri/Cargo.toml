@@ -33,11 +33,14 @@ uuid = { version = "1.29.0", features = ["v4"] }
 tauri-plugin-dialog = "2"
 chrono = { version = "0.4.45", features = ["serde"] }
 tokio = { version = "1.54.1", features = ["sync"] }
+cpal = "0.18"
 
 # whisper.cpp GPU 백엔드는 플랫폼마다 다르다. macOS는 Metal을 항상 켜고,
 # 윈도우와 리눅스는 기본 CPU로 빌드하되 빌드 머신에 SDK가 있으면 아래 기능으로 켠다
 [target.'cfg(target_os = "macos")'.dependencies]
 whisper-rs = { version = "0.16", features = ["metal"] }
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", features = ["NSProcessInfo", "NSString", "NSObject"] }
 
 [features]
 vulkan = ["whisper-rs/vulkan"]

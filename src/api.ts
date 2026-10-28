@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
-export type Status = "new" | "processing" | "done" | "failed";
+export type Status = "recording" | "new" | "processing" | "done" | "failed";
 export type Stage = "decoding" | "diarizing" | "transcribing";
 
 export interface Recording {
@@ -47,6 +47,13 @@ export interface RecordingDetail {
 export interface Settings {
   models: { whisper: string; segmentation: string; embedding: string };
   defaultLanguages: string[];
+  inputDeviceId: string | null;
+}
+
+export interface InputDevice {
+  id: string;
+  name: string;
+  isDefault: boolean;
 }
 
 export interface ProgressEvent {
@@ -66,6 +73,12 @@ export const api = {
   cancelProcessing: (id: string) => invoke<void>("cancel_processing", { id }),
   processRecording: (id: string, numSpeakers: number | null, languages: string[]) =>
     invoke<Transcript>("process_recording", { request: { id, numSpeakers, languages } }),
+  listInputDevices: () => invoke<InputDevice[]>("list_input_devices"),
+  startRecording: () => invoke<Recording>("start_recording"),
+  stopRecording: () => invoke<Recording>("stop_recording"),
+  onLevel: (handler: (level: number) => void) =>
+    listen<{ id: string; level: number }>("recording-level", (e) => handler(e.payload.level)),
+  onRecordingInterrupted: (handler: () => void) => listen("recording-interrupted", () => handler()),
   onProgress: (handler: (e: ProgressEvent) => void) =>
     listen<ProgressEvent>("progress", (e) => handler(e.payload)),
 };

@@ -1,4 +1,5 @@
 :root {
+  --rec: #d23c2f;
   --bg: #f7f6f3;
   --panel: #ffffff;
   --sidebar: #efede8;
@@ -89,7 +90,8 @@ button.danger {
   color: var(--danger);
 }
 
-input {
+input,
+select {
   font: inherit;
   color: var(--text);
   background: var(--panel);
@@ -447,4 +449,81 @@ button:focus-visible {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.recorder {
+  padding: 0 14px 12px;
+}
+.record-button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 36px;
+}
+.record-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--rec);
+  flex: none;
+}
+.record-dot.live {
+  animation: pulse 1.2s ease-in-out infinite;
+}
+@keyframes pulse {
+  50% {
+    opacity: 0.3;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .record-dot.live {
+    animation: none;
+  }
+}
+.recorder.recording {
+  margin: 0 8px 10px;
+  padding: 10px 12px;
+  background: var(--panel);
+  border: 1px solid var(--rec);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.recorder-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.recorder-time {
+  flex: 1;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.stop-button {
+  color: var(--rec);
+  border-color: var(--rec);
+}
+.level-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border);
+  overflow: hidden;
+}
+.level-bar {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.06s linear;
+}
+.badge-recording {
+  background: var(--rec);
+  color: #fff;
+}
+.recording-notice {
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px dashed var(--rec);
+  border-radius: 8px;
 }

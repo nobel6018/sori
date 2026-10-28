@@ -1,6 +1,8 @@
+import { ReactNode } from "react";
 import { formatTime, ProgressEvent, Recording, Status } from "../api";
 
 const STATUS_LABEL: Record<Status, string> = {
+  recording: "녹음 중",
   new: "대기",
   processing: "처리 중",
   done: "완료",
@@ -14,15 +16,17 @@ interface Props {
   onSelect: (id: string) => void;
   onImport: () => void;
   onOpenSettings: () => void;
+  recorder: ReactNode;
 }
 
-export function Sidebar({ recordings, selectedId, progress, onSelect, onImport, onOpenSettings }: Props) {
+export function Sidebar({ recordings, selectedId, progress, onSelect, onImport, onOpenSettings, recorder }: Props) {
   return (
     <aside className="sidebar">
       <header className="sidebar-header">
         <span className="brand">sori</span>
         <button onClick={onImport}>가져오기</button>
       </header>
+      {recorder}
       <ul className="recording-list">
         {recordings.map((r) => {
           const p = progress[r.id];

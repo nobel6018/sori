@@ -137,13 +137,17 @@ export function RecordingView({ recording, progress, onChanged, onDeleted }: Pro
           {transcript && (
             <button onClick={copyText}>{copied ? "복사했습니다" : "텍스트 복사"}</button>
           )}
-          <button className="danger" onClick={remove} disabled={running}>
+          <button className="danger" onClick={remove} disabled={running || rec.status === "recording"}>
             삭제
           </button>
         </div>
       </header>
 
-      {detail && (
+      {rec.status === "recording" && (
+        <p className="recording-notice">녹음 중입니다. 왼쪽 위에서 멈추면 재생하고 받아 적을 수 있습니다.</p>
+      )}
+
+      {detail && rec.status !== "recording" && (
         <audio
           ref={audioRef}
           className="player"
@@ -153,6 +157,7 @@ export function RecordingView({ recording, progress, onChanged, onDeleted }: Pro
         />
       )}
 
+      {rec.status !== "recording" && (
       <section className="process-panel">
         <label className="field">
           <span>화자 수</span>
@@ -195,6 +200,7 @@ export function RecordingView({ recording, progress, onChanged, onDeleted }: Pro
           화자 수를 알면 꼭 적어 주세요. 자동 추정은 회의실처럼 울리는 녹음에서 화자를 지나치게 많이 나눕니다. 언어를 고르지 않으면 구간마다 자동 감지합니다.
         </p>
       </section>
+      )}
 
       {running && (
         <div className="progress" aria-live="polite">

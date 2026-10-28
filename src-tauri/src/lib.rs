@@ -1,4 +1,5 @@
 pub mod engine;
+mod recorder;
 mod store;
 
 use std::collections::HashMap;
@@ -27,6 +28,8 @@ struct AppState {
     cancels: Mutex<HashMap<String, Arc<AtomicBool>>>,
     /// GPU와 CPU를 다 쓰는 작업이라 한 번에 하나만 처리한다
     pipeline: tokio::sync::Mutex<()>,
+    /// 녹음은 한 번에 하나만. 녹음 id와 녹음 스레드 핸들
+    recorder: Mutex<Option<(String, recorder::ActiveRecording)>>,
 }
 
 impl AppState {
@@ -115,6 +118,9 @@ fn update_recording(state: State<AppState>, recording: Recording) -> CmdResult<(
 
 #[tauri::command]
 fn delete_recording(state: State<AppState>, id: String) -> CmdResult<()> {
+    if state.recorder.lock().unwrap().as_ref().is_some_and(|(r, _)| r == &id) {
+        return Err("녹음 중인 항목은 삭제할 수 없습니다. 먼저 녹음을 멈춰 주세요".into());
+    }
     if state.cancels.lock().unwrap().contains_key(&id) {
         return Err("처리 중인 녹음은 삭제할 수 없습니다. 먼저 취소해 주세요".into());
     }
@@ -126,6 +132,82 @@ fn cancel_processing(state: State<AppState>, id: String) {
     if let Some(flag) = state.cancels.lock().unwrap().get(&id) {
         flag.store(true, Ordering::Relaxed);
     }
+}
+
+#[tauri::command]
+fn list_input_devices() -> CmdResult<Vec<recorder::InputDevice>> {
+    recorder::list_input_devices().map_err(err)
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct LevelEvent {
+    id: String,
+    level: f32,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct InterruptedEvent {
+    id: String,
+    reason: String,
+}
+
+// 마이크를 열고 녹음 스레드를 합치는 동안 메인 스레드(화면)가 멈추지 않도록 async로 둔다
+#[tauri::command]
+async fn start_recording(app: AppHandle, state: State<'_, AppState>) -> CmdResult<Recording> {
+    let mut slot = state.recorder.lock().unwrap();
+    if slot.is_some() {
+        return Err("이미 녹음 중입니다".into());
+    }
+    let settings = state.store.get_settings(&state.home);
+    let title = format!("녹음 {}", chrono::Local::now().format("%Y-%m-%d %H:%M"));
+    let recording = state.store.create_for_recording(title).map_err(err)?;
+    let path = state.store.audio_path(&recording).map_err(err)?;
+
+    let id = recording.id.clone();
+    let level_app = app.clone();
+    let interrupted_id = recording.id.clone();
+    let started = recorder::start(
+        settings.input_device_id.as_deref(),
+        &path,
+        move |level| {
+            let _ = level_app.emit("recording-level", LevelEvent { id: id.clone(), level });
+        },
+        move |reason| {
+            let _ = app.emit("recording-interrupted", InterruptedEvent { id: interrupted_id, reason });
+        },
+    );
+    match started {
+        Ok(active) => {
+            *slot = Some((recording.id.clone(), active));
+            Ok(recording)
+        }
+        Err(e) => {
+            // 장치를 못 열었으면 빈 항목을 남기지 않는다
+            let _ = state.store.delete(&recording.id);
+            Err(format!("{e:#}"))
+        }
+    }
+}
+
+#[tauri::command]
+async fn stop_recording(state: State<'_, AppState>) -> CmdResult<Recording> {
+    let (id, active) = state.recorder.lock().unwrap().take().ok_or("녹음 중이 아닙니다")?;
+    let result = active.stop();
+    let mut recording = state.store.get(&id).map_err(err)?;
+    recording.status = Status::New;
+    match result {
+        Ok(finished) => {
+            recording.duration = Some(finished.duration);
+            recording.error = finished
+                .interrupted
+                .map(|e| format!("녹음 장치 오류로 중간에 멈췄습니다. 그 전까지는 저장됐습니다: {e}"));
+        }
+        Err(e) => recording.error = Some(format!("녹음을 마무리하지 못했습니다: {e:#}")),
+    }
+    state.store.save(&recording).map_err(err)?;
+    Ok(recording)
 }
 
 #[tauri::command]
@@ -210,9 +292,19 @@ pub fn run() {
             let store = Store::new(data_dir)?;
 
             // 처리 도중 앱이 꺼졌던 녹음은 다시 시작할 수 있게 실패로 돌려 둔다
-            for mut r in store.list()?.into_iter().filter(|r| r.status == Status::Processing) {
-                r.status = Status::Failed;
-                r.error = Some("처리 도중 앱이 종료됐습니다".into());
+            for mut r in store.list()?.into_iter() {
+                match r.status {
+                    Status::Processing => {
+                        r.status = Status::Failed;
+                        r.error = Some("처리 도중 앱이 종료됐습니다".into());
+                    }
+                    // WAV 헤더를 2초마다 갱신하므로 마지막 2초 정도만 빠지고 나머지는 재생된다
+                    Status::Recording => {
+                        r.status = Status::New;
+                        r.error = Some("녹음 도중 앱이 종료됐습니다. 마지막 몇 초가 빠졌을 수 있습니다".into());
+                    }
+                    _ => continue,
+                }
                 store.save(&r)?;
             }
 
@@ -222,6 +314,7 @@ pub fn run() {
                 whisper: Mutex::new(None),
                 cancels: Mutex::new(HashMap::new()),
                 pipeline: tokio::sync::Mutex::new(()),
+                recorder: Mutex::new(None),
             });
             Ok(())
         })
@@ -235,6 +328,9 @@ pub fn run() {
             delete_recording,
             cancel_processing,
             process_recording,
+            list_input_devices,
+            start_recording,
+            stop_recording,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

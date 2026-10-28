@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
-import { api, LANGUAGES, Settings } from "../api";
+import { api, InputDevice, LANGUAGES, Settings } from "../api";
 
 const MODEL_FIELDS: { key: keyof Settings["models"]; label: string; hint: string }[] = [
   { key: "whisper", label: "Whisper 모델", hint: "ggml 형식 .bin (예: ggml-large-v3-turbo.bin)" },
@@ -11,9 +11,11 @@ const MODEL_FIELDS: { key: keyof Settings["models"]; label: string; hint: string
 export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [saving, setSaving] = useState(false);
+  const [devices, setDevices] = useState<InputDevice[]>([]);
 
   useEffect(() => {
     api.getSettings().then(setSettings);
+    api.listInputDevices().then(setDevices).catch(() => setDevices([]));
   }, []);
 
   if (!settings) return null;
@@ -57,6 +59,23 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
             </div>
           </div>
         ))}
+        <div className="setting-row">
+          <div className="setting-label">
+            <span>마이크</span>
+            <span className="muted">녹음에 쓸 입력 장치</span>
+          </div>
+          <select
+            value={settings.inputDeviceId ?? ""}
+            onChange={(e) => setSettings({ ...settings, inputDeviceId: e.target.value || null })}
+          >
+            <option value="">시스템 기본값{devices.find((d) => d.isDefault) ? ` (${devices.find((d) => d.isDefault)!.name})` : ""}</option>
+            {devices.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.name}
+              </option>
+            ))}
+          </select>
+        </div>
         <div className="setting-row">
           <div className="setting-label">
             <span>기본 녹음 언어</span>
