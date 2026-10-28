@@ -42,6 +42,9 @@ whisper-rs = { version = "0.16", features = ["metal"] }
 objc2 = "0.6"
 objc2-foundation = { version = "0.3", features = ["NSProcessInfo", "NSString", "NSObject"] }
 
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_System_Power"] }
+
 [features]
 vulkan = ["whisper-rs/vulkan"]
 cuda = ["whisper-rs/cuda"]

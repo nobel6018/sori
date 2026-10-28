@@ -337,6 +337,9 @@ async fn process_recording(app: AppHandle, request: ProcessRequest) -> CmdResult
         let recording = state.store.get(&worker_id)?;
         let audio = state.store.audio_path(&recording)?;
         let whisper = state.whisper(&settings.models.whisper)?;
+        let track_paths = state.store.track_paths(&recording)?;
+        let find = |name: &str| track_paths.iter().find(|p| p.ends_with(name)).filter(|p| p.exists()).cloned();
+        let tracks = find("mic.wav").zip(find("system.wav"));
 
         let emitter = worker_app.clone();
         let event_id = worker_id.clone();
@@ -347,6 +350,7 @@ async fn process_recording(app: AppHandle, request: ProcessRequest) -> CmdResult
             &ProcessOptions {
                 num_speakers: request.num_speakers,
                 languages: request.languages,
+                tracks,
             },
             cancel,
             move |stage, progress| {
@@ -369,6 +373,16 @@ async fn process_recording(app: AppHandle, request: ProcessRequest) -> CmdResult
     match result {
         Ok(transcript) => {
             state.store.save_transcript(&id, &transcript).map_err(err)?;
+            // 마이크 쪽 화자가 한 명뿐이면 녹음한 본인이다. 사용자가 붙인 이름은 덮지 않는다
+            let locals: Vec<i32> = transcript
+                .origins
+                .iter()
+                .filter(|(_, o)| **o == engine::origin::Origin::Local)
+                .map(|(s, _)| *s)
+                .collect();
+            if let [me] = locals.as_slice() {
+                recording.speaker_names.entry(me.to_string()).or_insert_with(|| "나".to_string());
+            }
             recording.status = Status::Done;
             recording.duration = Some(transcript.duration);
             state.store.save(&recording).map_err(err)?;

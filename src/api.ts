@@ -37,6 +37,8 @@ export interface Transcript {
   duration: number;
   turns: SpeakerTurn[];
   utterances: Utterance[];
+  /** 화자 번호 → 마이크 앞(local) 또는 화상 회의 상대(remote). 트랙을 따로 녹음했을 때만 있다 */
+  origins: Record<string, "local" | "remote">;
 }
 
 export interface RecordingDetail {

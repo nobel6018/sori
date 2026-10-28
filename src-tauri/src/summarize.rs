@@ -118,6 +118,10 @@ pub fn format_transcript(recording: &Recording, transcript: &Transcript) -> Stri
                 .get(&u.speaker.to_string())
                 .cloned()
                 .unwrap_or_else(|| format!("화자 {}", u.speaker + 1));
+            let name = match transcript.origins.get(&u.speaker) {
+                Some(crate::engine::origin::Origin::Remote) => format!("{name}(원격)"),
+                _ => name,
+            };
             let secs = u.start as u32;
             out.push_str(&format!("[{:02}:{:02}] {name}: ", secs / 60, secs % 60));
             last_speaker = Some(u.speaker);
@@ -261,6 +265,7 @@ mod tests {
             duration: 10.0,
             turns: vec![],
             utterances: vec![utt(0.0, 0, "안녕하세요."), utt(1.5, 0, "시작할게요."), utt(65.0, 1, "네.")],
+            origins: Default::default(),
         };
 
         let text = format_transcript(&recording(&[("0", "이영훈")]), &t);

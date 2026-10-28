@@ -1,5 +1,6 @@
 pub mod audio;
 pub mod diarize;
+pub mod origin;
 pub mod transcribe;
 
 use std::path::{Path, PathBuf};
@@ -35,11 +36,16 @@ pub struct Transcript {
     pub duration: f32,
     pub turns: Vec<SpeakerTurn>,
     pub utterances: Vec<Utterance>,
+    /// 마이크와 시스템 소리를 따로 녹음한 경우에만 채운다. 판단하지 못한 화자는 빠진다
+    #[serde(default)]
+    pub origins: std::collections::BTreeMap<i32, origin::Origin>,
 }
 
 pub struct ProcessOptions {
     pub num_speakers: Option<i32>,
     pub languages: Vec<String>,
+    /// (마이크 트랙, 시스템 소리 트랙). 앱에서 둘 다 녹음했을 때만 있다
+    pub tracks: Option<(PathBuf, PathBuf)>,
 }
 
 pub fn load_whisper(path: &Path) -> Result<WhisperContext> {
@@ -86,9 +92,19 @@ pub fn process(
         |p| on_progress(Stage::Transcribing, p),
     )?;
 
+    // 트랙 분석은 덤이라 실패해도 전사 결과는 돌려준다
+    let origins = match &options.tracks {
+        Some((mic, system)) => match (audio::load_mono_16k(mic), audio::load_mono_16k(system)) {
+            (Ok(mic), Ok(system)) => origin::classify(&turns, &mic, &system),
+            _ => Default::default(),
+        },
+        None => Default::default(),
+    };
+
     Ok(Transcript {
         duration,
         turns,
         utterances,
+        origins,
     })
 }

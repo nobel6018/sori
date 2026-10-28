@@ -305,8 +305,9 @@ where
     Ok(stream)
 }
 
-/// 녹음하는 동안 macOS App Nap과 잠자기를 막는다. 회의 중에는 앱이 대부분 뒤에 가려져 있는데,
-/// App Nap에 들어가면 녹음 스레드가 느려져 버퍼 오버런으로 소리가 빠진다
+/// 녹음하는 동안 잠자기를 막는다. 회의 중에는 앱이 대부분 뒤에 가려져 있고 입력도 없어서,
+/// macOS는 App Nap으로 녹음 스레드를 느리게 돌리고 Windows는 유휴 시간이 지나면 잠자기에 들어간다.
+/// 녹음 스레드 안에서 만들고 없애야 한다(Windows 실행 상태는 스레드 단위다)
 struct KeepAwake {
     #[cfg(target_os = "macos")]
     activity: objc2::rc::Retained<objc2::runtime::ProtocolObject<dyn objc2::runtime::NSObjectProtocol>>,
@@ -323,9 +324,26 @@ impl KeepAwake {
         Self { activity }
     }
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(windows)]
+    fn begin() -> Self {
+        use windows_sys::Win32::System::Power::{SetThreadExecutionState, ES_CONTINUOUS, ES_SYSTEM_REQUIRED};
+        // SAFETY: 플래그만 넘기는 Win32 호출이다. 화면 꺼짐(ES_DISPLAY_REQUIRED)은 막지 않는다
+        unsafe { SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED) };
+        Self {}
+    }
+
+    #[cfg(not(any(target_os = "macos", windows)))]
     fn begin() -> Self {
         Self {}
+    }
+}
+
+#[cfg(windows)]
+impl Drop for KeepAwake {
+    fn drop(&mut self) {
+        use windows_sys::Win32::System::Power::{SetThreadExecutionState, ES_CONTINUOUS};
+        // SAFETY: ES_CONTINUOUS만 넘겨 이 스레드가 걸어 둔 요구를 푼다
+        unsafe { SetThreadExecutionState(ES_CONTINUOUS) };
     }
 }
 

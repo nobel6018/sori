@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { SummaryPanel } from "./SummaryPanel";
+import { Block, TranscriptList } from "./TranscriptList";
 import { api, formatTime, LANGUAGES, ProgressEvent, Recording, RecordingDetail, speakerName, Stage, Utterance } from "../api";
 
 const STAGE_LABEL: Record<Stage, string> = {
@@ -14,13 +15,6 @@ interface Props {
   progress?: ProgressEvent;
   onChanged: () => Promise<void>;
   onDeleted: () => Promise<void>;
-}
-
-interface Block {
-  speaker: number;
-  start: number;
-  end: number;
-  utterances: Utterance[];
 }
 
 /** 같은 화자가 이어서 말한 발화를 한 덩어리로 보여 준다 */
@@ -45,6 +39,7 @@ export function RecordingView({ recording, progress, onChanged, onDeleted }: Pro
   const [running, setRunning] = useState(recording.status === "processing");
   const [error, setError] = useState<string | null>(recording.error);
   const [currentTime, setCurrentTime] = useState(0);
+  const [playing, setPlaying] = useState(false);
   const [editingSpeaker, setEditingSpeaker] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
   const [tab, setTab] = useState<"transcript" | "summary">("transcript");
@@ -104,12 +99,13 @@ export function RecordingView({ recording, progress, onChanged, onDeleted }: Pro
     }
   };
 
-  const seek = (time: number) => {
+  // 블록 컴포넌트가 memo로 다시 그려지지 않도록 같은 함수를 넘긴다
+  const seek = useCallback((time: number) => {
     const audio = audioRef.current;
     if (!audio) return;
     audio.currentTime = time;
     audio.play();
-  };
+  }, []);
 
   const copyText = async () => {
     const text = blocks
@@ -156,6 +152,8 @@ export function RecordingView({ recording, progress, onChanged, onDeleted }: Pro
           controls
           src={convertFileSrc(detail.audioPath)}
           onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
+          onPlay={() => setPlaying(true)}
+          onPause={() => setPlaying(false)}
         />
       )}
 
@@ -229,7 +227,9 @@ export function RecordingView({ recording, progress, onChanged, onDeleted }: Pro
       )}
 
       {transcript && tab === "summary" && (
-        <SummaryPanel recordingId={rec.id} summary={detail?.summary ?? null} onSummarized={load} />
+        <div className="tab-scroll">
+          <SummaryPanel recordingId={rec.id} summary={detail?.summary ?? null} onSummarized={load} />
+        </div>
       )}
 
       {transcript && tab === "transcript" && speakers.length > 0 && (
@@ -254,6 +254,9 @@ export function RecordingView({ recording, progress, onChanged, onDeleted }: Pro
             ) : (
               <button key={s} className={`speaker-tag spk-${s % 8}`} onClick={() => setEditingSpeaker(s)} title="이름 바꾸기">
                 {speakerName(rec, s)}
+                {transcript.origins?.[String(s)] && (
+                  <span className="origin">{transcript.origins[String(s)] === "local" ? "마이크" : "원격"}</span>
+                )}
               </button>
             ),
           )}
@@ -261,33 +264,7 @@ export function RecordingView({ recording, progress, onChanged, onDeleted }: Pro
       )}
 
       {transcript && tab === "transcript" && (
-        <section className="transcript">
-          {blocks.length === 0 && <p className="muted">받아 적은 내용이 없습니다.</p>}
-          {blocks.map((b) => {
-            const active = currentTime >= b.start && currentTime < b.end;
-            return (
-              <article key={`${b.start}-${b.speaker}`} className={`block ${active ? "active" : ""}`}>
-                <div className="block-head">
-                  <span className={`speaker-name spk-${b.speaker % 8}`}>{speakerName(rec, b.speaker)}</span>
-                  <button className="time" onClick={() => seek(b.start)}>
-                    {formatTime(b.start)}
-                  </button>
-                </div>
-                <p className="block-text">
-                  {b.utterances.map((u, i) => (
-                    <span
-                      key={i}
-                      className={currentTime >= u.start && currentTime < u.end ? "now" : ""}
-                      onDoubleClick={() => seek(u.start)}
-                    >
-                      {u.text}{" "}
-                    </span>
-                  ))}
-                </p>
-              </article>
-            );
-          })}
-        </section>
+        <TranscriptList blocks={blocks} recording={rec} currentTime={currentTime} playing={playing} onSeek={seek} />
       )}
     </div>
   );
