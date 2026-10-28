@@ -62,20 +62,44 @@ pub const DEFAULT_PROMPT: &str = "\
 const TIMEOUT: Duration = Duration::from_secs(600);
 
 /// 이 PATH로 CLI를 찾고 실행한다.
-/// Finder에서 연 macOS 앱은 /usr/bin:/bin 정도만 물려받아 ~/.local/bin, Homebrew의 CLI를 못 찾는다
+/// Finder에서 연 macOS 앱은 /usr/bin:/bin 정도만 물려받아 ~/.local/bin, Homebrew의 CLI를 못 찾는다.
+/// 로그인 셸만으로는 .zshrc(nvm, ~/.local/bin 설정이 흔히 있는 곳)를 읽지 않아 대화형 로그인 셸(-ilc)로 묻는다.
+/// 대화형 셸은 인사말 같은 다른 출력을 낼 수 있어 표시 문자열 사이의 값만 쓴다
 fn login_path() -> Option<&'static str> {
     static PATH: OnceLock<Option<String>> = OnceLock::new();
     PATH.get_or_init(|| {
+        let inherited = std::env::var("PATH").unwrap_or_default();
         if cfg!(windows) {
-            return std::env::var("PATH").ok();
+            return Some(inherited);
         }
         let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
-        let out = std::process::Command::new(shell)
-            .args(["-lc", "printf %s \"$PATH\""])
+        let from_shell = std::process::Command::new(shell)
+            .args(["-ilc", "printf '__SORI_PATH__%s__SORI_PATH__' \"$PATH\""])
             .stdin(Stdio::null())
+            .stderr(Stdio::null())
             .output()
-            .ok()?;
-        out.status.success().then(|| String::from_utf8_lossy(&out.stdout).into_owned())
+            .ok()
+            .and_then(|out| {
+                let text = String::from_utf8_lossy(&out.stdout).into_owned();
+                text.split("__SORI_PATH__").nth(1).map(str::to_string)
+            })
+            .unwrap_or_default();
+        // 셸 설정에 없어도 흔한 설치 위치는 찾아본다
+        let home = std::env::var("HOME").unwrap_or_default();
+        let extra = [
+            format!("{home}/.local/bin"),
+            format!("{home}/.claude/local"),
+            format!("{home}/.npm-global/bin"),
+            "/opt/homebrew/bin".to_string(),
+            "/usr/local/bin".to_string(),
+        ];
+        let mut parts: Vec<String> = Vec::new();
+        for p in from_shell.split(':').chain(inherited.split(':')).map(str::to_string).chain(extra) {
+            if !p.is_empty() && !parts.contains(&p) {
+                parts.push(p);
+            }
+        }
+        Some(parts.join(":"))
     })
     .as_deref()
 }
@@ -175,14 +199,21 @@ pub async fn run(provider: Provider, prompt: String, cancel: oneshot::Receiver<(
 
     let result = async {
         let mut child = cmd.spawn().wrap_err_with(|| format!("{}를 실행하지 못했습니다", program.display()))?;
+        let pid = child.id();
         let mut stdin = child.stdin.take().ok_or_else(|| eyre!("표준 입력을 열지 못했습니다"))?;
         stdin.write_all(prompt.as_bytes()).await?;
         drop(stdin);
 
         let output = tokio::select! {
             out = child.wait_with_output() => out?,
-            _ = cancel => eyre::bail!("요약을 취소했습니다"),
-            _ = tokio::time::sleep(TIMEOUT) => eyre::bail!("요약이 {}분 안에 끝나지 않아 멈췄습니다", TIMEOUT.as_secs() / 60),
+            _ = cancel => {
+                kill_tree(pid);
+                eyre::bail!("요약을 취소했습니다")
+            }
+            _ = tokio::time::sleep(TIMEOUT) => {
+                kill_tree(pid);
+                eyre::bail!("요약이 {}분 안에 끝나지 않아 멈췄습니다", TIMEOUT.as_secs() / 60)
+            }
         };
 
         if !output.status.success() {
@@ -207,19 +238,25 @@ pub async fn run(provider: Provider, prompt: String, cancel: oneshot::Receiver<(
     result
 }
 
-/// Windows에서 .cmd, .bat은 직접 실행되지 않아 cmd /C로 감싼다
+/// Rust 1.77부터 .cmd, .bat도 Command로 바로 실행하고 인자를 안전하게 이스케이프한다.
+/// cmd /C로 직접 감싸면 사용자 폴더에 공백이 있을 때(C:\Users\Lee Young\...) 따옴표가 벗겨져 경로가 잘린다
 fn command_for(program: &Path) -> Command {
-    let is_script = program
-        .extension()
-        .and_then(|e| e.to_str())
-        .is_some_and(|e| e.eq_ignore_ascii_case("cmd") || e.eq_ignore_ascii_case("bat"));
-    if cfg!(windows) && is_script {
-        let mut cmd = Command::new("cmd");
-        cmd.arg("/C").arg(program);
-        cmd
-    } else {
-        Command::new(program)
+    Command::new(program)
+}
+
+/// 취소나 시간 초과 때 하위 프로세스까지 끝낸다. Windows에서 .cmd는 cmd.exe가 node를 띄우므로
+/// cmd.exe만 죽이면 node가 남는다
+fn kill_tree(pid: Option<u32>) {
+    #[cfg(windows)]
+    if let Some(pid) = pid {
+        let _ = std::process::Command::new("taskkill")
+            .args(["/PID", &pid.to_string(), "/T", "/F"])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
     }
+    #[cfg(not(windows))]
+    let _ = pid;
 }
 
 fn tail(text: &str, max: usize) -> String {

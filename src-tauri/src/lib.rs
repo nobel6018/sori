@@ -301,7 +301,8 @@ async fn stop_recording(app: AppHandle) -> CmdResult<Recording> {
         finalize_tracks(&state.store, &recording)
     })
     .await
-    .map_err(err)?;
+    // 패닉해도 녹음 상태는 아래에서 마무리한다. 여기서 빠져나가면 "녹음 중"에 묶인다
+    .unwrap_or_else(|e| Err(eyre::eyre!("트랙을 합치다 멈췄습니다: {e}")));
 
     let mut recording = state.store.get(&id).map_err(err)?;
     recording.status = Status::New;
@@ -342,7 +343,7 @@ async fn summarize_recording(
         .get_transcript(&id)
         .map_err(err)?
         .ok_or("먼저 전사를 끝내 주세요")?;
-    let mut settings = state.store.get_settings(&state.home);
+    let settings = state.store.get_settings(&state.home);
     let instructions = settings.summary_prompt.clone().unwrap_or_else(|| summarize::DEFAULT_PROMPT.to_string());
     let prompt = summarize::build_prompt(&instructions, &recording, &transcript);
 
@@ -364,9 +365,11 @@ async fn summarize_recording(
         markdown,
     };
     state.store.save_summary(&id, &summary).map_err(err)?;
-    // 다음 요약에서 같은 CLI를 미리 고르도록 기억한다
-    settings.summary_provider = Some(provider);
-    let _ = state.store.save_settings(&settings);
+    // 다음 요약에서 같은 CLI를 미리 고르도록 기억한다. 요약하는 1분 사이 사용자가 바꾼 설정을
+    // 덮지 않도록 저장 직전에 다시 읽고 이 값만 바꾼다
+    let mut latest = state.store.get_settings(&state.home);
+    latest.summary_provider = Some(provider);
+    let _ = state.store.save_settings(&latest);
     Ok(summary)
 }
 
@@ -397,7 +400,12 @@ async fn process_recording(app: AppHandle, request: ProcessRequest) -> CmdResult
     let _guard = state.pipeline.lock().await;
     let worker_app = app.clone();
     let worker_id = id.clone();
+    let worker_cancel = cancel.clone();
     let result = tauri::async_runtime::spawn_blocking(move || {
+        // 앞 작업을 기다리는 동안 취소했으면 시작하지 않는다
+        if worker_cancel.load(Ordering::Relaxed) {
+            eyre::bail!("취소했습니다");
+        }
         let state = worker_app.state::<AppState>();
         let settings = state.store.get_settings(&state.home);
         let recording = state.store.get(&worker_id)?;
@@ -432,14 +440,17 @@ async fn process_recording(app: AppHandle, request: ProcessRequest) -> CmdResult
         )
     })
     .await
-    .map_err(err)?;
+    // 패닉해도 상태를 "실패"로 남기고 취소 목록을 비운다. 여기서 빠져나가면 "처리 중"에 묶여 삭제도 안 된다
+    .unwrap_or_else(|e| Err(eyre::eyre!("처리하다 멈췄습니다: {e}")));
 
     state.cancels.lock().unwrap().remove(&id);
     let mut recording = state.store.get(&id).map_err(err)?;
     match result {
         Ok(transcript) => {
             state.store.save_transcript(&id, &transcript).map_err(err)?;
-            // 마이크 쪽 화자가 한 명뿐이면 녹음한 본인이다. 사용자가 붙인 이름은 덮지 않는다
+            // 다시 처리하면 화자 번호가 바뀔 수 있어, 예전 번호에 붙인 이름은 지운다
+            recording.speaker_names.clear();
+            // 마이크 쪽 화자가 한 명뿐이면 녹음한 본인이다
             let locals: Vec<i32> = transcript
                 .origins
                 .iter()
@@ -447,7 +458,7 @@ async fn process_recording(app: AppHandle, request: ProcessRequest) -> CmdResult
                 .map(|(s, _)| *s)
                 .collect();
             if let [me] = locals.as_slice() {
-                recording.speaker_names.entry(me.to_string()).or_insert_with(|| "나".to_string());
+                recording.speaker_names.insert(me.to_string(), "나".to_string());
             }
             recording.status = Status::Done;
             recording.duration = Some(transcript.duration);

@@ -109,8 +109,9 @@ export default function App() {
           <ModelSetup catalog={catalog} onInstalled={setCatalog} onLater={() => setSetupLater(true)} />
         ) : selected ? (
           <RecordingView
-            // 녹음이 끝나면 화면을 새로 만들어 재생기와 처리 패널을 띄운다
-            key={`${selected.id}-${selected.status === "recording"}`}
+            // 상태(녹음 중, 처리 중, 완료 등)가 바뀌면 화면을 새로 만들어 최신 결과를 읽는다.
+            // 처리 중에 다른 녹음을 봤다 돌아와도 끝난 결과가 보인다
+            key={`${selected.id}-${selected.status}`}
             recording={selected}
             progress={progress[selected.id]}
             onChanged={refresh}

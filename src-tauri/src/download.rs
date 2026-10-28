@@ -34,7 +34,7 @@ const RETRIES: usize = 3;
 const PROGRESS_INTERVAL: Duration = Duration::from_millis(100);
 
 /// 파일을 차례로 받는다. 한 파일은 16MB 조각으로 나눠 연결 4개로 동시에 받는다.
-/// 끝난 조각은 옆 파일(.part.json)에 적어 두어, 끊겼다가 다시 부르면 남은 조각만 받는다.
+/// 끝난 조각은 옆 파일(.sori-part.json)에 적어 두어, 끊겼다가 다시 부르면 남은 조각만 받는다.
 /// 다 받으면 이름을 바꾼다. 이미 받은 파일은 건너뛴다
 pub fn download_all(items: &[Item], cancel: &AtomicBool, on_progress: impl Fn(Progress)) -> Result<()> {
     let agent = ureq::AgentBuilder::new()
@@ -76,8 +76,10 @@ fn download_one(agent: &ureq::Agent, item: &Item, cancel: &AtomicBool, on_progre
     if let Some(dir) = item.dest.parent() {
         fs::create_dir_all(dir)?;
     }
-    let part = sidecar(&item.dest, ".part");
-    let state_path = sidecar(&item.dest, ".part.json");
+    // 스크립트(curl -C -)는 .part를 쓴다. 앱의 .part는 미리 전체 크기로 늘려 두고 조각을 채우므로,
+    // 같은 이름을 쓰면 curl이 크기만 보고 다 받았다고 판단해 구멍 난 파일을 모델로 설치할 수 있다
+    let part = sidecar(&item.dest, ".sori-part");
+    let state_path = sidecar(&item.dest, ".sori-part.json");
     let chunks = item.size.div_ceil(CHUNK) as usize;
 
     // 조각마다 앞에서부터 받은 바이트 수. 기록이 없거나 맞지 않으면 처음부터 받는다
@@ -248,6 +250,6 @@ mod tests {
     fn 기록_파일_이름은_원래_이름_뒤에_붙인다() {
         let p = Path::new("/m/ggml-large-v3.bin");
 
-        assert_eq!(sidecar(p, ".part.json"), Path::new("/m/ggml-large-v3.bin.part.json"));
+        assert_eq!(sidecar(p, ".sori-part.json"), Path::new("/m/ggml-large-v3.bin.sori-part.json"));
     }
 }

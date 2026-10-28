@@ -57,12 +57,13 @@ export function Recorder({ onStarted, onStopped, onError }: Props) {
     setBusy(true);
     try {
       const recording = await api.stopRecording();
-      setActive(null);
-      setLevels([]);
       onStopped(recording);
     } catch (e) {
       onError(String(e));
     } finally {
+      // 멈추기가 실패해도 백엔드는 녹음 핸들을 이미 내려놓았다. 화면도 녹음 상태를 풀어야 다시 녹음할 수 있다
+      setActive(null);
+      setLevels([]);
       setBusy(false);
     }
   };

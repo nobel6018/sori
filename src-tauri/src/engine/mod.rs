@@ -64,8 +64,15 @@ pub fn process(
     cancel: Arc<AtomicBool>,
     on_progress: impl Fn(Stage, f32) + Send + Sync + Clone + 'static,
 ) -> Result<Transcript> {
+    let check_cancel = || -> Result<()> {
+        if cancel.load(std::sync::atomic::Ordering::Relaxed) {
+            eyre::bail!("취소했습니다");
+        }
+        Ok(())
+    };
     on_progress(Stage::Decoding, 0.0);
     let samples = audio::load_mono_16k(audio_path)?;
+    check_cancel()?;
     let duration = samples.len() as f32 / audio::SAMPLE_RATE as f32;
 
     let progress = on_progress.clone();
@@ -81,11 +88,13 @@ pub fn process(
     )?;
     // 화자 수를 알면 구간마다 임베딩을 다시 뽑아 그 수로 묶는다. 자동 모드는 기준값이
     // 녹음 환경마다 크게 흔들려(회의실 녹음이 65명으로 쪼개졌다) sherpa 결과를 그대로 둔다
+    check_cancel()?;
     let turns = match options.num_speakers {
         Some(k) if k >= 2 => recluster::recluster(&turns, &samples, &models.embedding, k as usize)?,
         _ => turns,
     };
 
+    check_cancel()?;
     let threads = std::thread::available_parallelism().map_or(4, |n| n.get() as i32);
     let utterances = transcribe::transcribe(
         whisper,

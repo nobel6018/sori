@@ -242,8 +242,9 @@ export function RecordingView({ recording, progress, onChanged, onDeleted }: Pro
         </div>
       )}
 
-      {transcript && tab === "summary" && (
-        <div className="tab-scroll">
+      {/* 탭을 바꿔도 요약 진행 상태를 잃지 않도록 숨기기만 한다 */}
+      {transcript && (
+        <div className="tab-scroll" hidden={tab !== "summary"}>
           <SummaryPanel recordingId={rec.id} summary={detail?.summary ?? null} onSummarized={load} />
         </div>
       )}

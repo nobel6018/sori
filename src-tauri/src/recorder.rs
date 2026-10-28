@@ -124,11 +124,13 @@ fn run(
     on_interrupted: impl FnOnce(String),
 ) -> Result<Finished> {
     let (tx, rx) = mpsc::channel::<Event>();
-    let setup = || -> Result<(Vec<cpal::Stream>, Vec<Writer>)> {
+    let setup = || -> Result<(Vec<cpal::Stream>, Vec<Writer>, Vec<u32>)> {
         let mut streams = Vec::new();
         let mut writers = Vec::new();
+        let mut rates = Vec::new();
         for (index, track) in tracks.iter().enumerate() {
             let (stream, rate) = open_stream(&track.source, index, tx.clone())?;
+            rates.push(rate);
             writers.push(hound::WavWriter::create(
                 &track.path,
                 hound::WavSpec {
@@ -147,10 +149,10 @@ fn run(
                 Source::System => "시스템 소리 녹음을 시작하지 못했습니다. 시스템 오디오 녹음 권한을 확인해 주세요",
             })?;
         }
-        Ok((streams, writers))
+        Ok((streams, writers, rates))
     };
 
-    let (streams, mut writers) = match setup() {
+    let (streams, mut writers, rates) = match setup() {
         Ok(v) => {
             let _ = ready_tx.send(Ok(()));
             v
@@ -163,60 +165,99 @@ fn run(
     };
 
     let _awake = KeepAwake::begin();
+    let started = Instant::now();
     let mut written = vec![0u64; writers.len()];
     let mut peaks = vec![0.0f32; writers.len()];
     let mut last_flush = Instant::now();
     let mut last_level = Instant::now();
     let mut interrupted = None;
 
-    loop {
-        if stop_rx.try_recv().is_ok() {
-            break;
-        }
-        match rx.recv_timeout(Duration::from_millis(50)) {
-            Ok(Event::Samples(i, samples)) => {
-                write_samples(&mut writers[i], &samples)?;
-                peaks[i] = samples.iter().fold(peaks[i], |p, s| p.max(s.abs()));
-                written[i] += samples.len() as u64;
+    // 쓰기 실패(디스크 가득 참 등)도 장치 오류처럼 "중간에 끊김"으로 다룬다. 그때까지 쓴 파일은 아래에서 마무리한다
+    let result = (|| -> Result<()> {
+        loop {
+            if stop_rx.try_recv().is_ok() {
+                return Ok(());
             }
-            Ok(Event::StreamError(e)) => {
-                interrupted = Some(e);
-                break;
+            match rx.recv_timeout(Duration::from_millis(50)) {
+                Ok(Event::Samples(i, samples)) => {
+                    write_samples(&mut writers[i], &samples)?;
+                    peaks[i] = samples.iter().fold(peaks[i], |p, s| p.max(s.abs()));
+                    written[i] += samples.len() as u64;
+                }
+                Ok(Event::StreamError(e)) => {
+                    interrupted = Some(e);
+                    return Ok(());
+                }
+                Err(RecvTimeoutError::Timeout) => {}
+                Err(RecvTimeoutError::Disconnected) => return Ok(()),
             }
-            Err(RecvTimeoutError::Timeout) => {}
-            Err(RecvTimeoutError::Disconnected) => break,
-        }
-        if last_level.elapsed() >= LEVEL_INTERVAL {
-            on_level(peaks.iter().map(|p| level(*p)).collect());
-            peaks.iter_mut().for_each(|p| *p = 0.0);
-            last_level = Instant::now();
-        }
-        if last_flush.elapsed() >= FLUSH_INTERVAL {
-            for w in &mut writers {
-                w.flush()?;
+            pad_gaps(&mut writers, &mut written, &rates, started.elapsed())?;
+            if last_level.elapsed() >= LEVEL_INTERVAL {
+                on_level(peaks.iter().map(|p| level(*p)).collect());
+                peaks.iter_mut().for_each(|p| *p = 0.0);
+                last_level = Instant::now();
             }
-            last_flush = Instant::now();
+            if last_flush.elapsed() >= FLUSH_INTERVAL {
+                for w in &mut writers {
+                    w.flush()?;
+                }
+                last_flush = Instant::now();
+            }
         }
+    })();
+    if let Err(e) = result {
+        interrupted = Some(format!("녹음 파일을 쓰지 못했습니다. 디스크 공간을 확인해 주세요: {e:#}"));
     }
 
     // 스트림을 먼저 멈춘 뒤 채널에 남은 샘플까지 받아 적는다
     drop(streams);
     while let Ok(event) = rx.try_recv() {
         if let Event::Samples(i, samples) = event {
-            write_samples(&mut writers[i], &samples)?;
-            written[i] += samples.len() as u64;
+            if write_samples(&mut writers[i], &samples).is_ok() {
+                written[i] += samples.len() as u64;
+            }
         }
     }
+    let _ = pad_gaps(&mut writers, &mut written, &rates, started.elapsed());
+    let mut finalize_error = None;
     for w in writers {
-        w.finalize()?;
+        if let Err(e) = w.finalize() {
+            finalize_error.get_or_insert(e);
+        }
     }
     on_level(vec![0.0; written.len()]);
     // 사용자가 멈추기를 누르지 않았는데 끝났으면 화면에 알려 멈추기 처리를 하게 한다
     if let Some(reason) = &interrupted {
         on_interrupted(reason.clone());
     }
+    if let Some(e) = finalize_error {
+        return Err(e.into());
+    }
 
     Ok(Finished { interrupted })
+}
+
+/// 트랙이 실제 흐른 시간보다 이만큼 넘게 짧아지면 무음으로 채운다
+const GAP_THRESHOLD: Duration = Duration::from_millis(500);
+
+/// Windows WASAPI 루프백은 아무 소리도 나지 않는 동안 데이터를 보내지 않는다. 그대로 두면 상대가 조용했던
+/// 시간만큼 시스템 소리 트랙이 짧아지고, 섞을 때 그 뒤 원격 목소리가 모두 앞당겨진다.
+/// 트랙마다 흐른 시간에 비해 모자란 만큼을 무음으로 채워 트랙 길이를 실제 시간에 맞춘다.
+/// 블루투스 마이크가 잠깐 끊길 때도 같은 일이 생긴다. 장치 버퍼 지연(수십 ms)으로는 채우지 않도록 여유를 둔다
+fn pad_gaps(writers: &mut [Writer], written: &mut [u64], rates: &[u32], elapsed: Duration) -> Result<()> {
+    for ((w, n), &rate) in writers.iter_mut().zip(written.iter_mut()).zip(rates) {
+        let expected = (elapsed.as_secs_f64() * rate as f64) as u64;
+        let threshold = (GAP_THRESHOLD.as_secs_f64() * rate as f64) as u64;
+        if expected > *n + threshold {
+            // 곧 도착할 샘플 몫으로 50ms는 남겨 둔다
+            let fill = expected - *n - rate as u64 / 20;
+            for _ in 0..fill {
+                w.write_sample(0i16)?;
+            }
+            *n += fill;
+        }
+    }
+    Ok(())
 }
 
 fn write_samples(writer: &mut Writer, samples: &[f32]) -> Result<()> {
@@ -367,6 +408,43 @@ fn level(peak: f32) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn writer(path: &std::path::Path, rate: u32) -> Writer {
+        hound::WavWriter::create(
+            path,
+            hound::WavSpec { channels: 1, sample_rate: rate, bits_per_sample: 16, sample_format: hound::SampleFormat::Int },
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn 데이터가_끊긴_트랙은_흐른_시간만큼_무음으로_채운다() {
+        let dir = std::env::temp_dir().join(format!("sori-pad-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut writers = vec![writer(&dir.join("a.wav"), 16_000), writer(&dir.join("b.wav"), 48_000)];
+        // a는 3초 내내 받았고, b(루프백)는 1초만 받고 끊긴 상황
+        let mut written = vec![48_000, 48_000];
+
+        pad_gaps(&mut writers, &mut written, &[16_000, 48_000], Duration::from_secs(3)).unwrap();
+
+        assert_eq!(written[0], 48_000);
+        assert_eq!(written[1], 3 * 48_000 - 48_000 / 20);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn 장치_버퍼_지연_정도는_채우지_않는다() {
+        let dir = std::env::temp_dir().join(format!("sori-nopad-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut writers = vec![writer(&dir.join("a.wav"), 16_000)];
+        // 1초가 흘렀고 0.8초 분량만 도착(0.2초 지연)
+        let mut written = vec![12_800];
+
+        pad_gaps(&mut writers, &mut written, &[16_000], Duration::from_secs(1)).unwrap();
+
+        assert_eq!(written[0], 12_800);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
 
     #[test]
     fn 무음은_레벨_0이다() {

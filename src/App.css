@@ -804,3 +804,7 @@ label.model-option {
   gap: 4px;
   font-size: 12px;
 }
+
+.tab-scroll[hidden] {
+  display: none;
+}

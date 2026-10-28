@@ -45,6 +45,7 @@ pub fn diarize(
     };
     let mut sd = Diarize::new(segmentation_model, embedding_model, config)?;
 
+    // sherpa-onnx는 이 콜백의 반환값을 쓰지 않아 화자 분리 도중에는 멈출 수 없다. 취소는 이 단계가 끝난 직후 적용된다
     let callback = Box::new(move |done: i32, total: i32| {
         if total > 0 {
             on_progress(done as f32 / total as f32);
