@@ -29,6 +29,7 @@ sori가 앞에 없어도 동작합니다. 설정에서 바꾸고, Backspace로 �
 |---|---|---|
 | 녹음 시작/멈춤 | ⌥⇧⌘R | Ctrl+Alt+Shift+R |
 | sori 창 앞으로 | ⌥⇧⌘S | Ctrl+Alt+Shift+S |
+| 북마크 (녹음 중) | ⌥⇧⌘B | Ctrl+Alt+Shift+B |
 
 녹음 토글은 창을 앞으로 가져오지 않습니다. 회의 앱을 보는 중에 누르는 키라서입니다. 다른 앱이 이미 쓰는 조합이면 등록이 실패하고, 설정은 저장되지 않은 채 이유를 보여 줍니다.
 
@@ -46,6 +47,7 @@ sori가 앞에 없어도 동작합니다. 설정에서 바꾸고, Backspace로 �
 |---|---|---|
 | `sori://record/toggle?token=<토큰>` | 녹음 시작/멈춤 | 아니요 |
 | `sori://record/start?token=..`, `sori://record/stop?token=..` | 녹음 시작, 멈춤 | 아니요 |
+| `sori://record/bookmark?token=..` | 녹음 중인 지금 시각에 북마크 | 아니요 |
 | `sori://show` | 창 앞으로 | 예 |
 | `sori://open?id=<녹음 id>&t=<초>` | 녹음을 열고 그 시각으로 이동. `t`는 생략 가능 | 예 |
 | `sori://import?path=<경로>&path=<경로>&process=1&token=<토큰>` | 파일을 가져옴. `process=1`이면 기본 설정으로 바로 처리 | 예 |

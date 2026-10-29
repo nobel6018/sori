@@ -41,9 +41,62 @@ pub struct ProviderStatus {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Summary {
+    /// 0.3.0 이하에서 만든 요약에는 id가 없어 "legacy"로 읽는다
+    #[serde(default = "legacy_id")]
+    pub id: String,
+    /// 만든 템플릿 이름. 0.3.0 이하 요약은 비어 있다
+    #[serde(default)]
+    pub template: Option<String>,
     pub provider: Provider,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub markdown: String,
+}
+
+fn legacy_id() -> String {
+    "legacy".into()
+}
+
+/// 요약 지시문 묶음. 설정에서 고치고 더할 수 있다
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SummaryTemplate {
+    pub id: String,
+    pub name: String,
+    pub prompt: String,
+}
+
+const COMMON: &str = "다음은 녹음을 자동으로 받아 적은 기록이다. 화자는 자동으로 나눈 것이라 틀릴 수 있고, 받아 적기 오류도 있다. 문맥으로 보정해서 읽어라. 기록에 없는 내용은 지어내지 말고, 해당하는 내용이 없는 항목은 \"없음\"이라고 적어라. 한국어 마크다운으로 쓴다.";
+
+/// 처음 설치했을 때의 템플릿. 0.3.0 이하에서 요약 지시문을 고쳤다면 회의록 템플릿에 그 지시문을 쓴다
+pub fn default_templates(custom_meeting_prompt: Option<&str>) -> Vec<SummaryTemplate> {
+    let t = |id: &str, name: &str, prompt: String| SummaryTemplate {
+        id: id.into(),
+        name: name.into(),
+        prompt,
+    };
+    vec![
+        t("meeting", "회의록", custom_meeting_prompt.unwrap_or(DEFAULT_PROMPT).to_string()),
+        t(
+            "one-on-one",
+            "1:1 면담",
+            format!("{COMMON}\n\n## 한 줄 요약\n## 나눈 이야기\n## 상대가 걱정하거나 원하는 것\n## 피드백\n## 다음까지 할 일\n누가 할지 함께 적는다."),
+        ),
+        t(
+            "interview",
+            "인터뷰",
+            format!("{COMMON}\n\n## 인터뷰 대상과 맥락\n## 질문별 답변\n질문마다 답의 요지를 정리하고, 인상적인 말은 따옴표로 그대로 옮긴다.\n## 눈에 띈 점\n## 더 물어볼 것"),
+        ),
+        t(
+            "lecture",
+            "강의, 세미나",
+            format!("{COMMON}\n\n## 주제\n## 핵심 개념\n개념마다 설명과 예시를 짧게 적는다.\n## 순서대로 정리\n## 질의응답\n## 더 찾아볼 것"),
+        ),
+        t(
+            "actions",
+            "할 일만",
+            format!("{COMMON}\n\n녹음에서 나온 할 일만 체크리스트(- [ ])로 뽑아라. 항목마다 담당자, 기한, 근거가 된 시각([mm:ss])을 함께 적는다. 정해지지 않은 것은 \"미정\"으로 적는다."),
+        ),
+    ]
 }
 
 pub const DEFAULT_PROMPT: &str = "\
@@ -157,9 +210,30 @@ pub fn format_transcript(recording: &Recording, transcript: &Transcript) -> Stri
 
 pub fn build_prompt(instructions: &str, recording: &Recording, transcript: &Transcript) -> String {
     format!(
-        "{instructions}\n\n회의 제목: {}\n\n<transcript>\n{}\n</transcript>\n",
+        "{instructions}\n\n회의 제목: {}\n{}\n<transcript>\n{}\n</transcript>\n",
         recording.title,
+        format_notes(recording),
         format_transcript(recording, transcript)
+    )
+}
+
+/// 녹음하며 남긴 메모. 사용자가 중요하다고 표시한 곳이므로 요약과 질문에 함께 넘긴다
+pub fn format_notes(recording: &Recording) -> String {
+    if recording.notes.is_empty() {
+        return String::new();
+    }
+    let lines: Vec<String> = recording
+        .notes
+        .iter()
+        .map(|n| {
+            let secs = n.time.max(0.0) as u32;
+            let text = if n.text.trim().is_empty() { "(북마크)" } else { n.text.trim() };
+            format!("[{:02}:{:02}] {text}", secs / 60, secs % 60)
+        })
+        .collect();
+    format!(
+        "\n녹음한 사람이 녹음 중에 남긴 메모다. 메모가 가리키는 시각 근처를 더 중요하게 다루고, 메모의 짧은 표현은 기록을 보고 풀어서 반영하라.\n<notes>\n{}\n</notes>\n",
+        lines.join("\n")
     )
 }
 
@@ -303,6 +377,7 @@ mod tests {
             turns: vec![],
             utterances: vec![utt(0.0, 0, "안녕하세요."), utt(1.5, 0, "시작할게요."), utt(65.0, 1, "네.")],
             origins: Default::default(),
+            speaker_embeddings: Default::default(),
         };
 
         let text = format_transcript(&recording(&[("0", "이영훈")]), &t);

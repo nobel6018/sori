@@ -3,6 +3,7 @@ pub mod diarize;
 pub mod origin;
 pub mod recluster;
 pub mod transcribe;
+pub mod voiceprint;
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
@@ -40,6 +41,9 @@ pub struct Transcript {
     /// 마이크와 시스템 소리를 따로 녹음한 경우에만 채운다. 판단하지 못한 화자는 빠진다
     #[serde(default)]
     pub origins: std::collections::BTreeMap<i32, origin::Origin>,
+    /// 화자 번호 → 목소리 특징(단위 벡터). 화자 이름을 기억하고 다음 녹음에서 알아보는 데 쓴다
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub speaker_embeddings: std::collections::BTreeMap<i32, Vec<f32>>,
 }
 
 pub struct ProcessOptions {
@@ -117,10 +121,20 @@ pub fn process(
         None => Default::default(),
     };
 
+    // 목소리 기억도 덤이다. 실패하면 이름 자동 붙이기만 빠진다
+    let speaker_embeddings = voiceprint::speaker_embeddings(&turns, &samples, &models.embedding).unwrap_or_default();
+
     Ok(Transcript {
         duration,
         turns,
         utterances,
         origins,
+        speaker_embeddings,
     })
+}
+
+/// 목소리 특징 없이 저장된 예전 전사에서 화자별 특징을 새로 뽑는다
+pub fn embeddings_for(audio_path: &Path, turns: &[SpeakerTurn], embedding_model: &Path) -> Result<std::collections::BTreeMap<i32, Vec<f32>>> {
+    let samples = audio::load_mono_16k(audio_path)?;
+    voiceprint::speaker_embeddings(turns, &samples, embedding_model)
 }

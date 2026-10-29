@@ -18,6 +18,8 @@ pub enum Action {
     ToggleRecording,
     StartRecording,
     StopRecording,
+    /// 지금 녹음 중인 항목에 북마크를 남긴다
+    Bookmark,
     ShowWindow,
     /// 녹음을 열고, time이 있으면 그 시각부터 재생할 준비를 한다
     Open { id: String, time: Option<f32> },
@@ -31,7 +33,7 @@ pub enum Action {
 impl Action {
     /// 창을 앞으로 가져올지. 녹음 토글은 회의 앱을 보는 중에 누르므로 창을 띄우지 않는다
     fn shows_window(&self) -> bool {
-        !matches!(self, Action::ToggleRecording | Action::StartRecording | Action::StopRecording)
+        !matches!(self, Action::ToggleRecording | Action::StartRecording | Action::StopRecording | Action::Bookmark)
     }
 }
 
@@ -41,6 +43,7 @@ impl Action {
 pub struct Shortcuts {
     pub toggle_recording: String,
     pub show_window: String,
+    pub bookmark: String,
 }
 
 impl Default for Shortcuts {
@@ -49,6 +52,7 @@ impl Default for Shortcuts {
         Self {
             toggle_recording: "CommandOrControl+Alt+Shift+R".into(),
             show_window: "CommandOrControl+Alt+Shift+S".into(),
+            bookmark: "CommandOrControl+Alt+Shift+B".into(),
         }
     }
 }
@@ -171,7 +175,7 @@ pub fn handle_url(app: &AppHandle, url: &Url) {
 fn needs_token(action: &Action) -> bool {
     matches!(
         action,
-        Action::ToggleRecording | Action::StartRecording | Action::StopRecording | Action::Import { .. }
+        Action::ToggleRecording | Action::StartRecording | Action::StopRecording | Action::Bookmark | Action::Import { .. }
     )
 }
 
@@ -186,6 +190,7 @@ pub fn parse_url(url: &Url) -> Option<Action> {
         ("record", "toggle") => Some(Action::ToggleRecording),
         ("record", "start") => Some(Action::StartRecording),
         ("record", "stop") => Some(Action::StopRecording),
+        ("record", "bookmark") => Some(Action::Bookmark),
         ("show", "") => Some(Action::ShowWindow),
         ("open", "") => Some(Action::Open {
             id: query("id").filter(|id| uuid::Uuid::parse_str(id).is_ok())?,
@@ -234,6 +239,7 @@ fn register(app: &AppHandle, shortcuts: &Shortcuts) -> Result<(), String> {
     let entries = [
         ("녹음 시작/멈춤", &shortcuts.toggle_recording, Action::ToggleRecording),
         ("sori 창 앞으로", &shortcuts.show_window, Action::ShowWindow),
+        ("북마크", &shortcuts.bookmark, Action::Bookmark),
     ];
     for (label, accelerator, action) in entries {
         if accelerator.trim().is_empty() {

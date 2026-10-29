@@ -21,7 +21,10 @@ export type Command =
   | "toggle-follow"
   | "copy-markdown"
   | "delete"
-  | "reveal";
+  | "reveal"
+  | "bookmark"
+  | "tab-ask"
+  | "tab-notes";
 
 const EVENT = "sori:command";
 
@@ -41,7 +44,7 @@ export function useCommands(handler: (command: Command) => void) {
 }
 
 /** App이 직접 처리하는 일 */
-export type AppCommand = "import" | "settings" | "search" | "help" | "prev" | "next";
+export type AppCommand = "import" | "settings" | "search" | "help" | "prev" | "next" | "ask-all";
 
 export interface Shortcut {
   /** 키 이름(KeyboardEvent.key 기준, 글자는 소문자) */
@@ -70,6 +73,10 @@ export const SHORTCUTS: Shortcut[] = [
   { key: "ArrowDown", mod: true, run: "next", label: "다음 녹음", group: "이동" },
   { key: "1", mod: true, run: "tab-transcript", label: "전사 탭", group: "이동" },
   { key: "2", mod: true, run: "tab-summary", label: "요약 탭", group: "이동" },
+  { key: "3", mod: true, run: "tab-ask", label: "질문 탭", group: "이동" },
+  { key: "4", mod: true, run: "tab-notes", label: "메모 탭", group: "이동" },
+  { key: "j", mod: true, run: "ask-all", label: "모든 녹음에 물어보기", group: "이동", inInput: true },
+  { key: "b", mod: true, run: "bookmark", label: "북마크 (녹음 중이면 지금, 아니면 재생 위치)", group: "재생", inInput: true },
   { key: " ", run: "play-pause", label: "재생, 일시정지", group: "재생" },
   { key: "ArrowLeft", run: "seek-back", label: "5초 뒤로", group: "재생" },
   { key: "ArrowRight", run: "seek-forward", label: "5초 앞으로", group: "재생" },

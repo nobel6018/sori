@@ -985,3 +985,179 @@ kbd {
     display: none;
   }
 }
+
+/* 요약 여러 개 */
+.summary-list {
+  margin: 4px 0 8px;
+}
+.summary-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+/* 질문하기 */
+.ask {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 100%;
+}
+.ask-turns {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.ask-empty .chips {
+  margin-top: 8px;
+}
+.ask-question {
+  margin: 0;
+  font-weight: 600;
+}
+.ask-question::before {
+  content: "Q. ";
+  color: var(--muted);
+}
+.ask-answer {
+  margin-top: 4px;
+}
+.cite {
+  display: inline;
+  padding: 0 5px;
+  margin: 0 1px;
+  font-size: 12px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: var(--accent-soft);
+  color: var(--accent);
+  cursor: pointer;
+  vertical-align: baseline;
+}
+.ask-form {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  gap: 6px;
+  padding: 8px 0;
+  background: var(--panel);
+}
+.ask-form input {
+  flex: 1;
+}
+.ask-modal {
+  width: min(760px, 94vw);
+  height: min(680px, 86vh);
+  height: min(680px, 86dvh);
+}
+.ask-modal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* 메모와 북마크 */
+.notes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.note-form {
+  display: flex;
+  gap: 6px;
+}
+.note-form input {
+  flex: 1;
+}
+.note-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.note-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+.note-list li > span {
+  flex: 1;
+}
+.note-marker {
+  margin-left: 6px;
+  padding: 1px 7px;
+  font-size: 11px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--active);
+  color: var(--text);
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.export-select {
+  width: auto;
+}
+
+/* 설정: 템플릿, 목소리 */
+.template-edit {
+  display: flex;
+  gap: 6px;
+  margin: 8px 0 6px;
+}
+.template-edit input {
+  flex: 1;
+}
+.voice-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+}
+.voice-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+}
+.voice-list input {
+  flex: 1;
+}
+
+/* 회의 앱 감지 창 */
+.meeting-prompt {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-sizing: border-box;
+  font-size: 13px;
+}
+.meeting-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.meeting-text strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.meeting-text span {
+  color: var(--muted);
+}
+.meeting-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}

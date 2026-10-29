@@ -14,6 +14,7 @@ export interface Recording {
   status: "recording" | "new" | "processing" | "done" | "failed";
   duration: number | null;
   speakerNames: Record<string, string>;
+  notes?: { time: number; text: string }[];
 }
 
 export interface Utterance {

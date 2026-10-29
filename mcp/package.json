@@ -1,0 +1,20 @@
+{
+  "name": "sori-mcp",
+  "version": "0.4.0",
+  "private": true,
+  "description": "sori 녹음의 요약과 전사를 Claude 같은 MCP 클라이언트에서 찾고 읽는 서버 (읽기 전용)",
+  "type": "module",
+  "bin": { "sori-mcp": "dist/index.js" },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "zod": "3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "22.13.10",
+    "typescript": "5.9.3"
+  }
+}

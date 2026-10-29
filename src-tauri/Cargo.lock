@@ -3949,13 +3949,15 @@ dependencies = [
 
 [[package]]
 name = "sori"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "chrono",
  "cpal",
  "eyre",
  "hound",
  "objc2",
+ "objc2-core-audio",
+ "objc2-core-foundation",
  "objc2-foundation",
  "rubato",
  "serde",

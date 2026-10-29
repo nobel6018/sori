@@ -130,3 +130,28 @@ jobs:
       - run: npm ci
       # 타입 검사와 묶기까지 한다. ray lint는 author가 Raycast 계정이 아니라 실패하므로 돌리지 않는다
       - run: npx ray build -e dist
+
+  mcp:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: mcp
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mcp/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      # 빈 데이터 폴더로 띄워 도구 목록이 나오는지 본다
+      - name: tools/list
+        run: |
+          out=$({ printf '%s\n' \
+            '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"ci","version":"1"}}}' \
+            '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
+            '{"jsonrpc":"2.0","id":2,"method":"tools/list"}'; sleep 2; } | SORI_DATA_DIR=$RUNNER_TEMP timeout 10 node dist/index.js || true)
+          echo "$out"
+          echo "$out" | grep -q search_recordings

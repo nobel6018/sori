@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
+import { save } from "@tauri-apps/plugin-dialog";
+import { AskPanel } from "./AskPanel";
+import { NotesPanel } from "./NotesPanel";
 import { SummaryPanel } from "./SummaryPanel";
 import { TranscriptList } from "./TranscriptList";
 import { api, LANGUAGES, ProgressEvent, Recording, RecordingDetail, speakerName, Stage } from "../api";
+import { EXPORT_LABEL, ExportFormat, exportBytes, exportFileName } from "../export";
 import { recordingMarkdown, toBlocks, transcriptMarkdown } from "../markdown";
 import { IS_MAC, useCommands } from "../shortcuts";
 
@@ -49,7 +53,7 @@ export function RecordingView({ recording, progress, seekTo, onSeekDone, onChang
     });
   const [editingSpeaker, setEditingSpeaker] = useState<number | null>(null);
   const [copied, setCopied] = useState<"text" | "markdown" | null>(null);
-  const [tab, setTab] = useState<"transcript" | "summary">("transcript");
+  const [tab, setTab] = useState<"transcript" | "summary" | "ask" | "notes">("transcript");
   const audioRef = useRef<HTMLAudioElement>(null);
 
   const load = useCallback(async () => {
@@ -64,6 +68,14 @@ export function RecordingView({ recording, progress, seekTo, onSeekDone, onChang
   useEffect(() => {
     load();
   }, [load]);
+
+  // 전역 북마크 단축키처럼 화면 밖에서 메모가 늘면 다시 읽는다
+  useEffect(() => {
+    const unlisten = api.onRecordingChanged((id) => id === recording.id && load());
+    return () => {
+      unlisten.then((f) => f());
+    };
+  }, [recording.id, load]);
 
   const rec = detail?.recording ?? recording;
   const transcript = detail?.transcript ?? null;
@@ -87,6 +99,27 @@ export function RecordingView({ recording, progress, seekTo, onSeekDone, onChang
       setRunning(false);
       await load();
       await onChanged();
+    }
+  };
+
+  const nameSpeaker = async (speaker: number, name: string) => {
+    try {
+      await api.nameSpeaker(rec.id, speaker, name);
+    } catch (e) {
+      setError(String(e));
+    }
+    await load();
+    await onChanged();
+  };
+
+  const exportAs = async (format: ExportFormat) => {
+    if (!detail) return;
+    const path = await save({ defaultPath: exportFileName(rec.title, format), filters: [{ name: EXPORT_LABEL[format], extensions: [format] }] });
+    if (!path) return;
+    try {
+      await api.saveExport(path, await exportBytes(detail, format));
+    } catch (e) {
+      setError(String(e));
     }
   };
 
@@ -188,6 +221,17 @@ export function RecordingView({ recording, progress, seekTo, onSeekDone, onChang
         return;
       case "reveal":
         return api.revealAudio(rec.id).catch((e) => setError(String(e)));
+      case "bookmark": {
+        // 다른 녹음이 진행 중이면 그 녹음에 단다. 회의 중에 예전 녹음을 보다가 누른 경우다
+        const playback = () => api.addNote(rec.id, audioRef.current?.currentTime ?? 0, "");
+        const pending = rec.status === "recording" ? api.addNote(rec.id, null, "") : api.addNote(null, null, "").catch(playback);
+        return pending.then(load).catch((e) => setError(String(e)));
+      }
+      case "tab-ask":
+        if (transcript) setTab("ask");
+        return;
+      case "tab-notes":
+        return setTab("notes");
     }
   });
 
@@ -212,6 +256,19 @@ export function RecordingView({ recording, progress, seekTo, onSeekDone, onChang
           </button>
           {transcript && (
             <>
+              <select
+                className="export-select"
+                aria-label="내보내기"
+                value=""
+                onChange={(e) => e.target.value && exportAs(e.target.value as ExportFormat)}
+              >
+                <option value="">내보내기</option>
+                {(Object.keys(EXPORT_LABEL) as ExportFormat[]).map((f) => (
+                  <option key={f} value={f}>
+                    {EXPORT_LABEL[f]}
+                  </option>
+                ))}
+              </select>
               <button onClick={() => copy("text")}>{copied === "text" ? "복사했습니다" : "전사 복사"}</button>
               <button onClick={() => copy("markdown")} title={IS_MAC ? "⇧⌘C" : "Ctrl+Shift+C"}>
                 {copied === "markdown" ? "복사했습니다" : "마크다운 복사"}
@@ -225,7 +282,10 @@ export function RecordingView({ recording, progress, seekTo, onSeekDone, onChang
       </header>
 
       {rec.status === "recording" && (
-        <p className="recording-notice">녹음 중입니다. 왼쪽 위에서 멈추면 재생하고 받아 적을 수 있습니다.</p>
+        <>
+          <p className="recording-notice">녹음 중입니다. 왼쪽 위에서 멈추면 재생하고 받아 적을 수 있습니다.</p>
+          <NotesPanel recording={rec} recordingNow currentTime={0} onSeek={seek} onChanged={load} />
+        </>
       )}
 
       {detail && rec.status !== "recording" && (
@@ -304,15 +364,39 @@ export function RecordingView({ recording, progress, seekTo, onSeekDone, onChang
             전사
           </button>
           <button role="tab" aria-selected={tab === "summary"} className={tab === "summary" ? "on" : ""} onClick={() => setTab("summary")}>
-            요약{detail?.summary ? "" : " (없음)"}
+            요약{detail?.summaries.length ? (detail.summaries.length > 1 ? ` ${detail.summaries.length}` : "") : " (없음)"}
+          </button>
+          <button role="tab" aria-selected={tab === "ask"} className={tab === "ask" ? "on" : ""} onClick={() => setTab("ask")}>
+            질문
+          </button>
+          <button role="tab" aria-selected={tab === "notes"} className={tab === "notes" ? "on" : ""} onClick={() => setTab("notes")}>
+            메모{rec.notes.length ? ` ${rec.notes.length}` : ""}
           </button>
         </div>
       )}
 
-      {/* 탭을 바꿔도 요약 진행 상태를 잃지 않도록 숨기기만 한다 */}
+      {/* 탭을 바꿔도 요약, 질문 진행 상태를 잃지 않도록 숨기기만 한다 */}
       {transcript && (
         <div className="tab-scroll" hidden={tab !== "summary"}>
-          <SummaryPanel recordingId={rec.id} summary={detail?.summary ?? null} onSummarized={load} />
+          <SummaryPanel recordingId={rec.id} summaries={detail?.summaries ?? []} onSummarized={load} />
+        </div>
+      )}
+      {transcript && (
+        <div className="tab-scroll" hidden={tab !== "ask"}>
+          <AskPanel
+            recordingId={rec.id}
+            onCite={(_, time) => {
+              if (time == null) return;
+              setTab("transcript");
+              setScrollTarget({ time, nonce: Date.now() });
+              seek(time);
+            }}
+          />
+        </div>
+      )}
+      {transcript && tab === "notes" && (
+        <div className="tab-scroll">
+          <NotesPanel recording={rec} recordingNow={false} currentTime={currentTime} onSeek={seek} onChanged={load} />
         </div>
       )}
 
@@ -336,16 +420,19 @@ export function RecordingView({ recording, progress, seekTo, onSeekDone, onChang
                 onBlur={(e) => {
                   setEditingSpeaker(null);
                   const name = e.target.value.trim();
-                  const speakerNames = { ...rec.speakerNames };
-                  if (name) speakerNames[String(s)] = name;
-                  else delete speakerNames[String(s)];
-                  saveRecording({ ...rec, speakerNames });
+                  if (name !== (rec.speakerNames[String(s)] ?? "")) nameSpeaker(s, name);
                 }}
                 onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
               />
             ) : (
-              <button key={s} className={`speaker-tag spk-${s % 8}`} onClick={() => setEditingSpeaker(s)} title="이름 바꾸기">
+              <button
+                key={s}
+                className={`speaker-tag spk-${s % 8}`}
+                onClick={() => setEditingSpeaker(s)}
+                title={rec.voiceIds?.[String(s)] ? "기억한 목소리로 알아본 이름입니다. 눌러서 바꾸면 기억도 고칩니다" : "이름 바꾸기. 바꾼 이름은 목소리와 함께 기억합니다"}
+              >
                 {speakerName(rec, s)}
+                {rec.voiceIds?.[String(s)] && <span className="origin">목소리</span>}
                 {transcript.origins?.[String(s)] && (
                   <span className="origin">{transcript.origins[String(s)] === "local" ? "마이크" : "원격"}</span>
                 )}
@@ -362,6 +449,7 @@ export function RecordingView({ recording, progress, seekTo, onSeekDone, onChang
           currentTime={currentTime}
           follow={playing && follow}
           scrollTarget={scrollTarget}
+          notes={rec.notes}
           onSeek={seek}
         />
       )}

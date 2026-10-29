@@ -30,6 +30,10 @@ export function ShortcutHelp({ onClose }: { onClose: () => void }) {
                 <dt>sori 창 앞으로</dt>
                 <dd><kbd>{acceleratorLabel(global.showWindow)}</kbd></dd>
               </div>
+              <div className="shortcut-row">
+                <dt>북마크 (녹음 중)</dt>
+                <dd><kbd>{acceleratorLabel(global.bookmark)}</kbd></dd>
+              </div>
             </dl>
           </section>
         )}

@@ -1,5 +1,8 @@
 mod actions;
+pub mod ask;
 pub mod engine;
+pub mod meeting;
+mod voices;
 pub mod download;
 pub mod models;
 mod recorder;
@@ -11,6 +14,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -42,6 +46,12 @@ struct AppState {
     search: search::Index,
     /// 시작할 때 전역 단축키를 등록하지 못했으면 그 이유. 화면이 준비되면 알린다
     shortcut_error: Mutex<Option<String>>,
+    voices: voices::VoiceBook,
+    /// 지금 녹음을 시작한 시각. 메모와 북마크의 시각을 잰다
+    recording_started: Mutex<Option<Instant>>,
+    meeting: Mutex<meeting::Detector>,
+    /// 지금 띄운 회의 질문 창의 내용
+    meeting_prompt: Mutex<Option<meeting::Prompt>>,
 }
 
 impl AppState {
@@ -73,6 +83,8 @@ struct RecordingDetail {
     audio_path: PathBuf,
     transcript: Option<Transcript>,
     summary: Option<summarize::Summary>,
+    /// 오래된 것부터
+    summaries: Vec<summarize::Summary>,
 }
 
 #[derive(Deserialize)]
@@ -219,22 +231,23 @@ fn get_recording(state: State<AppState>, id: String) -> CmdResult<RecordingDetai
         audio_path: state.store.audio_path(&recording).map_err(err)?,
         transcript: state.store.get_transcript(&id).map_err(err)?,
         summary: state.store.get_summary(&id).map_err(err)?,
+        summaries: state.store.get_summaries(&id).map_err(err)?,
         recording,
     })
 }
 
 #[tauri::command]
 fn update_recording(state: State<AppState>, recording: Recording) -> CmdResult<()> {
-    // 상태와 오류는 처리 파이프라인만 바꾼다. 프론트가 보낸 값으로 덮어쓰지 않는다
+    // 상태와 오류는 처리 파이프라인이, 화자 이름과 메모는 각자의 명령이 바꾼다.
+    // 화면이 들고 있던 예전 값으로 덮어쓰지 않도록 제목, 화자 수, 언어만 받는다
     let current = state.store.get(&recording.id).map_err(err)?;
     state
         .store
         .save(&Recording {
-            status: current.status,
-            error: current.error,
-            duration: current.duration,
-            audio_file: current.audio_file,
-            ..recording
+            title: recording.title,
+            num_speakers: recording.num_speakers,
+            languages: recording.languages,
+            ..current
         })
         .map_err(err)
 }
@@ -323,6 +336,7 @@ async fn start_recording(app: AppHandle, state: State<'_, AppState>) -> CmdResul
     match started {
         Ok(active) => {
             *slot = Some((recording.id.clone(), active));
+            *state.recording_started.lock().unwrap() = Some(Instant::now());
             Ok(recording)
         }
         Err(e) => {
@@ -344,6 +358,7 @@ fn finalize_tracks(store: &Store, recording: &Recording) -> eyre::Result<f32> {
 async fn stop_recording(app: AppHandle) -> CmdResult<Recording> {
     let state = app.state::<AppState>();
     let (id, active) = state.recorder.lock().unwrap().take().ok_or("녹음 중이 아닙니다")?;
+    state.recording_started.lock().unwrap().take();
     let result = active.stop();
 
     let worker_app = app.clone();
@@ -384,11 +399,30 @@ fn default_summary_prompt() -> &'static str {
     summarize::DEFAULT_PROMPT
 }
 
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct SummaryState {
+    id: String,
+    running: bool,
+}
+
+/// 요약 중인지 알린다. 자동 요약처럼 화면 밖에서 시작한 요약도 요약 화면에 보이게 한다
+fn emit_summary_state(app: &AppHandle, id: &str, running: bool) {
+    let _ = app.emit("summary-state", SummaryState { id: id.to_string(), running });
+}
+
+#[tauri::command]
+fn summary_running(state: State<AppState>, id: String) -> bool {
+    state.summaries.lock().unwrap().contains_key(&id)
+}
+
+/// template이 없으면 설정의 기본 템플릿으로 요약한다
 #[tauri::command]
 async fn summarize_recording(
     app: AppHandle,
     id: String,
-    provider: summarize::Provider,
+    provider: Option<summarize::Provider>,
+    template: Option<String>,
 ) -> CmdResult<summarize::Summary> {
     let state = app.state::<AppState>();
     let recording = state.store.get(&id).map_err(err)?;
@@ -398,8 +432,26 @@ async fn summarize_recording(
         .map_err(err)?
         .ok_or("먼저 전사를 끝내 주세요")?;
     let settings = state.store.get_settings(&state.home);
-    let instructions = settings.summary_prompt.clone().unwrap_or_else(|| summarize::DEFAULT_PROMPT.to_string());
-    let prompt = summarize::build_prompt(&instructions, &recording, &transcript);
+    let template_id = template.or(settings.default_template.clone());
+    let chosen = settings
+        .summary_templates
+        .iter()
+        .find(|t| Some(&t.id) == template_id.as_ref())
+        .or(settings.summary_templates.first())
+        .cloned()
+        .ok_or("요약 템플릿이 없습니다")?;
+    // CLI를 고르지 않았으면(자동 요약) 지난번에 쓴 것, 없으면 설치된 것 중 첫째
+    let provider = match provider.or(settings.summary_provider) {
+        Some(p) => p,
+        None => tauri::async_runtime::spawn_blocking(summarize::statuses)
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .find(|s| s.path.is_some())
+            .map(|s| s.provider)
+            .ok_or("claude 또는 codex CLI가 없어 요약할 수 없습니다")?,
+    };
+    let prompt = summarize::build_prompt(&chosen.prompt, &recording, &transcript);
 
     let (cancel_tx, cancel_rx) = tokio::sync::oneshot::channel();
     {
@@ -409,11 +461,15 @@ async fn summarize_recording(
         }
         summaries.insert(id.clone(), cancel_tx);
     }
+    emit_summary_state(&app, &id, true);
     let result = summarize::run(provider, prompt, cancel_rx).await;
     state.summaries.lock().unwrap().remove(&id);
+    emit_summary_state(&app, &id, false);
 
     let markdown = result.map_err(|e| format!("{e:#}"))?;
     let summary = summarize::Summary {
+        id: uuid::Uuid::new_v4().to_string(),
+        template: Some(chosen.name),
         provider,
         created_at: chrono::Utc::now(),
         markdown,
@@ -428,10 +484,276 @@ async fn summarize_recording(
 }
 
 #[tauri::command]
+fn delete_summary(state: State<AppState>, id: String, summary_id: String) -> CmdResult<()> {
+    state.store.delete_summary(&id, &summary_id).map_err(err)
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Answer {
+    markdown: String,
+    /// 전체 녹음에 물었을 때 [R3 12:34]의 R3가 가리키는 녹음
+    sources: Vec<ask::SourceRef>,
+}
+
+/// recording_id가 있으면 그 녹음에, 없으면 모든 녹음에 묻는다. 취소 키는 "ask" 또는 "ask:<녹음 id>"
+#[tauri::command]
+async fn ask_recordings(
+    app: AppHandle,
+    question: String,
+    recording_id: Option<String>,
+    provider: summarize::Provider,
+) -> CmdResult<Answer> {
+    let state = app.state::<AppState>();
+    let worker = app.clone();
+    let scope = recording_id.clone();
+    let q = question.clone();
+    let (prompt, sources) = tauri::async_runtime::spawn_blocking(move || -> eyre::Result<(String, Vec<ask::SourceRef>)> {
+        let state = worker.state::<AppState>();
+        let store = &state.store;
+        match scope {
+            Some(id) => {
+                let recording = store.get(&id)?;
+                let transcript = store.get_transcript(&id)?.ok_or_else(|| eyre::eyre!("먼저 전사를 끝내 주세요"))?;
+                let summary = store.get_summary(&id)?;
+                Ok((ask::single_prompt(&q, &recording, &transcript, summary.as_ref()), Vec::new()))
+            }
+            None => {
+                let recordings = store.list()?;
+                let loaded: Vec<_> = recordings
+                    .iter()
+                    .map(|r| (store.get_transcript(&r.id).ok().flatten(), store.get_summary(&r.id).ok().flatten()))
+                    .collect();
+                let candidates: Vec<ask::Candidate> = recordings
+                    .iter()
+                    .zip(&loaded)
+                    .map(|(r, (t, s))| ask::Candidate { recording: r, transcript: t.as_ref(), summary: s.as_ref() })
+                    .collect();
+                Ok(ask::all_prompt(&q, &candidates))
+            }
+        }
+    })
+    .await
+    .map_err(err)?
+    .map_err(|e| format!("{e:#}"))?;
+
+    let key = recording_id.map_or_else(|| "ask".to_string(), |id| format!("ask:{id}"));
+    let (cancel_tx, cancel_rx) = tokio::sync::oneshot::channel();
+    {
+        let mut running = state.summaries.lock().unwrap();
+        if running.contains_key(&key) {
+            return Err("이미 답을 기다리는 중입니다".into());
+        }
+        running.insert(key.clone(), cancel_tx);
+    }
+    let result = summarize::run(provider, prompt, cancel_rx).await;
+    state.summaries.lock().unwrap().remove(&key);
+    Ok(Answer { markdown: result.map_err(|e| format!("{e:#}"))?, sources })
+}
+
+#[tauri::command]
 fn cancel_summary(state: State<AppState>, id: String) {
     if let Some(tx) = state.summaries.lock().unwrap().remove(&id) {
         let _ = tx.send(());
     }
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct RecordingChanged {
+    id: String,
+}
+
+/// 메모나 북마크를 더한다. id가 없으면 지금 녹음 중인 항목, time이 없으면 녹음을 시작한 지 지난 시간
+#[tauri::command]
+fn add_note(app: AppHandle, state: State<AppState>, id: Option<String>, time: Option<f32>, text: String) -> CmdResult<Recording> {
+    let current = state.recorder.lock().unwrap().as_ref().map(|(r, _)| r.clone());
+    let id = id.or(current.clone()).ok_or("녹음 중이 아니라 북마크를 남길 곳이 없습니다")?;
+    let time = match time {
+        Some(t) => t.max(0.0),
+        None if current.as_deref() == Some(id.as_str()) => state
+            .recording_started
+            .lock()
+            .unwrap()
+            .map_or(0.0, |t| t.elapsed().as_secs_f32()),
+        None => 0.0,
+    };
+    let mut recording = state.store.get(&id).map_err(err)?;
+    let at = recording.notes.partition_point(|n| n.time <= time);
+    recording.notes.insert(at, store::Note { time, text: text.trim().to_string() });
+    state.store.save(&recording).map_err(err)?;
+    let _ = app.emit("recording-changed", RecordingChanged { id });
+    Ok(recording)
+}
+
+#[tauri::command]
+fn delete_note(app: AppHandle, state: State<AppState>, id: String, index: usize) -> CmdResult<Recording> {
+    let mut recording = state.store.get(&id).map_err(err)?;
+    if index < recording.notes.len() {
+        recording.notes.remove(index);
+    }
+    state.store.save(&recording).map_err(err)?;
+    let _ = app.emit("recording-changed", RecordingChanged { id });
+    Ok(recording)
+}
+
+/// 화자 이름을 바꾼다. 목소리 기억이 켜져 있으면 이 녹음의 목소리를 그 이름으로 기억하고,
+/// 예전에 다른 이름으로 알아본 화자였다면 그 이름 쪽에서 이 녹음의 목소리를 뺀다
+#[tauri::command]
+async fn name_speaker(app: AppHandle, id: String, speaker: i32, name: String) -> CmdResult<Recording> {
+    tauri::async_runtime::spawn_blocking(move || -> eyre::Result<Recording> {
+        let state = app.state::<AppState>();
+        let settings = state.store.get_settings(&state.home);
+        let mut recording = state.store.get(&id)?;
+        let key = speaker.to_string();
+        let name = name.trim().to_string();
+        let previous_voice = recording.voice_ids.remove(&key);
+        if name.is_empty() {
+            recording.speaker_names.remove(&key);
+        } else {
+            recording.speaker_names.insert(key.clone(), name.clone());
+        }
+
+        if settings.remember_voices {
+            if let Some(mut transcript) = state.store.get_transcript(&id)? {
+                // 0.3.0 이하에서 처리한 녹음은 목소리 특징이 없어 지금 뽑는다
+                if transcript.speaker_embeddings.is_empty() {
+                    let audio = state.store.audio_path(&recording)?;
+                    transcript.speaker_embeddings = engine::embeddings_for(&audio, &transcript.turns, &settings.models.embedding)?;
+                    state.store.save_transcript(&id, &transcript)?;
+                }
+                if let Some(embedding) = transcript.speaker_embeddings.get(&speaker) {
+                    if let Some(voice) = &previous_voice {
+                        state.voices.forget_sample(voice, embedding)?;
+                    }
+                    if !name.is_empty() {
+                        let voice = state.voices.remember(&name, embedding)?;
+                        recording.voice_ids.insert(key, voice);
+                    }
+                }
+            }
+        }
+        state.store.save(&recording)?;
+        Ok(recording)
+    })
+    .await
+    .map_err(err)?
+    .map_err(|e| format!("{e:#}"))
+}
+
+#[tauri::command]
+fn list_voices(state: State<AppState>) -> Vec<voices::VoiceInfo> {
+    state.voices.list()
+}
+
+#[tauri::command]
+fn rename_voice(state: State<AppState>, id: String, name: String) -> CmdResult<()> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err("이름을 적어 주세요".into());
+    }
+    state.voices.rename(&id, name).map_err(err)
+}
+
+#[tauri::command]
+fn delete_voice(state: State<AppState>, id: String) -> CmdResult<()> {
+    state.voices.delete(&id).map_err(err)
+}
+
+/// 저장 창에서 고른 경로에 내보낸 파일을 쓴다. 본문은 바이트 그대로 받고, 경로는 x-path 헤더(URL 인코딩)로 받는다
+#[tauri::command]
+fn save_export(request: tauri::ipc::Request) -> CmdResult<()> {
+    let encoded = request
+        .headers()
+        .get("x-path")
+        .and_then(|v| v.to_str().ok())
+        .ok_or("저장할 경로가 없습니다")?;
+    let path = tauri::Url::parse(&format!("sori://export?p={encoded}"))
+        .ok()
+        .and_then(|u| u.query_pairs().find(|(k, _)| k == "p").map(|(_, v)| PathBuf::from(v.into_owned())))
+        .ok_or("저장할 경로를 읽지 못했습니다")?;
+    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
+        return Err("내보낼 내용이 없습니다".into());
+    };
+    std::fs::write(&path, bytes).map_err(|e| format!("{}에 저장하지 못했습니다: {e}", path.display()))
+}
+
+/// 회의 질문 창이 띄울 내용
+#[tauri::command]
+fn meeting_prompt(state: State<AppState>) -> Option<meeting::Prompt> {
+    state.meeting_prompt.lock().unwrap().clone()
+}
+
+/// 회의 질문 창의 답. 녹음을 시작하거나 멈추는 일은 메인 화면의 녹음기가 한다
+#[tauri::command]
+fn meeting_prompt_respond(app: AppHandle, state: State<AppState>, accept: bool) {
+    let prompt = state.meeting_prompt.lock().unwrap().take();
+    if let Some(window) = app.get_webview_window(MEETING_WINDOW) {
+        let _ = window.close();
+    }
+    match prompt {
+        Some(meeting::Prompt::Start { app: name }) if accept => {
+            state.meeting.lock().unwrap().recording_started_for(name);
+            actions::dispatch(&app, actions::Action::StartRecording);
+        }
+        Some(meeting::Prompt::Stop { .. }) if accept => actions::dispatch(&app, actions::Action::StopRecording),
+        _ => {}
+    }
+}
+
+const MEETING_WINDOW: &str = "meeting-prompt";
+
+/// 화면 오른쪽 위에 작은 창을 띄운다. 회의 앱을 보는 중이라 초점은 가져오지 않는다
+fn show_meeting_prompt(app: &AppHandle, prompt: meeting::Prompt) {
+    *app.state::<AppState>().meeting_prompt.lock().unwrap() = Some(prompt);
+    if let Some(window) = app.get_webview_window(MEETING_WINDOW) {
+        let _ = window.close();
+    }
+    let (width, height) = (360.0, 108.0);
+    let (x, y) = app
+        .primary_monitor()
+        .ok()
+        .flatten()
+        .map(|m| {
+            let scale = m.scale_factor();
+            let pos = m.position().to_logical::<f64>(scale);
+            let size = m.size().to_logical::<f64>(scale);
+            (pos.x + size.width - width - 16.0, pos.y + 40.0)
+        })
+        .unwrap_or((40.0, 40.0));
+    let built = tauri::WebviewWindowBuilder::new(app, MEETING_WINDOW, tauri::WebviewUrl::App("index.html?view=meeting".into()))
+        .title("sori")
+        .inner_size(width, height)
+        .position(x, y)
+        .resizable(false)
+        .decorations(false)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .focused(false)
+        .visible_on_all_workspaces(true)
+        .build();
+    if let Err(e) = built {
+        eprintln!("회의 질문 창을 띄우지 못했습니다: {e}");
+    }
+}
+
+/// 3초마다 마이크를 쓰는 회의 앱을 살핀다
+fn watch_meetings(app: AppHandle) {
+    std::thread::spawn(move || loop {
+        std::thread::sleep(Duration::from_secs(3));
+        let state = app.state::<AppState>();
+        if !state.store.get_settings(&state.home).meeting_detection {
+            continue;
+        }
+        let apps = meeting::meeting_apps_using_mic();
+        let recording = state.recorder.lock().unwrap().is_some();
+        let prompt = state.meeting.lock().unwrap().update(&apps, recording, Instant::now());
+        if let Some(prompt) = prompt {
+            let handle = app.clone();
+            // 창은 메인 스레드에서 만든다
+            let _ = app.run_on_main_thread(move || show_meeting_prompt(&handle, prompt));
+        }
+    });
 }
 
 #[tauri::command]
@@ -514,6 +836,24 @@ async fn process_recording(app: AppHandle, request: ProcessRequest) -> CmdResult
             if let [me] = locals.as_slice() {
                 recording.speaker_names.insert(me.to_string(), "나".to_string());
             }
+            recording.voice_ids.clear();
+            let settings = state.store.get_settings(&state.home);
+            if settings.remember_voices {
+                // 마이크 쪽 한 사람은 녹음한 본인이 확실하므로 "나"의 목소리로 기억해 둔다.
+                // 가져온 파일에서도 본인을 알아보게 된다
+                if let [me] = locals.as_slice() {
+                    if let Some(e) = transcript.speaker_embeddings.get(me) {
+                        if let Ok(voice) = state.voices.remember("나", e) {
+                            recording.voice_ids.insert(me.to_string(), voice);
+                        }
+                    }
+                }
+                let named: std::collections::BTreeSet<i32> = recording.speaker_names.keys().filter_map(|k| k.parse().ok()).collect();
+                for m in state.voices.match_speakers(&transcript.speaker_embeddings, &named) {
+                    recording.speaker_names.insert(m.speaker.to_string(), m.name);
+                    recording.voice_ids.insert(m.speaker.to_string(), m.voice_id);
+                }
+            }
             recording.status = Status::Done;
             recording.duration = Some(transcript.duration);
             state.store.save(&recording).map_err(err)?;
@@ -562,6 +902,7 @@ pub fn run() {
             let data_dir = app.path().app_data_dir()?;
             let home = app.path().home_dir()?;
             let store = Store::new(data_dir)?;
+            let voices_path = store.voices_path();
 
             // 처리 도중 앱이 꺼졌던 녹음은 다시 시작할 수 있게 실패로 돌려 둔다
             for mut r in store.list()?.into_iter() {
@@ -592,7 +933,12 @@ pub fn run() {
                 model_install: Mutex::new(None),
                 search: search::Index::default(),
                 shortcut_error: Mutex::new(None),
+                voices: voices::VoiceBook::new(voices_path),
+                recording_started: Mutex::new(None),
+                meeting: Mutex::new(meeting::Detector::default()),
+                meeting_prompt: Mutex::new(None),
             });
+            watch_meetings(app.handle().clone());
 
             let handle = app.handle().clone();
             // 링크를 처리하기 전에 읽어야 링크로 앱을 띄운 경우도 확인할 수 있다
@@ -634,6 +980,18 @@ pub fn run() {
             search_recordings,
             suspend_shortcuts,
             resume_shortcuts,
+            summary_running,
+            delete_summary,
+            ask_recordings,
+            add_note,
+            delete_note,
+            name_speaker,
+            list_voices,
+            rename_voice,
+            delete_voice,
+            save_export,
+            meeting_prompt,
+            meeting_prompt_respond,
             reveal_audio,
         ])
         .build(tauri::generate_context!())

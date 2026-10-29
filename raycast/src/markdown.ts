@@ -40,6 +40,9 @@ export function recordingMarkdown({ recording, transcript, summary }: Detail): s
     if (names.length > 0) lines.push(`- 참석: ${names.join(", ")}`);
   }
   if (summary) lines.push("", "## 요약", "", summary.markdown.trim().replace(/^(#{1,5}) /gm, "#$1 "));
+  if (recording.notes?.length) {
+    lines.push("", "## 메모", "", ...recording.notes.map((n) => `- [${formatTime(n.time)}] ${n.text || "(북마크)"}`));
+  }
   if (transcript && transcript.utterances.length > 0) {
     lines.push("", "## 전사", "", transcriptMarkdown(recording, transcript.utterances));
   }

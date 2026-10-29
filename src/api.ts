@@ -17,6 +17,15 @@ export interface Recording {
   numSpeakers: number | null;
   languages: string[];
   tracks: string[];
+  /** 녹음하며 남긴 메모. 글이 비면 북마크 */
+  notes: Note[];
+  /** 화자 번호 → 목소리로 알아본 기억 id */
+  voiceIds: Record<string, string>;
+}
+
+export interface Note {
+  time: number;
+  text: string;
 }
 
 export interface SpeakerTurn {
@@ -46,7 +55,30 @@ export interface RecordingDetail {
   audioPath: string;
   transcript: Transcript | null;
   summary: Summary | null;
+  /** 오래된 것부터 */
+  summaries: Summary[];
 }
+
+export interface SummaryTemplate {
+  id: string;
+  name: string;
+  prompt: string;
+}
+
+export interface VoiceInfo {
+  id: string;
+  name: string;
+  samples: number;
+  updatedAt: string;
+}
+
+export interface Answer {
+  markdown: string;
+  /** 전체 녹음 질문에서 [R3 12:34]의 R3가 가리키는 녹음 */
+  sources: { key: string; recordingId: string; title: string }[];
+}
+
+export type MeetingPrompt = { kind: "start"; app: string } | { kind: "stop"; app: string };
 
 export interface Settings {
   models: { whisper: string; segmentation: string; embedding: string };
@@ -56,12 +88,19 @@ export interface Settings {
   summaryProvider: Provider | null;
   summaryPrompt: string | null;
   shortcuts: GlobalShortcuts;
+  autoProcess: boolean;
+  autoSummarize: boolean;
+  rememberVoices: boolean;
+  meetingDetection: boolean;
+  summaryTemplates: SummaryTemplate[];
+  defaultTemplate: string | null;
 }
 
 /** Tauri 단축키 표기(CommandOrControl+Alt+Shift+R). 빈 문자열이면 끈다 */
 export interface GlobalShortcuts {
   toggleRecording: string;
   showWindow: string;
+  bookmark: string;
 }
 
 /** 전역 단축키와 sori:// 링크로 들어온 요청 */
@@ -69,6 +108,7 @@ export type AppAction =
   | { type: "toggleRecording" }
   | { type: "startRecording" }
   | { type: "stopRecording" }
+  | { type: "bookmark" }
   | { type: "showWindow" }
   | { type: "open"; id: string; time: number | null }
   | { type: "import"; paths: string[]; process: boolean }
@@ -97,6 +137,9 @@ export interface ProviderStatus {
 }
 
 export interface Summary {
+  id: string;
+  /** 만든 템플릿 이름. 예전 요약은 없다 */
+  template: string | null;
   provider: Provider;
   createdAt: string;
   markdown: string;
@@ -186,7 +229,29 @@ export const api = {
     listen<{ id: string; levels: number[] }>("recording-level", (e) => handler(e.payload.levels)),
   summaryProviders: () => invoke<ProviderStatus[]>("summary_providers"),
   defaultSummaryPrompt: () => invoke<string>("default_summary_prompt"),
-  summarize: (id: string, provider: Provider) => invoke<Summary>("summarize_recording", { id, provider }),
+  summarize: (id: string, provider: Provider | null, template: string | null) =>
+    invoke<Summary>("summarize_recording", { id, provider, template }),
+  summaryRunning: (id: string) => invoke<boolean>("summary_running", { id }),
+  onSummaryState: (handler: (e: { id: string; running: boolean }) => void) =>
+    listen<{ id: string; running: boolean }>("summary-state", (e) => handler(e.payload)),
+  deleteSummary: (id: string, summaryId: string) => invoke<void>("delete_summary", { id, summaryId }),
+  ask: (question: string, recordingId: string | null, provider: Provider) =>
+    invoke<Answer>("ask_recordings", { question, recordingId, provider }),
+  /** 질문 취소. 요약 취소와 같은 통로를 쓴다 */
+  cancelAsk: (recordingId: string | null) => invoke<void>("cancel_summary", { id: recordingId ? `ask:${recordingId}` : "ask" }),
+  addNote: (id: string | null, time: number | null, text: string) => invoke<Recording>("add_note", { id, time, text }),
+  deleteNote: (id: string, index: number) => invoke<Recording>("delete_note", { id, index }),
+  onRecordingChanged: (handler: (id: string) => void) =>
+    listen<{ id: string }>("recording-changed", (e) => handler(e.payload.id)),
+  nameSpeaker: (id: string, speaker: number, name: string) => invoke<Recording>("name_speaker", { id, speaker, name }),
+  listVoices: () => invoke<VoiceInfo[]>("list_voices"),
+  renameVoice: (id: string, name: string) => invoke<void>("rename_voice", { id, name }),
+  deleteVoice: (id: string) => invoke<void>("delete_voice", { id }),
+  /** 저장 창에서 고른 경로에 바이트를 그대로 쓴다 */
+  saveExport: (path: string, bytes: Uint8Array) =>
+    invoke<void>("save_export", bytes, { headers: { "x-path": encodeURIComponent(path) } }),
+  meetingPrompt: () => invoke<MeetingPrompt | null>("meeting_prompt"),
+  meetingPromptRespond: (accept: boolean) => invoke<void>("meeting_prompt_respond", { accept }),
   cancelSummary: (id: string) => invoke<void>("cancel_summary", { id }),
   onRecordingInterrupted: (handler: () => void) => listen("recording-interrupted", () => handler()),
   frontendReady: () => invoke<{ pending: AppAction[]; shortcutError: string | null }>("frontend_ready"),

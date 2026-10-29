@@ -5,9 +5,13 @@
   "description": "sori 녹음의 전사를 검색하고, 요약과 전사를 마크다운으로 복사하고, 녹음을 켜고 끕니다",
   "icon": "icon.png",
   "author": "nobel6018",
-  "categories": ["Productivity"],
+  "categories": [
+    "Productivity"
+  ],
   "license": "MIT",
-  "platforms": ["macOS"],
+  "platforms": [
+    "macOS"
+  ],
   "commands": [
     {
       "name": "search-transcripts",
@@ -15,7 +19,10 @@
       "subtitle": "sori",
       "description": "모든 녹음의 제목, 요약, 전사에서 찾습니다",
       "mode": "view",
-      "keywords": ["전사 검색", "녹음 검색"]
+      "keywords": [
+        "전사 검색",
+        "녹음 검색"
+      ]
     },
     {
       "name": "recent-recordings",
@@ -23,7 +30,9 @@
       "subtitle": "sori",
       "description": "최근 녹음의 요약과 전사를 미리 보고 마크다운으로 복사합니다",
       "mode": "view",
-      "keywords": ["최근 녹음"]
+      "keywords": [
+        "최근 녹음"
+      ]
     },
     {
       "name": "toggle-recording",
@@ -31,7 +40,21 @@
       "subtitle": "sori",
       "description": "녹음을 시작하거나 멈춥니다",
       "mode": "no-view",
-      "keywords": ["녹음 시작", "녹음 멈춤"]
+      "keywords": [
+        "녹음 시작",
+        "녹음 멈춤"
+      ]
+    },
+    {
+      "name": "add-bookmark",
+      "title": "Add Bookmark",
+      "subtitle": "sori",
+      "description": "녹음 중인 지금 시각에 북마크를 남깁니다. 요약할 때 이 부분을 더 중요하게 다룹니다",
+      "mode": "no-view",
+      "keywords": [
+        "북마크",
+        "메모"
+      ]
     },
     {
       "name": "import-selected",
@@ -39,7 +62,9 @@
       "subtitle": "sori",
       "description": "Finder에서 고른 오디오를 sori로 가져와 바로 받아 적습니다",
       "mode": "no-view",
-      "keywords": ["가져오기"]
+      "keywords": [
+        "가져오기"
+      ]
     },
     {
       "name": "recording-status",

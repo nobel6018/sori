@@ -146,6 +146,7 @@ mod tests {
                 })
                 .collect(),
             origins: Default::default(),
+            speaker_embeddings: Default::default(),
         }
     }
 

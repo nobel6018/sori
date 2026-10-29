@@ -54,6 +54,17 @@ Windows (PowerShell):
 
 화자 분리 모델(pyannote segmentation 3.0, 3D-Speaker ERes2Net)은 항상 함께 받습니다. 받는 곳은 macOS `~/Library/Application Support/com.nobel6018.sori/models`, Windows `%APPDATA%\com.nobel6018.sori\models`입니다. 앱은 이 폴더를 먼저 보고, 예전 공용 위치(`~/whisper-models`, `~/sherpa-onnx/models`)도 찾습니다(`src-tauri/src/models.rs`).
 
+## 녹음 뒤에 하는 일
+
+- 자동 처리: 녹음을 멈추거나 파일을 가져오면 바로 받아 적습니다. 끝나면 요약까지 하게 할 수 있습니다(설정)
+- 화자 목소리 기억: 화자 이름을 바꾸면 목소리를 기억하고, 다음 녹음에서 같은 사람에게 이름을 붙입니다. [docs/voices.md](docs/voices.md)
+- 요약 템플릿: 회의록, 1:1 면담, 인터뷰, 강의, 할 일만. 한 녹음에 여러 요약을 남기고, 템플릿은 설정에서 고치고 더합니다
+- 메모와 북마크: 녹음하며 메모를 쓰거나 북마크(⌘B, 뒤에 있으면 ⌥⇧⌘B)를 남기면 요약이 그 부분을 더 중요하게 다룹니다
+- 질문하기: 녹음 하나(질문 탭) 또는 모든 녹음(⌘J)에 묻습니다. 답의 시각을 누르면 그 구간이 재생됩니다. [docs/ask.md](docs/ask.md)
+- 내보내기: 마크다운, 텍스트, SRT, VTT, Word. [docs/export.md](docs/export.md)
+- 회의 앱 감지: Zoom, Teams, Meet 등이 마이크를 쓰기 시작하면 녹음할지 묻습니다. [docs/meeting-detection.md](docs/meeting-detection.md)
+- MCP 서버: Claude Code, Claude 데스크톱에서 sori 녹음을 찾고 읽습니다. [mcp/README.md](mcp/README.md)
+
 ## 단축키, 링크, Raycast
 
 - 전역 단축키: 녹음 시작/멈춤 ⌥⇧⌘R(Windows Ctrl+Alt+Shift+R), 창 앞으로 ⌥⇧⌘S. 설정에서 바꿉니다

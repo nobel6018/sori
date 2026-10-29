@@ -8,7 +8,7 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use crate::actions::Shortcuts;
 use crate::engine::{ModelPaths, Transcript};
-use crate::summarize::{Provider, Summary};
+use crate::summarize::{Provider, Summary, SummaryTemplate};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -42,6 +42,21 @@ pub struct Recording {
     /// 앱에서 녹음한 경우 소리별 트랙 파일 이름(mic.wav, system.wav). 섞은 결과가 audio_file이다
     #[serde(default)]
     pub tracks: Vec<String>,
+    /// 녹음하며 남긴 메모와 북마크(글이 빈 메모). 시각순
+    #[serde(default)]
+    pub notes: Vec<Note>,
+    /// 화자 번호(문자열) → 기억한 목소리 id. 이름을 목소리로 알아봐 붙인 화자만 있다
+    #[serde(default)]
+    pub voice_ids: BTreeMap<String, String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Note {
+    /// 녹음 시작부터 초
+    pub time: f32,
+    /// 비어 있으면 북마크
+    pub text: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -66,6 +81,28 @@ pub struct Settings {
     /// 앱이 앞에 없어도 동작하는 단축키
     #[serde(default)]
     pub shortcuts: Shortcuts,
+    /// 녹음을 멈추거나 파일을 가져오면 바로 받아 적는다
+    #[serde(default = "yes")]
+    pub auto_process: bool,
+    /// 받아 적기가 끝나면 기본 템플릿으로 요약한다. 구독 사용량을 쓰므로 기본은 끈다
+    #[serde(default)]
+    pub auto_summarize: bool,
+    /// 화자 이름을 붙이면 목소리를 기억하고, 다음 녹음에서 같은 사람에게 이름을 붙인다
+    #[serde(default = "yes")]
+    pub remember_voices: bool,
+    /// 회의 앱이 마이크를 쓰기 시작하면 녹음할지 묻는다
+    #[serde(default = "yes")]
+    pub meeting_detection: bool,
+    /// 비어 있으면 기본 템플릿을 쓴다. Store::get_settings가 채운다
+    #[serde(default)]
+    pub summary_templates: Vec<SummaryTemplate>,
+    /// 자동 요약과 요약 화면의 기본 템플릿 id
+    #[serde(default)]
+    pub default_template: Option<String>,
+}
+
+fn yes() -> bool {
+    true
 }
 
 impl Settings {
@@ -78,6 +115,12 @@ impl Settings {
             summary_provider: None,
             summary_prompt: None,
             shortcuts: Shortcuts::default(),
+            auto_process: true,
+            auto_summarize: false,
+            remember_voices: true,
+            meeting_detection: true,
+            summary_templates: Vec::new(),
+            default_template: None,
         }
     }
 }
@@ -102,8 +145,21 @@ impl Store {
     }
 
     pub fn get_settings(&self, home: &Path) -> Settings {
-        read_json(&self.settings_path)
-            .unwrap_or_else(|_| Settings::defaults(crate::models::default_paths(&self.models_dir, home)))
+        let mut settings: Settings = read_json(&self.settings_path)
+            .unwrap_or_else(|_| Settings::defaults(crate::models::default_paths(&self.models_dir, home)));
+        if settings.summary_templates.is_empty() {
+            // 템플릿이 생기기 전(0.3.0 이하)에 고친 요약 지시문은 회의록 템플릿으로 옮긴다
+            settings.summary_templates = crate::summarize::default_templates(settings.summary_prompt.as_deref());
+        }
+        if !settings.summary_templates.iter().any(|t| Some(&t.id) == settings.default_template.as_ref()) {
+            settings.default_template = settings.summary_templates.first().map(|t| t.id.clone());
+        }
+        settings
+    }
+
+    /// 목소리 기억 파일. 녹음 폴더 밖에 두어 녹음을 지워도 남는다
+    pub fn voices_path(&self) -> PathBuf {
+        self.settings_path.with_file_name("voices.json")
     }
 
     pub fn save_settings(&self, settings: &Settings) -> Result<()> {
@@ -174,6 +230,8 @@ impl Store {
             num_speakers: None,
             languages: Vec::new(),
             tracks: Vec::new(),
+            notes: Vec::new(),
+            voice_ids: BTreeMap::new(),
         };
         self.save(&recording)?;
         Ok(recording)
@@ -200,6 +258,7 @@ impl Store {
         write_json(&self.dir(id)?.join("transcript.json"), transcript)
     }
 
+    /// 가장 최근 요약. summary.json에 따로 두어 Raycast, MCP 서버처럼 파일을 직접 읽는 쪽이 하나만 보면 되게 한다
     pub fn get_summary(&self, id: &str) -> Result<Option<Summary>> {
         let path = self.dir(id)?.join("summary.json");
         if !path.exists() {
@@ -208,8 +267,34 @@ impl Store {
         read_json(&path).map(Some)
     }
 
+    /// 이 녹음의 모든 요약, 오래된 것부터. summaries.json이 없으면(0.3.0 이하) summary.json 하나를 목록으로 본다
+    pub fn get_summaries(&self, id: &str) -> Result<Vec<Summary>> {
+        let path = self.dir(id)?.join("summaries.json");
+        if path.exists() {
+            return read_json(&path);
+        }
+        Ok(self.get_summary(id)?.into_iter().collect())
+    }
+
     pub fn save_summary(&self, id: &str, summary: &Summary) -> Result<()> {
+        let mut all = self.get_summaries(id)?;
+        all.push(summary.clone());
+        write_json(&self.dir(id)?.join("summaries.json"), &all)?;
         write_json(&self.dir(id)?.join("summary.json"), summary)
+    }
+
+    pub fn delete_summary(&self, id: &str, summary_id: &str) -> Result<()> {
+        let mut all = self.get_summaries(id)?;
+        all.retain(|s| s.id != summary_id);
+        let dir = self.dir(id)?;
+        write_json(&dir.join("summaries.json"), &all)?;
+        match all.last() {
+            Some(latest) => write_json(&dir.join("summary.json"), latest),
+            None => {
+                let _ = fs::remove_file(dir.join("summary.json"));
+                Ok(())
+            }
+        }
     }
 
     pub fn delete(&self, id: &str) -> Result<()> {

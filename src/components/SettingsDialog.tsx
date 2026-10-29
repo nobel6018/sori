@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
-import { api, formatBytes, GlobalShortcuts, InputDevice, installCommand, LANGUAGES, ModelCatalog, Settings } from "../api";
+import { api, formatBytes, GlobalShortcuts, InputDevice, installCommand, LANGUAGES, ModelCatalog, Settings, VoiceInfo } from "../api";
 import { acceleratorFromEvent, acceleratorLabel } from "../shortcuts";
 import { useModelInstall } from "../useModelInstall";
 import { InstallProgress } from "./InstallProgress";
@@ -15,7 +15,6 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [saving, setSaving] = useState(false);
   const [devices, setDevices] = useState<InputDevice[]>([]);
-  const [defaultPrompt, setDefaultPrompt] = useState("");
   const [catalog, setCatalog] = useState<ModelCatalog | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const refreshCatalog = () => api.modelCatalog().then(setCatalog);
@@ -25,7 +24,6 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
 
   useEffect(() => {
     api.getSettings().then(setSettings);
-    api.defaultSummaryPrompt().then(setDefaultPrompt);
     refreshCatalog();
     api.listInputDevices().then(setDevices).catch(() => setDevices([]));
   }, []);
@@ -217,26 +215,40 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
             ))}
           </div>
         </div>
-        <div className="setting-row">
-          <div className="setting-label">
-            <span>요약 지시문</span>
-            <button
-              className="ghost"
-              disabled={settings.summaryPrompt === null}
-              onClick={() => setSettings({ ...settings, summaryPrompt: null })}
-            >
-              기본값으로
-            </button>
-          </div>
-          <textarea
-            className="prompt-input"
-            rows={8}
-            value={settings.summaryPrompt ?? defaultPrompt}
-            onChange={(e) =>
-              setSettings({ ...settings, summaryPrompt: e.target.value === defaultPrompt ? null : e.target.value })
-            }
+        <label className="setting-toggle">
+          <input type="checkbox" checked={settings.autoProcess} onChange={(e) => setSettings({ ...settings, autoProcess: e.target.checked })} />
+          <span>
+            녹음을 멈추거나 파일을 가져오면 바로 받아 적기
+            <span className="muted"> 화자 수는 자동으로 추정하고 언어는 위의 기본값을 씁니다</span>
+          </span>
+        </label>
+        <label className="setting-toggle">
+          <input
+            type="checkbox"
+            checked={settings.autoSummarize}
+            onChange={(e) => setSettings({ ...settings, autoSummarize: e.target.checked })}
           />
-        </div>
+          <span>
+            받아 적기가 끝나면 기본 템플릿으로 요약
+            <span className="muted"> 구독한 claude, codex CLI의 사용량을 씁니다</span>
+          </span>
+        </label>
+        <label className="setting-toggle">
+          <input
+            type="checkbox"
+            checked={settings.meetingDetection}
+            onChange={(e) => setSettings({ ...settings, meetingDetection: e.target.checked })}
+          />
+          <span>
+            회의 앱이 마이크를 쓰기 시작하면 녹음할지 묻기
+            <span className="muted"> Zoom, Teams, Meet(브라우저), Slack 허들, Discord, FaceTime, 카카오톡 통화. 그 질문으로 시작한 녹음은 통화가 끝나면 멈출지도 묻습니다</span>
+          </span>
+        </label>
+        <TemplateEditor settings={settings} onChange={setSettings} />
+        <VoiceList
+          enabled={settings.rememberVoices}
+          onToggle={(on) => setSettings({ ...settings, rememberVoices: on })}
+        />
         <div className="setting-row">
           <div className="setting-label">
             <span>전역 단축키</span>
@@ -245,6 +257,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
           <div className="shortcut-settings">
             <ShortcutInput label="녹음 시작/멈춤" value={settings.shortcuts.toggleRecording} onChange={(v) => setShortcut("toggleRecording", v)} />
             <ShortcutInput label="sori 창 앞으로" value={settings.shortcuts.showWindow} onChange={(v) => setShortcut("showWindow", v)} />
+            <ShortcutInput label="북마크 (녹음 중)" value={settings.shortcuts.bookmark} onChange={(v) => setShortcut("bookmark", v)} />
           </div>
         </div>
         {saveError && <div className="error">{saveError}</div>}
@@ -296,5 +309,111 @@ function ShortcutInput({ label, value, onChange }: { label: string; value: strin
         {listening ? "키 조합을 누르세요" : <kbd>{acceleratorLabel(value)}</kbd>}
       </button>
     </label>
+  );
+}
+
+/** 요약 템플릿 고치기. 저장을 눌러야 반영된다 */
+function TemplateEditor({ settings, onChange }: { settings: Settings; onChange: (s: Settings) => void }) {
+  const templates = settings.summaryTemplates;
+  const [selected, setSelected] = useState(templates[0]?.id ?? "");
+  const current = templates.find((t) => t.id === selected) ?? templates[0];
+
+  const update = (patch: Partial<{ name: string; prompt: string }>) =>
+    onChange({ ...settings, summaryTemplates: templates.map((t) => (t.id === current.id ? { ...t, ...patch } : t)) });
+
+  const add = () => {
+    const id = `custom-${Date.now()}`;
+    const base = current?.prompt ?? "";
+    onChange({ ...settings, summaryTemplates: [...templates, { id, name: "새 템플릿", prompt: base }] });
+    setSelected(id);
+  };
+
+  const remove = () => {
+    if (templates.length <= 1 || !confirm(`"${current.name}" 템플릿을 지울까요?`)) return;
+    const rest = templates.filter((t) => t.id !== current.id);
+    onChange({
+      ...settings,
+      summaryTemplates: rest,
+      defaultTemplate: settings.defaultTemplate === current.id ? rest[0].id : settings.defaultTemplate,
+    });
+    setSelected(rest[0].id);
+  };
+
+  if (!current) return null;
+  return (
+    <div className="setting-row">
+      <div className="setting-label">
+        <span>요약 템플릿</span>
+        <button className="ghost" onClick={add}>
+          템플릿 더하기
+        </button>
+      </div>
+      <div className="chips">
+        {templates.map((t) => (
+          <button key={t.id} className={`chip ${t.id === current.id ? "on" : ""}`} onClick={() => setSelected(t.id)}>
+            {t.name}
+            {t.id === settings.defaultTemplate ? " (기본)" : ""}
+          </button>
+        ))}
+      </div>
+      <div className="template-edit">
+        <input value={current.name} onChange={(e) => update({ name: e.target.value })} aria-label="템플릿 이름" />
+        <button className="ghost" disabled={current.id === settings.defaultTemplate} onClick={() => onChange({ ...settings, defaultTemplate: current.id })}>
+          기본으로
+        </button>
+        <button className="ghost" disabled={templates.length <= 1} onClick={remove}>
+          지우기
+        </button>
+      </div>
+      <textarea className="prompt-input" rows={8} value={current.prompt} onChange={(e) => update({ prompt: e.target.value })} aria-label="요약 지시문" />
+    </div>
+  );
+}
+
+/** 기억한 목소리. 이름 바꾸기와 지우기는 바로 반영된다 */
+function VoiceList({ enabled, onToggle }: { enabled: boolean; onToggle: (on: boolean) => void }) {
+  const [voices, setVoices] = useState<VoiceInfo[]>([]);
+  const refresh = () => api.listVoices().then(setVoices);
+  useEffect(() => {
+    refresh();
+  }, []);
+
+  return (
+    <div className="setting-row">
+      <label className="setting-toggle">
+        <input type="checkbox" checked={enabled} onChange={(e) => onToggle(e.target.checked)} />
+        <span>
+          화자 목소리 기억하기
+          <span className="muted">
+            {" "}
+            화자 이름을 바꾸면 그 목소리를 기억하고, 다음 녹음에서 같은 사람에게 이름을 붙입니다. 목소리 특징은 이 컴퓨터에만 저장됩니다
+          </span>
+        </span>
+      </label>
+      {voices.length > 0 && (
+        <ul className="voice-list">
+          {voices.map((v) => (
+            <li key={v.id}>
+              <input
+                defaultValue={v.name}
+                aria-label="목소리 이름"
+                onBlur={(e) => {
+                  const name = e.target.value.trim();
+                  if (name && name !== v.name) api.renameVoice(v.id, name).then(refresh);
+                }}
+                onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+              />
+              <span className="muted">녹음 {v.samples}개</span>
+              <button
+                className="ghost"
+                onClick={() => confirm(`"${v.name}"의 목소리를 잊을까요?`) && api.deleteVoice(v.id).then(refresh)}
+              >
+                잊기
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }

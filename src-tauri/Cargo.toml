@@ -1,6 +1,6 @@
 [package]
 name = "sori"
-version = "0.3.0"
+version = "0.4.0"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2024"
@@ -46,9 +46,12 @@ tauri-plugin-single-instance = { version = "=2.5.4", features = ["deep-link"] }
 whisper-rs = { version = "0.16", features = ["metal"] }
 objc2 = "0.6"
 objc2-foundation = { version = "0.3", features = ["NSProcessInfo", "NSString", "NSObject"] }
+# 회의 앱 감지: 마이크를 쓰는 프로세스 목록(macOS 14.0 이상)
+objc2-core-audio = { version = "0.3", default-features = false, features = ["std", "AudioHardware"] }
+objc2-core-foundation = { version = "0.3", default-features = false, features = ["std", "CFString"] }
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61", features = ["Win32_System_Power"] }
+windows-sys = { version = "0.61", features = ["Win32_System_Power", "Win32_System_Registry", "Win32_Foundation"] }
 
 [features]
 vulkan = ["whisper-rs/vulkan"]

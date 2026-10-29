@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open } from "@tauri-apps/plugin-dialog";
 import { api, AppAction, AUDIO_EXTENSIONS, ModelCatalog, modelsReady, ProgressEvent, Recording } from "./api";
+import { AskPanel } from "./components/AskPanel";
 import { QuickOpen } from "./components/QuickOpen";
 import { ShortcutHelp } from "./components/ShortcutHelp";
 import { AppCommand, Command, matchShortcut, sendCommand } from "./shortcuts";
@@ -29,6 +30,7 @@ export default function App() {
     [],
   );
   const [helpOpen, setHelpOpen] = useState(false);
+  const [askOpen, setAskOpen] = useState(false);
   /** 링크나 검색 결과로 녹음을 열 때 옮겨 갈 재생 위치. nonce로 같은 시각을 다시 골라도 반영한다 */
   const [seekTo, setSeekTo] = useState<{ id: string; time: number; nonce: number } | null>(null);
 
@@ -56,13 +58,17 @@ export default function App() {
     [refresh],
   );
 
-  /** 가져온 녹음을 기본 설정(언어는 설정값, 화자 수는 자동)으로 처리한다. 백엔드가 하나씩 차례로 처리한다 */
+  /**
+   * 녹음을 기본 설정(언어는 설정값, 화자 수는 자동)으로 처리한다. 백엔드가 하나씩 차례로 처리한다.
+   * 자동 요약이 켜져 있으면 처리가 끝난 뒤 기본 템플릿으로 요약한다
+   */
   const processDefaults = useCallback(
     async (recordings: Recording[]) => {
       const settings = await api.getSettings();
       for (const r of recordings) {
         api
           .processRecording(r.id, null, settings.defaultLanguages)
+          .then(() => (settings.autoSummarize ? api.summarize(r.id, null, null) : undefined))
           .catch((e) => setError(`${r.title}: ${e}`))
           .finally(refresh);
       }
@@ -70,13 +76,21 @@ export default function App() {
     [refresh],
   );
 
+  /** 설정에서 자동 처리를 켰으면 처리한다 */
+  const autoProcess = useCallback(
+    async (recordings: Recording[]) => {
+      if (recordings.length > 0 && (await api.getSettings()).autoProcess) await processDefaults(recordings);
+    },
+    [processDefaults],
+  );
+
   const pickFiles = useCallback(async () => {
     const picked = await open({
       multiple: true,
       filters: [{ name: "오디오", extensions: AUDIO_EXTENSIONS }],
     });
-    if (picked) await importPaths(picked);
-  }, [importPaths]);
+    if (picked) await autoProcess(await importPaths(picked));
+  }, [importPaths, autoProcess]);
 
   useEffect(() => {
     api.modelCatalog().then(setCatalog);
@@ -109,15 +123,21 @@ export default function App() {
         case "import": {
           const imported = await importPaths(a.paths);
           if (a.process) await processDefaults(imported);
+          else await autoProcess(imported);
           return;
         }
+        case "bookmark":
+          return api
+            .addNote(null, null, "")
+            .then(refresh)
+            .catch((e) => setError(String(e)));
         case "search":
           return setQuickOpen(a.query);
         case "blocked":
           return setError(a.message);
       }
     },
-    [importPaths, openRecording, processDefaults, setQuickOpen],
+    [importPaths, openRecording, processDefaults, autoProcess, refresh, setQuickOpen],
   );
 
   // 전역 단축키와 sori:// 링크. 구독을 마친 뒤 그 전에 들어온 요청(링크로 앱을 띄운 경우)을 받아 처리한다
@@ -148,6 +168,8 @@ export default function App() {
         return setQuickOpen("");
       case "help":
         return setHelpOpen(true);
+      case "ask-all":
+        return setAskOpen(true);
       case "prev":
       case "next": {
         if (recordings.length === 0) return;
@@ -160,7 +182,7 @@ export default function App() {
     }
   };
 
-  const modalOpen = settingsOpen || helpOpen || quickOpen !== null;
+  const modalOpen = settingsOpen || helpOpen || askOpen || quickOpen !== null;
   const commandRef = useRef(runCommand);
   commandRef.current = runCommand;
   useEffect(() => {
@@ -192,13 +214,13 @@ export default function App() {
     const unlistenDrop = getCurrentWebview().onDragDropEvent((e) => {
       if (e.payload.type === "enter" || e.payload.type === "over") setDragging(true);
       else setDragging(false);
-      if (e.payload.type === "drop") importPaths(e.payload.paths);
+      if (e.payload.type === "drop") importPaths(e.payload.paths).then(autoProcess);
     });
     return () => {
       unlistenProgress.then((f) => f());
       unlistenDrop.then((f) => f());
     };
-  }, [refresh, importPaths]);
+  }, [refresh, importPaths, autoProcess]);
 
   const selected = recordings.find((r) => r.id === selectedId) ?? null;
 
@@ -221,6 +243,7 @@ export default function App() {
             onStopped={async (r) => {
               await refresh();
               setSelectedId(r.id);
+              if (r.duration) await autoProcess([r]);
             }}
             onError={setError}
           />
@@ -280,6 +303,26 @@ export default function App() {
         />
       )}
       {helpOpen && <ShortcutHelp onClose={() => setHelpOpen(false)} />}
+      {askOpen && (
+        <div className="modal-backdrop" onClick={() => setAskOpen(false)} onKeyDown={(e) => e.key === "Escape" && setAskOpen(false)}>
+          <div className="modal ask-modal" role="dialog" aria-label="모든 녹음에 물어보기" onClick={(e) => e.stopPropagation()}>
+            <div className="ask-modal-head">
+              <h2>모든 녹음에 물어보기</h2>
+              <button className="ghost" onClick={() => setAskOpen(false)}>
+                닫기
+              </button>
+            </div>
+            <AskPanel
+              recordingId={null}
+              onCite={(id, time) => {
+                if (!id) return;
+                setAskOpen(false);
+                openRecording(id, time);
+              }}
+            />
+          </div>
+        </div>
+      )}
       {settingsOpen && (
         <SettingsDialog
           onClose={() => {
