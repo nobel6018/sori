@@ -5,12 +5,15 @@ import { IS_MAC } from "../shortcuts";
 
 const PROVIDERS: { id: SyncProvider; label: string; hint: string }[] = [
   { id: "local", label: "이 기기에만", hint: "동기화하지 않습니다" },
-  { id: "icloud", label: "iCloud Drive", hint: IS_MAC ? "iCloud Drive의 sori 폴더" : "iCloud for Windows의 iCloud Drive 폴더" },
-  { id: "onedrive", label: "OneDrive", hint: "OneDrive 앱이 동기화하는 폴더의 sori 폴더" },
+  { id: "icloud", label: "iCloud Drive", hint: "iCloud Drive의 sori 폴더" },
 ];
 
-/** 설정 화면의 동기화 항목. 고른 값은 설정 저장과 함께 반영된다 @see docs/sync.md */
-export function SyncSettings({ value, onChange }: { value: SyncSettingsValue; onChange: (v: SyncSettingsValue) => void }) {
+/** 설정 화면의 동기화 항목. 고른 값은 설정 저장과 함께 반영된다. Windows는 이 기기에만 저장해 보이지 않는다 @see docs/sync.md */
+export function SyncSettings(props: { value: SyncSettingsValue; onChange: (v: SyncSettingsValue) => void }) {
+  return IS_MAC ? <SyncSettingsMac {...props} /> : null;
+}
+
+function SyncSettingsMac({ value, onChange }: { value: SyncSettingsValue; onChange: (v: SyncSettingsValue) => void }) {
   const [status, setStatus] = useState<SyncStatus | null>(null);
   const [defaultFolder, setDefaultFolder] = useState<string | null>(null);
 
@@ -46,8 +49,7 @@ export function SyncSettings({ value, onChange }: { value: SyncSettingsValue; on
             aria-checked={value.provider === p.id}
             className={value.provider === p.id ? "on" : ""}
             title={p.hint}
-            // 고른 폴더는 클라우드마다 다르므로 바꾸면 새 클라우드의 기본 폴더로 돌아간다
-            onClick={() => p.id !== value.provider && onChange({ provider: p.id, folder: null })}
+            onClick={() => onChange({ ...value, provider: p.id })}
           >
             {p.label}
           </button>
@@ -66,8 +68,7 @@ export function SyncSettings({ value, onChange }: { value: SyncSettingsValue; on
       )}
       {value.provider !== "local" && (
         <p className="muted small">
-          처음 켜면 이 기기의 녹음을 모두 올립니다. WAV 오디오는 {IS_MAC ? "AAC(1시간 약 22MB)" : "FLAC(1시간 약 50MB)"}으로 압축해
-          올리고, 다른 기기에서 온 녹음의 오디오는 재생하거나 받아 적을 때 받습니다.
+          처음 켜면 이 기기의 녹음을 모두 올립니다. WAV 오디오는 AAC(1시간 약 22MB)로 압축해 올리고, 다른 기기에서 온 녹음의 오디오는 재생하거나 받아 적을 때 받습니다.
         </p>
       )}
       {status && status.provider !== "local" && <SyncStatusLine status={status} />}

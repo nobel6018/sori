@@ -1,6 +1,6 @@
 [package]
 name = "sori"
-version = "0.5.1"
+version = "0.5.2"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2024"
@@ -42,8 +42,6 @@ tauri-plugin-deep-link = "=2.6.2"
 # 딥링크를 열 때 앱이 하나 더 뜨지 않고, 이미 떠 있는 앱이 링크를 받게 한다
 tauri-plugin-single-instance = { version = "=2.5.4", features = ["deep-link"] }
 sori-sync = { path = "../crates/sori-sync" }
-# Windows에서 클라우드에 올릴 WAV를 압축한다(src/sync.rs)
-flacenc = "0.5.1"
 
 # whisper.cpp GPU 백엔드는 플랫폼마다 다르다. macOS는 Metal을 항상 켜고,
 # 윈도우와 리눅스는 기본 CPU로 빌드하되 빌드 머신에 SDK가 있으면 아래 기능으로 켠다

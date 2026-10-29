@@ -21,15 +21,17 @@ const INTERVAL: Duration = Duration::from_secs(120);
 /// 변경 요청이 몰려 오면(메모 여러 개 등) 잠깐 기다렸다 한 번에 맞춘다
 const DEBOUNCE: Duration = Duration::from_secs(3);
 
-/// 동기화 위치. 둘 다 운영체제가 동기화하는 폴더를 쓴다(FolderRemote)
+/// 동기화 위치. iCloud Drive는 운영체제가 동기화하는 폴더를 쓴다(FolderRemote).
+/// 동기화는 macOS에서만 쓰고 Windows는 이 기기에만 저장한다(2026-10-29 결정)
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Provider {
-    /// 이 기기에만 저장
-    #[default]
-    Local,
     Icloud,
-    Onedrive,
+    /// 이 기기에만 저장. 모르는 값(0.5.1의 "onedrive" 등)도 여기로 읽어, 설정 파일 전체가 기본값으로 돌아가지 않게 한다.
+    /// serde(other)는 마지막 변형에만 붙일 수 있어 맨 뒤에 둔다
+    #[default]
+    #[serde(other)]
+    Local,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -69,37 +71,12 @@ impl Syncer {
     }
 }
 
-/// 클라우드별 기본 sori 폴더. 클라우드 앱이 없어 찾지 못하면 None
+/// 기본 sori 폴더(iCloud Drive 안). macOS가 아니면 None
 pub fn default_folder(provider: Provider, home: &Path) -> Option<PathBuf> {
     match provider {
-        Provider::Local => None,
-        // macOS는 ~/Library/Mobile Documents, Windows는 iCloud for Windows의 기본 위치
         Provider::Icloud if cfg!(target_os = "macos") => Some(home.join("Library/Mobile Documents/com~apple~CloudDocs/sori")),
-        Provider::Icloud => Some(home.join("iCloudDrive").join("sori")),
-        Provider::Onedrive => onedrive_root(home).map(|r| r.join("sori")),
+        _ => None,
     }
-}
-
-/// OneDrive 앱이 동기화하는 폴더.
-/// macOS는 ~/Library/CloudStorage/OneDrive-Personal(개인) 또는 OneDrive-회사이름(회사)이다. 개인 계정을 먼저 고른다.
-/// Windows는 OneDrive 앱이 환경 변수에 위치를 적어 둔다
-fn onedrive_root(home: &Path) -> Option<PathBuf> {
-    if cfg!(target_os = "macos") {
-        let mut found: Vec<PathBuf> = std::fs::read_dir(home.join("Library/CloudStorage"))
-            .ok()?
-            .filter_map(|e| e.ok())
-            .filter(|e| e.file_name().to_string_lossy().starts_with("OneDrive"))
-            .map(|e| e.path())
-            .collect();
-        found.sort_by_key(|p| !p.ends_with("OneDrive-Personal"));
-        return found.into_iter().next();
-    }
-    ["OneDriveConsumer", "OneDrive", "OneDriveCommercial"]
-        .iter()
-        .filter_map(std::env::var_os)
-        .map(PathBuf::from)
-        .chain(std::iter::once(home.join("OneDrive")))
-        .find(|p| p.is_dir())
 }
 
 /// 설정에 맞는 클라우드와 그 구분값. 로컬 전용이면 None
@@ -107,8 +84,7 @@ pub fn remote_for(settings: &SyncSettings, home: &Path) -> Result<Option<(Box<dy
     let (name, hint) = match settings.provider {
         Provider::Local => return Ok(None),
         Provider::Icloud if cfg!(target_os = "macos") => ("iCloud Drive", "시스템 설정 > Apple 계정 > iCloud에서 iCloud Drive를 켜 주세요"),
-        Provider::Icloud => ("iCloud Drive", "iCloud for Windows를 설치하고 iCloud Drive를 켜 주세요"),
-        Provider::Onedrive => ("OneDrive", "OneDrive 앱을 설치하고 로그인해 주세요"),
+        Provider::Icloud => return Err(eyre!("동기화는 macOS에서만 씁니다. Windows는 이 기기에만 저장합니다")),
     };
     let folder = settings
         .folder
@@ -392,42 +368,13 @@ fn compress(source: &Path, tmp: &Path) -> Result<AudioUpload> {
     Ok(AudioUpload { path: dest, ext: "m4a".into(), temporary: true })
 }
 
-/// Windows: 운영체제에 쓸 만한 AAC 인코더 명령이 없어 순수 Rust FLAC(모노 16kHz)으로 압축한다. 1시간에 약 50MB
 #[cfg(not(target_os = "macos"))]
-fn compress(source: &Path, tmp: &Path) -> Result<AudioUpload> {
-    let dest = tmp.with_extension("flac");
-    encode_flac(source, &dest)?;
-    Ok(AudioUpload { path: dest, ext: "flac".into(), temporary: true })
+fn compress(_: &Path, _: &Path) -> Result<AudioUpload> {
+    Err(eyre!("동기화는 macOS에서만 씁니다"))
 }
 
-/// 모노 16kHz 16비트 FLAC. 전사 엔진이 쓰는 형식과 같아 다른 기기에서 받아 처리해도 결과가 같다
-#[cfg_attr(target_os = "macos", allow(dead_code))]
-pub fn encode_flac(source: &Path, dest: &Path) -> Result<()> {
-    use flacenc::component::BitRepr;
-    use flacenc::error::Verify;
-
-    let samples: Vec<i32> = crate::engine::audio::load_mono_16k(source)?
-        .iter()
-        .map(|s| (s.clamp(-1.0, 1.0) * i16::MAX as f32) as i32)
-        .collect();
-    let config = flacenc::config::Encoder::default().into_verified().map_err(|(_, e)| eyre!("FLAC 설정 오류: {e:?}"))?;
-    let source = flacenc::source::MemSource::from_samples(&samples, 1, 16, crate::engine::audio::SAMPLE_RATE as usize);
-    let stream = flacenc::encode_with_fixed_block_size(&config, source, config.block_size).map_err(|e| eyre!("FLAC로 압축하지 못했습니다: {e:?}"))?;
-    let mut sink = flacenc::bitsink::ByteSink::new();
-    stream.write(&mut sink).map_err(|e| eyre!("FLAC로 압축하지 못했습니다: {e:?}"))?;
-    let mut bytes = sink.as_slice().to_vec();
-    // flacenc는 STREAMINFO의 최소 블록 크기에 마지막(짧은) 블록 길이를 적는다. 규격은 마지막 블록을 빼고 세므로
-    // 고정 크기 블록이면 최대와 같아야 하고, symphonia는 둘이 다르면 파일을 읽지 못했다("end of stream").
-    // 바이트 0..4 "fLaC", 4..8 블록 헤더, 8..10 최소 블록 크기, 10..12 최대 블록 크기
-    if bytes.len() > 12 && &bytes[..4] == b"fLaC" && bytes[4] & 0x7f == 0 {
-        let max = [bytes[10], bytes[11]];
-        bytes[8..10].copy_from_slice(&max);
-    }
-    std::fs::write(dest, bytes)?;
-    Ok(())
-}
-
-#[cfg(test)]
+// 동기화는 macOS에서만 쓴다(오디오 압축이 afconvert)
+#[cfg(all(test, target_os = "macos"))]
 mod tests {
     use super::*;
 
@@ -446,19 +393,6 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("sori-sync-test-{}", uuid::Uuid::new_v4().simple()));
         std::fs::create_dir_all(&dir).unwrap();
         dir.join(name)
-    }
-
-    #[test]
-    fn flac로_압축한_오디오를_전사_엔진이_같은_길이로_읽는다() {
-        let wav = scratch("a.wav");
-        sine_wav(&wav, 3);
-        let flac = wav.with_extension("flac");
-
-        encode_flac(&wav, &flac).unwrap();
-
-        let samples = crate::engine::audio::load_mono_16k(&flac).unwrap();
-        assert!((samples.len() as i64 - 48_000).abs() < 1600, "{}", samples.len());
-        assert!(std::fs::metadata(&flac).unwrap().len() < std::fs::metadata(&wav).unwrap().len() / 4);
     }
 
     #[test]
@@ -494,21 +428,12 @@ mod tests {
         assert_eq!(a.get(&rec.id).unwrap().title, "B에서 고친 제목");
     }
 
-    #[cfg(target_os = "macos")]
     #[test]
-    fn onedrive는_개인_계정_폴더를_먼저_고르고_없으면_회사_폴더를_쓴다() {
-        let home = scratch("home");
-        let cloud = home.join("Library/CloudStorage");
-        std::fs::create_dir_all(cloud.join("OneDrive-NULLSPACE")).unwrap();
-        assert_eq!(default_folder(Provider::Onedrive, &home), Some(cloud.join("OneDrive-NULLSPACE/sori")));
-
-        std::fs::create_dir_all(cloud.join("OneDrive-Personal")).unwrap();
-        assert_eq!(default_folder(Provider::Onedrive, &home), Some(cloud.join("OneDrive-Personal/sori")));
-
-        assert_eq!(default_folder(Provider::Onedrive, &scratch("empty")), None);
+    fn 없어진_동기화_방식은_이_기기에만으로_읽는다() {
+        let settings: SyncSettings = serde_json::from_str(r#"{"provider":"onedrive","folder":null}"#).unwrap();
+        assert_eq!(settings.provider, Provider::Local);
     }
 
-    #[cfg(target_os = "macos")]
     #[test]
     fn afconvert로_압축한_m4a를_전사_엔진이_읽는다() {
         let wav = scratch("b.wav");

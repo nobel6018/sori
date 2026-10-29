@@ -71,8 +71,8 @@ Windows (PowerShell):
 
 설정의 "동기화"에서 저장 위치를 고릅니다. 기본은 이 기기에만 저장합니다.
 
-- iCloud Drive: `iCloud Drive/sori` 폴더로 다른 컴퓨터, 휴대폰 앱과 녹음, 전사, 요약, 메모를 나눕니다. Windows는 iCloud for Windows가 필요합니다
-- OneDrive: OneDrive 앱이 동기화하는 폴더의 `sori` 폴더를 씁니다
+- iCloud Drive: `iCloud Drive/sori` 폴더로 다른 Mac, 휴대폰 앱과 녹음, 전사, 요약, 메모를 나눕니다(macOS 전용)
+- Windows는 이 기기에만 저장합니다
 - 처음 켜면 이 기기의 녹음을 모두 올립니다. 다른 기기에서 온 녹음의 오디오는 재생하거나 받아 적을 때 받습니다
 - 휴대폰에서 녹음한 파일이 오면 자동 처리 설정에 따라 이 컴퓨터가 받아 적습니다
 

@@ -69,11 +69,12 @@ export interface RecordingDetail {
   audioAvailable: boolean;
 }
 
-export type SyncProvider = "local" | "icloud" | "onedrive";
+/** 동기화는 macOS의 iCloud Drive만. Windows는 이 기기에만 저장한다 */
+export type SyncProvider = "local" | "icloud";
 
 export interface SyncSettings {
   provider: SyncProvider;
-  /** 고른 클라우드 안의 sori 폴더. null이면 기본 위치 */
+  /** iCloud Drive 안의 sori 폴더. null이면 기본 위치 */
   folder: string | null;
 }
 
@@ -273,7 +274,7 @@ export const api = {
   deleteNote: (id: string, index: number) => invoke<Recording>("delete_note", { id, index }),
   syncStatus: () => invoke<SyncStatus>("sync_status"),
   syncNow: () => invoke<void>("sync_now"),
-  /** 클라우드 앱이 없어 찾지 못하면 null */
+  /** macOS가 아니면 null */
   defaultSyncFolder: (provider: SyncProvider) => invoke<string | null>("default_sync_folder", { provider }),
   downloadAudio: (id: string) => invoke<void>("download_audio", { id }),
   onSyncStatus: (handler: (s: SyncStatus) => void) => listen<SyncStatus>("sync-status", (e) => handler(e.payload)),
