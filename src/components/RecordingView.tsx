@@ -4,7 +4,7 @@ import { AskPanel } from "./AskPanel";
 import { NotesPanel } from "./NotesPanel";
 import { SummaryPanel } from "./SummaryPanel";
 import { TranscriptList } from "./TranscriptList";
-import { api, LANGUAGES, ProgressEvent, Recording, RecordingDetail, speakerName, Stage } from "../api";
+import { api, formatBytes, LANGUAGES, ProgressEvent, Recording, RecordingDetail, speakerName, Stage } from "../api";
 import { EXPORT_LABEL, ExportFormat, exportBytes, exportFileName } from "../export";
 import { recordingMarkdown, toBlocks, transcriptMarkdown } from "../markdown";
 import { IS_MAC, useCommands } from "../shortcuts";
@@ -308,7 +308,8 @@ export function RecordingView({ recording, progress, seekTo, onSeekDone, onChang
         </>
       )}
 
-      {detail && rec.status !== "recording" && (
+      {detail && rec.status !== "recording" && !detail.audioAvailable && <AudioDownload id={rec.id} onDone={load} />}
+      {detail && rec.status !== "recording" && detail.audioAvailable && (
         <audio
           ref={audioRef}
           className="player"
@@ -493,6 +494,46 @@ export function RecordingView({ recording, progress, seekTo, onSeekDone, onChang
           onSeek={seek}
         />
       )}
+    </div>
+  );
+}
+
+/** 다른 기기에서 온 녹음: 오디오를 받기 전까지 재생기 대신 보여 준다. 받아 적기를 누르면 처리하며 받는다 */
+function AudioDownload({ id, onDone }: { id: string; onDone: () => void }) {
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const unlisten = api.onAudioDownload((p) => p.id === id && setProgress({ done: p.done, total: p.total }));
+    return () => {
+      unlisten.then((f) => f());
+    };
+  }, [id]);
+
+  const start = async () => {
+    setError(null);
+    setProgress({ done: 0, total: 0 });
+    try {
+      await api.downloadAudio(id);
+      onDone();
+    } catch (e) {
+      setError(String(e));
+      setProgress(null);
+    }
+  };
+
+  return (
+    <div className="audio-download">
+      <span className="muted">오디오가 클라우드에만 있습니다.</span>
+      {progress ? (
+        <span>
+          받는 중 {formatBytes(progress.done)}
+          {progress.total > 0 && ` / ${formatBytes(progress.total)}`}
+        </span>
+      ) : (
+        <button onClick={start}>오디오 받기</button>
+      )}
+      {error && <span className="error">{error}</span>}
     </div>
   );
 }

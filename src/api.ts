@@ -30,6 +30,10 @@ export interface Recording {
 export interface Note {
   time: number;
   text: string;
+  /** 동기화할 때 붙는다 */
+  id?: string;
+  /** 메모를 남긴 기기. 없으면 이 기기 */
+  device?: string;
 }
 
 export interface SpeakerTurn {
@@ -61,6 +65,24 @@ export interface RecordingDetail {
   summary: Summary | null;
   /** 오래된 것부터 */
   summaries: Summary[];
+  /** 오디오가 이 기기에 있는지. 다른 기기에서 온 녹음은 받기 전까지 없다 */
+  audioAvailable: boolean;
+}
+
+export type SyncProvider = "local" | "icloud" | "onedrive" | "googleDrive";
+
+export interface SyncSettings {
+  provider: SyncProvider;
+  /** iCloud Drive 안의 sori 폴더. null이면 기본 위치 */
+  folder: string | null;
+}
+
+export interface SyncStatus {
+  provider: SyncProvider;
+  running: boolean;
+  lastSync: string | null;
+  error: string | null;
+  message: string | null;
 }
 
 export interface SummaryTemplate {
@@ -100,6 +122,7 @@ export interface Settings {
   meetingDetection: boolean;
   summaryTemplates: SummaryTemplate[];
   defaultTemplate: string | null;
+  sync: SyncSettings;
 }
 
 /** Tauri 단축키 표기(CommandOrControl+Alt+Shift+R). 빈 문자열이면 끈다 */
@@ -248,6 +271,15 @@ export const api = {
   cancelAsk: (recordingId: string | null) => invoke<void>("cancel_summary", { id: recordingId ? `ask:${recordingId}` : "ask" }),
   addNote: (id: string | null, time: number | null, text: string) => invoke<Recording>("add_note", { id, time, text }),
   deleteNote: (id: string, index: number) => invoke<Recording>("delete_note", { id, index }),
+  syncStatus: () => invoke<SyncStatus>("sync_status"),
+  syncNow: () => invoke<void>("sync_now"),
+  defaultIcloudFolder: () => invoke<string>("default_icloud_folder"),
+  downloadAudio: (id: string) => invoke<void>("download_audio", { id }),
+  onSyncStatus: (handler: (s: SyncStatus) => void) => listen<SyncStatus>("sync-status", (e) => handler(e.payload)),
+  /** 다른 기기에서 녹음이 오거나 지워졌다 */
+  onRecordingsSynced: (handler: () => void) => listen("recordings-synced", () => handler()),
+  onAudioDownload: (handler: (p: { id: string; done: number; total: number }) => void) =>
+    listen<{ id: string; done: number; total: number }>("audio-download", (e) => handler(e.payload)),
   onRecordingChanged: (handler: (id: string) => void) =>
     listen<{ id: string }>("recording-changed", (e) => handler(e.payload.id)),
   nameSpeaker: (id: string, speaker: number, name: string) => invoke<Recording>("name_speaker", { id, speaker, name }),

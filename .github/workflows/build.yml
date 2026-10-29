@@ -42,6 +42,10 @@ jobs:
         working-directory: src-tauri
         timeout-minutes: 10
         run: cargo test --locked --lib -- --test-threads=1 --nocapture
+      # 기기 간 동기화 엔진(docs/sync.md). 두 기기가 폴더 하나를 함께 쓰는 상황을 흉내 낸다
+      - name: sori-sync test
+        working-directory: crates/sori-sync
+        run: cargo test --locked
       # whisper.cpp와 onnxruntime 정적 링크가 실제 실행 파일에서 깨지지 않는지 확인한다
       - name: cargo build
         working-directory: src-tauri

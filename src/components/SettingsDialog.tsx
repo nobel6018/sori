@@ -4,6 +4,7 @@ import { api, formatBytes, GlobalShortcuts, InputDevice, installCommand, LANGUAG
 import { acceleratorFromEvent, acceleratorLabel } from "../shortcuts";
 import { useModelInstall } from "../useModelInstall";
 import { InstallProgress } from "./InstallProgress";
+import { SyncSettings } from "./SyncSettings";
 
 const MODEL_FIELDS: { key: keyof Settings["models"]; label: string; hint: string }[] = [
   { key: "whisper", label: "Whisper 모델", hint: "ggml 형식 .bin (예: ggml-large-v3-turbo.bin)" },
@@ -97,6 +98,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal" role="dialog" aria-label="설정" onClick={(e) => e.stopPropagation()}>
         <h2>설정</h2>
+        <SyncSettings value={settings.sync} onChange={(sync) => setSettings({ ...settings, sync })} />
         <div className="setting-row">
           <div className="setting-label">
             <span>받아 적기 모델</span>

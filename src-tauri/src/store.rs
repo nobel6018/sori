@@ -54,6 +54,25 @@ pub struct Recording {
     /// 마지막으로 처리할 때 화자를 나눴는지. 다시 처리할 때 같은 방식을 미리 고른다
     #[serde(default = "yes")]
     pub diarize: bool,
+    /// 기기끼리 나누는 필드(제목, 화자 이름 등)를 마지막으로 고친 시각. 두 기기가 함께 고쳤을 때 늦은 쪽을 고른다
+    /// @see docs/sync.md
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<DateTime<Utc>>,
+}
+
+impl Recording {
+    /// sori-sync의 SHARED 필드가 같은지
+    fn same_shared(&self, other: &Recording) -> bool {
+        self.number == other.number
+            && self.title == other.title
+            && self.created_at == other.created_at
+            && self.source_name == other.source_name
+            && self.duration == other.duration
+            && self.speaker_names == other.speaker_names
+            && self.num_speakers == other.num_speakers
+            && self.languages == other.languages
+            && self.diarize == other.diarize
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -63,6 +82,12 @@ pub struct Note {
     pub time: f32,
     /// 비어 있으면 북마크
     pub text: String,
+    /// 동기화할 때 붙는다. 여러 기기의 메모를 합치고 지운 메모를 가린다
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    /// 메모를 남긴 기기 id. 없으면 이 기기
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub device: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -108,6 +133,9 @@ pub struct Settings {
     /// 자동 요약과 요약 화면의 기본 템플릿 id
     #[serde(default)]
     pub default_template: Option<String>,
+    /// 기기 간 동기화. 기본은 이 기기에만 저장
+    #[serde(default)]
+    pub sync: crate::sync::SyncSettings,
 }
 
 fn yes() -> bool {
@@ -131,6 +159,7 @@ impl Settings {
             meeting_detection: true,
             summary_templates: Vec::new(),
             default_template: None,
+            sync: Default::default(),
         }
     }
 }
@@ -171,6 +200,11 @@ impl Store {
             settings.default_template = settings.summary_templates.first().map(|t| t.id.clone());
         }
         settings
+    }
+
+    /// 데이터 폴더(설정 파일 옆)의 파일 경로
+    pub fn data_file(&self, name: &str) -> PathBuf {
+        self.settings_path.with_file_name(name)
     }
 
     /// 목소리 기억 파일. 녹음 폴더 밖에 두어 녹음을 지워도 남는다
@@ -234,7 +268,13 @@ impl Store {
 
     pub fn save(&self, recording: &Recording) -> Result<()> {
         let _guard = self.meta_lock.lock().unwrap();
-        write_json(&self.dir(&recording.id)?.join("meta.json"), recording)
+        let path = self.dir(&recording.id)?.join("meta.json");
+        let mut recording = recording.clone();
+        match read_json::<Recording>(&path) {
+            Ok(old) if old.same_shared(&recording) => recording.updated_at = old.updated_at,
+            _ => recording.updated_at = Some(Utc::now()),
+        }
+        write_json(&path, &recording)
     }
 
     /// 잠근 채 최신 meta.json을 다시 읽어 고치고 저장한다. 오래 걸리는 작업 뒤에 저장할 때는
@@ -243,9 +283,50 @@ impl Store {
         let _guard = self.meta_lock.lock().unwrap();
         let path = self.dir(id)?.join("meta.json");
         let mut recording: Recording = read_json(&path).wrap_err_with(|| format!("녹음을 찾을 수 없습니다: {id}"))?;
+        let before = recording.clone();
         change(&mut recording);
+        if !before.same_shared(&recording) {
+            recording.updated_at = Some(Utc::now());
+        }
         write_json(&path, &recording)?;
         Ok(recording)
+    }
+
+    /// 동기화 엔진용: meta.json을 JSON 값 그대로 고친다. 고친 시각은 엔진이 정하므로 건드리지 않는다.
+    /// 저장하기 전에 Recording으로 읽히는지 확인해 앱이 못 읽는 파일을 만들지 않는다
+    pub fn update_raw(&self, id: &str, change: &mut dyn FnMut(&mut serde_json::Value)) -> Result<serde_json::Value> {
+        let _guard = self.meta_lock.lock().unwrap();
+        let path = self.dir(id)?.join("meta.json");
+        let mut value: serde_json::Value = read_json(&path).wrap_err_with(|| format!("녹음을 찾을 수 없습니다: {id}"))?;
+        change(&mut value);
+        serde_json::from_value::<Recording>(value.clone()).wrap_err("동기화한 meta.json을 읽을 수 없습니다")?;
+        write_json(&path, &value)?;
+        Ok(value)
+    }
+
+    pub fn read_raw(&self, id: &str) -> Result<serde_json::Value> {
+        read_json(&self.dir(id)?.join("meta.json"))
+    }
+
+    /// 동기화 엔진용: 다른 기기에서 온 녹음을 그 id 그대로 만든다
+    pub fn create_raw(&self, id: &str, meta: serde_json::Value) -> Result<()> {
+        let _guard = self.create_lock.lock().unwrap();
+        serde_json::from_value::<Recording>(meta.clone()).wrap_err("동기화한 meta.json을 읽을 수 없습니다")?;
+        let dir = self.dir(id)?;
+        fs::create_dir_all(&dir)?;
+        write_json(&dir.join("meta.json"), &meta)
+    }
+
+    pub fn recording_dir(&self, id: &str) -> Result<PathBuf> {
+        self.dir(id)
+    }
+
+    pub fn ids(&self) -> Result<Vec<String>> {
+        Ok(fs::read_dir(&self.root)?
+            .filter_map(|e| e.ok())
+            .filter(|e| e.path().join("meta.json").is_file())
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect())
     }
 
     pub fn import(&self, source: &Path) -> Result<Recording> {
@@ -301,6 +382,7 @@ impl Store {
             notes: Vec::new(),
             voice_ids: BTreeMap::new(),
             diarize: true,
+            updated_at: None,
         };
         self.save(&recording)?;
         Ok(recording)

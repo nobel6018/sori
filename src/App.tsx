@@ -245,6 +245,8 @@ export default function App() {
       // 첫 이벤트는 백엔드가 상태를 "처리 중"으로 저장한 뒤에 오므로 이때 목록을 다시 읽는다
       if ((e.stage === "decoding" || e.stage === "waiting") && e.progress === 0) refresh();
     });
+    // 다른 기기에서 녹음이 오거나 지워지면 목록을 다시 읽는다
+    const unlistenSynced = api.onRecordingsSynced(() => refresh());
     const unlistenDrop = getCurrentWebview().onDragDropEvent((e) => {
       if (e.payload.type === "enter" || e.payload.type === "over") setDragging(true);
       else setDragging(false);
@@ -252,6 +254,7 @@ export default function App() {
     });
     return () => {
       unlistenProgress.then((f) => f());
+      unlistenSynced.then((f) => f());
       unlistenDrop.then((f) => f());
     };
   }, [refresh, importPaths, autoProcess]);

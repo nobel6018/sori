@@ -67,6 +67,17 @@ Windows (PowerShell):
 - 회의 앱 감지: Zoom, Teams, Meet 등이 마이크를 쓰기 시작하면 녹음할지 묻습니다. [docs/meeting-detection.md](docs/meeting-detection.md)
 - MCP 서버: Claude Code, Claude 데스크톱에서 sori 녹음을 찾고 읽습니다. [mcp/README.md](mcp/README.md)
 
+## 동기화
+
+설정의 "동기화"에서 저장 위치를 고릅니다. 기본은 이 기기에만 저장합니다.
+
+- iCloud Drive: `iCloud Drive/sori` 폴더로 다른 컴퓨터, 휴대폰 앱과 녹음, 전사, 요약, 메모를 나눕니다. Windows는 iCloud for Windows가 필요합니다
+- OneDrive, Google Drive: 준비 중입니다
+- 처음 켜면 이 기기의 녹음을 모두 올립니다. 다른 기기에서 온 녹음의 오디오는 재생하거나 받아 적을 때 받습니다
+- 휴대폰에서 녹음한 파일이 오면 자동 처리 설정에 따라 이 컴퓨터가 받아 적습니다
+
+자세한 구조와 충돌 규칙은 [docs/sync.md](docs/sync.md)에 있습니다.
+
 ## 단축키, 링크, Raycast
 
 - 전역 단축키: 녹음 시작/멈춤 ⌥⇧⌘R(Windows Ctrl+Alt+Shift+R), 창 앞으로 ⌥⇧⌘S. 설정에서 바꿉니다

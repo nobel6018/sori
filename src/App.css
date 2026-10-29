@@ -1229,3 +1229,40 @@ kbd {
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
+
+/* 동기화 @see docs/sync.md */
+.sync-status-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+}
+.sync-status-line .error {
+  white-space: pre-line;
+}
+.sidebar-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.sync-badge {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sync-badge.error {
+  color: var(--danger);
+}
+.audio-download {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  font-size: 13px;
+}

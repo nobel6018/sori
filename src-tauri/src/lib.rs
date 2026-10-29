@@ -9,6 +9,7 @@ mod recorder;
 pub mod store;
 pub mod search;
 pub mod summarize;
+mod sync;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -52,6 +53,7 @@ struct AppState {
     meeting: Mutex<meeting::Detector>,
     /// 지금 띄운 회의 질문 창의 내용
     meeting_prompt: Mutex<Option<meeting::Prompt>>,
+    syncer: sync::Syncer,
 }
 
 impl AppState {
@@ -85,17 +87,19 @@ struct RecordingDetail {
     summary: Option<summarize::Summary>,
     /// 오래된 것부터
     summaries: Vec<summarize::Summary>,
+    /// 오디오가 이 기기에 있는지. 다른 기기에서 온 녹음은 받기 전까지 없다
+    audio_available: bool,
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ProcessRequest {
-    id: String,
-    num_speakers: Option<i32>,
-    languages: Vec<String>,
+pub(crate) struct ProcessRequest {
+    pub(crate) id: String,
+    pub(crate) num_speakers: Option<i32>,
+    pub(crate) languages: Vec<String>,
     /// None이면 설정의 기본 방식(자동 처리)
     #[serde(default)]
-    diarize: Option<bool>,
+    pub(crate) diarize: Option<bool>,
 }
 
 #[tauri::command]
@@ -111,7 +115,10 @@ fn save_settings(app: AppHandle, state: State<AppState>, settings: Settings) -> 
         actions::apply_shortcuts(&app, &settings.shortcuts, Some(&previous.shortcuts))?;
         state.shortcut_error.lock().unwrap().take();
     }
-    state.store.save_settings(&settings).map_err(err)
+    state.store.save_settings(&settings).map_err(err)?;
+    // 동기화 방식을 바꿨으면 바로 새 방식으로 맞춘다
+    sync::request(&app);
+    Ok(())
 }
 
 #[derive(Serialize)]
@@ -230,8 +237,10 @@ fn import_recordings(state: State<AppState>, paths: Vec<PathBuf>) -> CmdResult<V
 #[tauri::command]
 fn get_recording(state: State<AppState>, id: String) -> CmdResult<RecordingDetail> {
     let recording = state.store.get(&id).map_err(err)?;
+    let audio_path = state.store.audio_path(&recording).map_err(err)?;
     Ok(RecordingDetail {
-        audio_path: state.store.audio_path(&recording).map_err(err)?,
+        audio_available: audio_path.is_file(),
+        audio_path,
         transcript: state.store.get_transcript(&id).map_err(err)?,
         summary: state.store.get_summary(&id).map_err(err)?,
         summaries: state.store.get_summaries(&id).map_err(err)?,
@@ -240,7 +249,7 @@ fn get_recording(state: State<AppState>, id: String) -> CmdResult<RecordingDetai
 }
 
 #[tauri::command]
-fn update_recording(state: State<AppState>, recording: Recording) -> CmdResult<()> {
+fn update_recording(app: AppHandle, state: State<AppState>, recording: Recording) -> CmdResult<()> {
     // 상태와 오류는 처리 파이프라인이, 화자 이름과 메모는 각자의 명령이 바꾼다.
     // 화면이 들고 있던 예전 값으로 덮어쓰지 않도록 제목, 화자 수, 언어만 받는다
     state
@@ -250,19 +259,22 @@ fn update_recording(state: State<AppState>, recording: Recording) -> CmdResult<(
             r.num_speakers = recording.num_speakers;
             r.languages = recording.languages;
         })
-        .map(|_| ())
-        .map_err(err)
+        .map_err(err)?;
+    sync::request(&app);
+    Ok(())
 }
 
 #[tauri::command]
-fn delete_recording(state: State<AppState>, id: String) -> CmdResult<()> {
+fn delete_recording(app: AppHandle, state: State<AppState>, id: String) -> CmdResult<()> {
     if state.recorder.lock().unwrap().as_ref().is_some_and(|(r, _)| r == &id) {
         return Err("녹음 중인 항목은 삭제할 수 없습니다. 먼저 녹음을 멈춰 주세요".into());
     }
     if state.cancels.lock().unwrap().contains_key(&id) {
         return Err("처리 중인 녹음은 삭제할 수 없습니다. 먼저 취소해 주세요".into());
     }
-    state.store.delete(&id).map_err(err)
+    state.store.delete(&id).map_err(err)?;
+    sync::request(&app);
+    Ok(())
 }
 
 #[tauri::command]
@@ -569,8 +581,8 @@ fn cancel_summary(state: State<AppState>, id: String) {
 
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
-struct RecordingChanged {
-    id: String,
+pub(crate) struct RecordingChanged {
+    pub(crate) id: String,
 }
 
 /// 메모나 북마크를 더한다. id가 없으면 지금 녹음 중인 항목, time이 없으면 녹음을 시작한 지 지난 시간
@@ -591,10 +603,11 @@ fn add_note(app: AppHandle, state: State<AppState>, id: Option<String>, time: Op
         .store
         .update(&id, |r| {
             let at = r.notes.partition_point(|n| n.time <= time);
-            r.notes.insert(at, store::Note { time, text: text.trim().to_string() });
+            r.notes.insert(at, store::Note { time, text: text.trim().to_string(), id: None, device: None });
         })
         .map_err(err)?;
     let _ = app.emit("recording-changed", RecordingChanged { id });
+    sync::request(&app);
     Ok(recording)
 }
 
@@ -609,6 +622,7 @@ fn delete_note(app: AppHandle, state: State<AppState>, id: String, index: usize)
         })
         .map_err(err)?;
     let _ = app.emit("recording-changed", RecordingChanged { id });
+    sync::request(&app);
     Ok(recording)
 }
 
@@ -820,6 +834,11 @@ fn watch_meetings(app: AppHandle) {
 
 #[tauri::command]
 async fn process_recording(app: AppHandle, request: ProcessRequest) -> CmdResult<Transcript> {
+    run_processing(app, request).await
+}
+
+/// 받아 적기와 화자 나누기. 화면의 명령과 동기화(다른 기기에서 온 녹음 자동 처리)가 함께 쓴다
+pub(crate) async fn run_processing(app: AppHandle, request: ProcessRequest) -> CmdResult<Transcript> {
     let state = app.state::<AppState>();
     let id = request.id.clone();
     // 모델이 없으면 whisper.cpp의 알아보기 힘든 오류 대신 설치 방법을 알려 준다
@@ -859,7 +878,12 @@ async fn process_recording(app: AppHandle, request: ProcessRequest) -> CmdResult
         }
         let state = worker_app.state::<AppState>();
         let settings = state.store.get_settings(&state.home);
-        let recording = state.store.get(&worker_id)?;
+        let mut recording = state.store.get(&worker_id)?;
+        // 다른 기기에서 온 녹음은 오디오를 이때 받는다
+        if !state.store.audio_path(&recording)?.is_file() {
+            sync::fetch_audio(&worker_app, &worker_id)?;
+            recording = state.store.get(&worker_id)?;
+        }
         let audio = state.store.audio_path(&recording)?;
         let whisper = state.whisper(&settings.models.whisper)?;
         let track_paths = state.store.track_paths(&recording)?;
@@ -937,6 +961,7 @@ async fn process_recording(app: AppHandle, request: ProcessRequest) -> CmdResult
                     r.duration = Some(transcript.duration);
                 })
                 .map_err(err)?;
+            sync::request(&app);
             Ok(transcript)
         }
         Err(e) => {
@@ -1022,8 +1047,10 @@ pub fn run() {
                 recording_started: Mutex::new(None),
                 meeting: Mutex::new(meeting::Detector::default()),
                 meeting_prompt: Mutex::new(None),
+                syncer: sync::Syncer::new(),
             });
             watch_meetings(app.handle().clone());
+            sync::start(app.handle().clone());
 
             let handle = app.handle().clone();
             // 링크를 처리하기 전에 읽어야 링크로 앱을 띄운 경우도 확인할 수 있다
@@ -1078,6 +1105,10 @@ pub fn run() {
             meeting_prompt,
             meeting_prompt_respond,
             reveal_audio,
+            sync_status,
+            sync_now,
+            download_audio,
+            default_icloud_folder,
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
@@ -1180,6 +1211,30 @@ fn setup_deep_links(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> 
 }
 
 /// 녹음의 오디오 파일을 Finder(Windows는 탐색기)에서 보여 준다
+#[tauri::command]
+fn sync_status(state: State<AppState>) -> sync::SyncStatus {
+    state.syncer.status()
+}
+
+#[tauri::command]
+fn sync_now(app: AppHandle) {
+    sync::request(&app);
+}
+
+#[tauri::command]
+fn default_icloud_folder(state: State<AppState>) -> PathBuf {
+    sync::default_icloud_folder(&state.home)
+}
+
+/// 다른 기기에서 온 녹음의 오디오를 받는다. 진행은 "audio-download" 이벤트로 알린다
+#[tauri::command]
+async fn download_audio(app: AppHandle, id: String) -> CmdResult<()> {
+    tauri::async_runtime::spawn_blocking(move || sync::fetch_audio(&app, &id).map(|_| ()))
+        .await
+        .map_err(err)?
+        .map_err(|e| format!("{e:#}"))
+}
+
 #[tauri::command]
 fn reveal_audio(state: State<AppState>, id: String) -> CmdResult<()> {
     let recording = state.store.get(&id).map_err(err)?;

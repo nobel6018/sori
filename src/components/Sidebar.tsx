@@ -1,5 +1,6 @@
-import { ReactNode } from "react";
-import { formatTime, ProgressEvent, Recording, Status } from "../api";
+import { ReactNode, useEffect, useState } from "react";
+import { api, formatTime, ProgressEvent, Recording, Status, SyncStatus } from "../api";
+import { describe } from "./SyncSettings";
 import { IS_MAC } from "../shortcuts";
 
 const STATUS_LABEL: Record<Status, string> = {
@@ -69,7 +70,31 @@ export function Sidebar({ recordings, selectedId, progress, onSelect, onImport, 
         <button className="ghost" onClick={onOpenSettings}>
           설정
         </button>
+        <SyncBadge />
       </footer>
     </aside>
+  );
+}
+
+/** 동기화를 켰을 때만 보인다. 누르면 바로 동기화한다 */
+function SyncBadge() {
+  const [status, setStatus] = useState<SyncStatus | null>(null);
+  useEffect(() => {
+    api.syncStatus().then(setStatus);
+    const unlisten = api.onSyncStatus(setStatus);
+    return () => {
+      unlisten.then((f) => f());
+    };
+  }, []);
+  if (!status || status.provider === "local") return null;
+  return (
+    <button
+      className={`ghost sync-badge ${status.error ? "error" : ""}`}
+      title={status.error ?? "눌러서 지금 동기화"}
+      disabled={status.running}
+      onClick={() => api.syncNow()}
+    >
+      {status.running ? "동기화 중" : status.error ? "동기화 오류" : describe(status)}
+    </button>
   );
 }
