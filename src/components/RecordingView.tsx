@@ -253,6 +253,18 @@ export function RecordingView({ recording, progress, seekTo, onSeekDone, onChang
           className="title-input"
           defaultValue={rec.title}
           aria-label="녹음 제목"
+          title="Enter로 저장, Esc로 취소"
+          onKeyDown={(e) => {
+            // WebKit은 한글 조합을 확정하는 Enter를 isComposing 없이 keyCode 229로 보낸다
+            if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+            if (e.key === "Enter") {
+              e.preventDefault();
+              e.currentTarget.blur();
+            } else if (e.key === "Escape") {
+              e.currentTarget.value = rec.title;
+              e.currentTarget.blur();
+            }
+          }}
           onBlur={(e) => {
             const title = e.target.value.trim();
             if (title && title !== rec.title) saveRecording({ ...rec, title });

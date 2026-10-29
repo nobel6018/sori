@@ -255,6 +255,9 @@ button:focus-visible {
 }
 .title-input {
   flex: 1;
+  /* 창이 좁으면 버튼 대신 제목 칸이 줄어든다 */
+  min-width: 120px;
+  text-overflow: ellipsis;
   font-size: 20px;
   font-weight: 700;
   border-color: transparent;
@@ -267,7 +270,11 @@ button:focus-visible {
 }
 .header-actions {
   display: flex;
+  flex-shrink: 0;
   gap: 8px;
+}
+.header-actions > * {
+  white-space: nowrap;
 }
 .player {
   width: 100%;
