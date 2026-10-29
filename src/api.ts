@@ -6,6 +6,8 @@ export type Stage = "waiting" | "decoding" | "diarizing" | "transcribing";
 
 export interface Recording {
   id: string;
+  /** 사람이 부르기 쉬운 번호(#12). 만든 순서대로 붙는다 */
+  number: number;
   title: string;
   createdAt: string;
   sourceName: string;

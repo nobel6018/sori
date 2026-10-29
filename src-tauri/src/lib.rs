@@ -988,6 +988,7 @@ pub fn run() {
             let store = Store::new(data_dir)?;
             let voices_path = store.voices_path();
 
+            store.assign_missing_numbers()?;
             // 처리 도중 앱이 꺼졌던 녹음은 다시 시작할 수 있게 실패로 돌려 둔다
             for mut r in store.list()?.into_iter() {
                 match r.status {

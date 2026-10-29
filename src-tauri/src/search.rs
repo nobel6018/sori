@@ -72,7 +72,9 @@ pub fn search(store: &Store, index: &Index, query: &str) -> Result<Vec<Recording
         let transcript = index.transcript(store, &recording.id);
         let summary = store.get_summary(&recording.id).ok().flatten();
         let mut hits = find_hits(transcript.as_deref(), summary.as_ref().map(|s| s.markdown.as_str()), &needle);
-        let title_match = normalize(&recording.title).contains(&needle);
+        // "#12"나 "12"로 찾으면 그 번호의 녹음도 보여 준다
+        let number_match = needle.trim_start_matches('#').parse::<u32>().is_ok_and(|n| n == recording.number);
+        let title_match = number_match || normalize(&recording.title).contains(&needle);
         if !title_match && hits.is_empty() {
             continue;
         }

@@ -242,6 +242,13 @@ export function RecordingView({ recording, progress, seekTo, onSeekDone, onChang
   return (
     <div className="recording-view">
       <header className="recording-header">
+        <button
+          className="number-badge"
+          title="녹음 번호. 눌러서 복사합니다. MCP, Raycast, 빠른 찾기에서 이 번호로 부를 수 있습니다"
+          onClick={() => navigator.clipboard.writeText(`#${rec.number}`)}
+        >
+          #{rec.number}
+        </button>
         <input
           className="title-input"
           defaultValue={rec.title}

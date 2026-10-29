@@ -21,6 +21,7 @@ export interface Note {
 
 export interface Recording {
   id: string;
+  number?: number;
   title: string;
   createdAt: string;
   status: string;

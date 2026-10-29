@@ -122,7 +122,7 @@ export function QuickOpen({ initialQuery, onClose, onOpen }: Props) {
         <input
           className="quick-input"
           autoFocus
-          placeholder="녹음 제목, 요약, 전사에서 찾기"
+          placeholder="녹음 제목, 요약, 전사, 번호(#12)로 찾기"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           aria-label="검색어"
@@ -161,7 +161,7 @@ export function QuickOpen({ initialQuery, onClose, onOpen }: Props) {
                         <Highlight text={rec.title} query={r.group.titleMatch ? query : ""} />
                       </span>
                       <span className="quick-meta">
-                        {new Date(rec.createdAt).toLocaleDateString("ko-KR")}
+                        #{rec.number}, {new Date(rec.createdAt).toLocaleDateString("ko-KR")}
                         {rec.duration != null && `, ${formatTime(rec.duration)}`}
                         {r.group.total > r.group.hits.length && `, ${r.group.total}곳 중 ${r.group.hits.length}곳`}
                       </span>

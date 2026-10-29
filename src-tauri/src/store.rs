@@ -24,6 +24,9 @@ pub enum Status {
 #[serde(rename_all = "camelCase")]
 pub struct Recording {
     pub id: String,
+    /// 사람이 부르기 쉬운 번호(#12). 만든 순서대로 1부터 붙고 지워도 다시 쓰지 않는다. 0.4.3 이하 녹음은 시작할 때 채운다
+    #[serde(default)]
+    pub number: u32,
     pub title: String,
     pub created_at: DateTime<Utc>,
     pub source_name: String,
@@ -134,6 +137,8 @@ impl Settings {
 
 /// 녹음마다 폴더 하나를 쓴다. `meta.json`, 오디오 사본, `transcript.json`
 pub struct Store {
+    /// 새 녹음 번호를 겹치지 않게 매긴다
+    create_lock: std::sync::Mutex<()>,
     /// meta.json을 읽고 고쳐 쓰는 동안 다른 명령이 끼어들어 바꾼 값을 덮지 않게 한다
     meta_lock: std::sync::Mutex<()>,
     root: PathBuf,
@@ -147,6 +152,7 @@ impl Store {
         let root = data_dir.join("recordings");
         fs::create_dir_all(&root)?;
         Ok(Self {
+            create_lock: std::sync::Mutex::new(()),
             meta_lock: std::sync::Mutex::new(()),
             root,
             settings_path: data_dir.join("settings.json"),
@@ -174,6 +180,43 @@ impl Store {
 
     pub fn save_settings(&self, settings: &Settings) -> Result<()> {
         write_json(&self.settings_path, settings)
+    }
+
+    /// 지금까지 쓴 가장 큰 번호 + 1. 지운 녹음의 번호를 다시 쓰지 않도록 기록 파일에도 남긴다
+    fn next_number(&self) -> Result<u32> {
+        let counter = self.settings_path.with_file_name("last-number");
+        let saved: u32 = fs::read_to_string(&counter).ok().and_then(|s| s.trim().parse().ok()).unwrap_or(0);
+        let listed = self.list()?.iter().map(|r| r.number).max().unwrap_or(0);
+        let next = saved.max(listed) + 1;
+        fs::write(&counter, next.to_string())?;
+        Ok(next)
+    }
+
+    /// 번호가 없는 녹음(0.4.3 이하)에 만든 순서대로 번호를 붙인다
+    pub fn assign_missing_numbers(&self) -> Result<()> {
+        let _guard = self.create_lock.lock().unwrap();
+        let mut all = self.list()?;
+        if all.iter().all(|r| r.number > 0) {
+            return Ok(());
+        }
+        all.sort_by(|a, b| a.created_at.cmp(&b.created_at));
+        let mut next = all.iter().map(|r| r.number).max().unwrap_or(0);
+        for r in all.iter().filter(|r| r.number == 0) {
+            next += 1;
+            let n = next;
+            self.update(&r.id, |m| m.number = n)?;
+        }
+        fs::write(self.settings_path.with_file_name("last-number"), next.to_string())?;
+        Ok(())
+    }
+
+    /// "#12", "12", 또는 id로 녹음을 찾는다
+    pub fn resolve(&self, key: &str) -> Result<Recording> {
+        let key = key.trim();
+        if let Ok(n) = key.trim_start_matches('#').parse::<u32>() {
+            return self.list()?.into_iter().find(|r| r.number == n).ok_or_else(|| eyre!("#{n} 녹음이 없습니다"));
+        }
+        self.get(key)
     }
 
     pub fn list(&self) -> Result<Vec<Recording>> {
@@ -237,10 +280,13 @@ impl Store {
     }
 
     fn create(&self, title: String, source_name: String, audio_file: String, status: Status) -> Result<Recording> {
+        let _guard = self.create_lock.lock().unwrap();
+        let number = self.next_number()?;
         let id = uuid::Uuid::new_v4().to_string();
         fs::create_dir_all(self.root.join(&id))?;
         let recording = Recording {
             id,
+            number,
             title,
             created_at: Utc::now(),
             source_name,
@@ -346,4 +392,47 @@ fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<()> {
     fs::write(&tmp, serde_json::to_vec_pretty(value)?)?;
     fs::rename(&tmp, path)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod number_tests {
+    use super::*;
+
+    fn store() -> (Store, PathBuf) {
+        let dir = std::env::temp_dir().join(format!("sori-store-{}", uuid::Uuid::new_v4()));
+        (Store::new(dir.clone()).unwrap(), dir)
+    }
+
+    #[test]
+    fn 번호는_순서대로_붙고_지운_번호는_다시_쓰지_않는다() {
+        let (store, dir) = store();
+
+        let a = store.create_for_recording("a".into(), "s".into(), vec![]).unwrap();
+        let b = store.create_for_recording("b".into(), "s".into(), vec![]).unwrap();
+        store.delete(&b.id).unwrap();
+        let c = store.create_for_recording("c".into(), "s".into(), vec![]).unwrap();
+
+        assert_eq!((a.number, b.number, c.number), (1, 2, 3));
+        assert_eq!(store.resolve("#3").unwrap().id, c.id);
+        assert_eq!(store.resolve("1").unwrap().id, a.id);
+        assert!(store.resolve("#2").is_err());
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn 번호가_없는_예전_녹음은_만든_순서대로_채운다() {
+        let (store, dir) = store();
+        let old = store.create_for_recording("old".into(), "s".into(), vec![]).unwrap();
+        let new = store.create_for_recording("new".into(), "s".into(), vec![]).unwrap();
+        for id in [&old.id, &new.id] {
+            store.update(id, |r| r.number = 0).unwrap();
+        }
+        let _ = fs::remove_file(dir.join("last-number"));
+
+        store.assign_missing_numbers().unwrap();
+
+        assert_eq!(store.get(&old.id).unwrap().number, 1);
+        assert_eq!(store.get(&new.id).unwrap().number, 2);
+        fs::remove_dir_all(dir).unwrap();
+    }
 }

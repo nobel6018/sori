@@ -29,6 +29,8 @@ const HITS_PER_RECORDING = 20;
 async function search(recordings: Recording[], query: string): Promise<Group[]> {
   const needle = normalize(query);
   if (!needle) return recordings.map((recording) => ({ recording, hits: [] }));
+  // "#12"나 "12"로 찾으면 그 번호의 녹음을 먼저 보여 준다
+  const asNumber = /^#?\d+$/.test(needle) ? Number(needle.replace("#", "")) : null;
   const groups = await Promise.all(
     recordings.map(async (recording) => {
       const [transcript, summary] = await Promise.all([getTranscript(recording.id), getSummary(recording.id)]);
@@ -40,7 +42,7 @@ async function search(recordings: Recording[], query: string): Promise<Group[]> 
       for (const u of transcript?.utterances ?? []) {
         if (normalize(u.text).includes(needle)) hits.push({ kind: "utterance", start: u.start, speaker: u.speaker, text: u.text.trim() });
       }
-      const titleMatch = normalize(recording.title).includes(needle);
+      const titleMatch = recording.number === asNumber || normalize(recording.title).includes(needle);
       return titleMatch || hits.length > 0 ? { recording, hits: hits.slice(0, HITS_PER_RECORDING) } : null;
     }),
   );
@@ -171,10 +173,11 @@ export function Recordings({ searchable }: { searchable: boolean }) {
               title={r.title}
               icon={Icon.Microphone}
               accessories={[
+                ...(r.number ? [{ text: `#${r.number}` }] : []),
                 { tag: { value: STATUS[r.status].text, color: STATUS[r.status].color } },
                 ...(r.duration != null ? [{ text: formatTime(r.duration) }] : []),
               ]}
-              keywords={[new Date(r.createdAt).toLocaleDateString("ko-KR")]}
+              keywords={[new Date(r.createdAt).toLocaleDateString("ko-KR"), ...(r.number ? [`#${r.number}`, String(r.number)] : [])]}
               detail={<List.Item.Detail markdown={markdown} />}
               actions={actions(r)}
             />

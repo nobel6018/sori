@@ -32,6 +32,7 @@ export function transcriptMarkdown(recording: Recording, utterances: Utterance[]
 export function recordingMarkdown({ recording, transcript, summary }: Detail): string {
   const lines = [`# ${recording.title}`, ""];
   const date = new Date(recording.createdAt).toLocaleString("ko-KR", { dateStyle: "medium", timeStyle: "short" });
+  if (recording.number) lines.push(`- 번호: #${recording.number}`);
   lines.push(`- 날짜: ${date}`);
   if (recording.duration != null) lines.push(`- 길이: ${formatTime(recording.duration)}`);
   if (transcript) {

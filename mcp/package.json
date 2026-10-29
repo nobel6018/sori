@@ -1,6 +1,6 @@
 {
   "name": "sori-mcp",
-  "version": "0.4.0",
+  "version": "0.4.4",
   "private": true,
   "description": "sori 녹음의 요약과 전사를 Claude 같은 MCP 클라이언트에서 찾고 읽는 서버 (읽기 전용)",
   "type": "module",

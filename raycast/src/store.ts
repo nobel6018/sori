@@ -9,6 +9,7 @@ export const DATA_DIR = join(homedir(), "Library/Application Support/com.nobel60
 
 export interface Recording {
   id: string;
+  number?: number;
   title: string;
   createdAt: string;
   status: "recording" | "new" | "processing" | "done" | "failed";

@@ -6,7 +6,7 @@ Claude Code, Claude 데스크톱 같은 MCP 클라이언트에서 sori 녹음을
 |---|---|
 | `list_recordings` | 최신순 녹음 목록(id, 제목, 날짜, 길이, 요약 여부) |
 | `search_recordings` | 제목, 요약, 전사에서 낱말 찾기. 띄어쓰기와 대소문자는 무시 |
-| `get_recording` | 녹음 하나의 요약, 메모, 전사를 마크다운으로 |
+| `get_recording` | 녹음 하나의 요약, 메모, 전사를 마크다운으로. 번호(`12`, `#12`)나 id로 부른다 |
 
 ## 설치
 
@@ -34,6 +34,7 @@ Claude 데스크톱은 설정 파일(`claude_desktop_config.json`)의 `mcpServer
 
 ## 쓰는 예
 
+- "sori 12번 녹음 요약해서 회의록으로 정리해 줘"
 - "sori에서 지난주 배포 회의 찾아서 결정 사항 정리해 줘"
 - "sori 녹음 중에 민지가 말한 걱정거리 모아서 이슈로 만들어 줘"
 - "오늘 회의 요약을 PR 설명에 넣어 줘"

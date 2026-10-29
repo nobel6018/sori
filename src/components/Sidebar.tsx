@@ -45,7 +45,10 @@ export function Sidebar({ recordings, selectedId, progress, onSelect, onImport, 
           return (
             <li key={r.id}>
               <button className={`recording-item ${r.id === selectedId ? "selected" : ""}`} onClick={() => onSelect(r.id)}>
-                <span className="recording-title">{r.title}</span>
+                <span className="recording-title">
+                  <span className="recording-number">#{r.number}</span>
+                  {r.title}
+                </span>
                 <span className="recording-meta">
                   <span className={`badge badge-${r.status}`}>
                     {r.status === "processing" && p
