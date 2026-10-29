@@ -52,7 +52,13 @@ pub fn diarize(
         }
         0
     });
-    let segments = sd.compute(samples.to_vec(), Some(callback))?;
+    // 화자 분리 모델이 말소리를 하나도 못 찾으면 sherpa-rs는 결과 없음을 오류로 돌려준다.
+    // 작게 말했거나 아주 짧은 녹음에서 생기므로, 빈 결과로 바꿔 받아 적기는 계속하게 한다
+    let segments = match sd.compute(samples.to_vec(), Some(callback)) {
+        Ok(s) => s,
+        Err(e) if e.to_string().contains("No segments found") => Vec::new(),
+        Err(e) => return Err(e),
+    };
 
     Ok(segments
         .into_iter()

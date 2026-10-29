@@ -90,6 +90,13 @@ pub fn process(
         },
         move |p| progress(Stage::Diarizing, p),
     )?;
+    // 화자 분리가 말소리를 못 찾았으면 녹음 전체를 한 사람으로 보고 whisper에 맡긴다.
+    // whisper가 더 작은 말소리도 받아 적고, 정말 말이 없으면 빈 전사가 된다
+    let turns = if turns.is_empty() && duration > 0.0 {
+        vec![SpeakerTurn { start: 0.0, end: duration, speaker: 0 }]
+    } else {
+        turns
+    };
     // 화자 수를 알면 구간마다 임베딩을 다시 뽑아 그 수로 묶는다. 자동 모드는 기준값이
     // 녹음 환경마다 크게 흔들려(회의실 녹음이 65명으로 쪼개졌다) sherpa 결과를 그대로 둔다
     check_cancel()?;
