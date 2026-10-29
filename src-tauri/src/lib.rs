@@ -240,15 +240,14 @@ fn get_recording(state: State<AppState>, id: String) -> CmdResult<RecordingDetai
 fn update_recording(state: State<AppState>, recording: Recording) -> CmdResult<()> {
     // 상태와 오류는 처리 파이프라인이, 화자 이름과 메모는 각자의 명령이 바꾼다.
     // 화면이 들고 있던 예전 값으로 덮어쓰지 않도록 제목, 화자 수, 언어만 받는다
-    let current = state.store.get(&recording.id).map_err(err)?;
     state
         .store
-        .save(&Recording {
-            title: recording.title,
-            num_speakers: recording.num_speakers,
-            languages: recording.languages,
-            ..current
+        .update(&recording.id, |r| {
+            r.title = recording.title;
+            r.num_speakers = recording.num_speakers;
+            r.languages = recording.languages;
         })
+        .map(|_| ())
         .map_err(err)
 }
 
@@ -373,9 +372,7 @@ async fn stop_recording(app: AppHandle) -> CmdResult<Recording> {
     // 패닉해도 녹음 상태는 아래에서 마무리한다. 여기서 빠져나가면 "녹음 중"에 묶인다
     .unwrap_or_else(|e| Err(eyre::eyre!("트랙을 합치다 멈췄습니다: {e}")));
 
-    let mut recording = state.store.get(&id).map_err(err)?;
-    recording.status = Status::New;
-    recording.error = match (&result, &mixed) {
+    let error = match (&result, &mixed) {
         (Err(e), _) => Some(format!("녹음을 마무리하지 못했습니다: {e:#}")),
         (_, Err(e)) => Some(format!("트랙을 합치지 못했습니다: {e:#}")),
         (Ok(f), Ok(_)) => f
@@ -383,9 +380,15 @@ async fn stop_recording(app: AppHandle) -> CmdResult<Recording> {
             .as_ref()
             .map(|e| format!("녹음 장치 오류로 중간에 멈췄습니다. 그 전까지는 저장됐습니다: {e}")),
     };
-    recording.duration = mixed.ok();
-    state.store.save(&recording).map_err(err)?;
-    Ok(recording)
+    // 녹음하는 동안 남긴 메모가 있으므로 다시 읽어 상태만 바꾼다
+    state
+        .store
+        .update(&id, |r| {
+            r.status = Status::New;
+            r.error = error;
+            r.duration = mixed.ok();
+        })
+        .map_err(err)
 }
 
 #[tauri::command]
@@ -432,14 +435,17 @@ async fn summarize_recording(
         .map_err(err)?
         .ok_or("먼저 전사를 끝내 주세요")?;
     let settings = state.store.get_settings(&state.home);
-    let template_id = template.or(settings.default_template.clone());
-    let chosen = settings
-        .summary_templates
-        .iter()
-        .find(|t| Some(&t.id) == template_id.as_ref())
-        .or(settings.summary_templates.first())
-        .cloned()
-        .ok_or("요약 템플릿이 없습니다")?;
+    // 고른 템플릿이 그사이 설정에서 지워졌으면 다른 템플릿으로 몰래 요약하지 않고 알린다
+    let chosen = match &template {
+        Some(id) => settings.summary_templates.iter().find(|t| &t.id == id).cloned().ok_or("고른 요약 템플릿이 없습니다. 설정에서 지웠는지 확인해 주세요")?,
+        None => settings
+            .summary_templates
+            .iter()
+            .find(|t| Some(&t.id) == settings.default_template.as_ref())
+            .or(settings.summary_templates.first())
+            .cloned()
+            .ok_or("요약 템플릿이 없습니다")?,
+    };
     // CLI를 고르지 않았으면(자동 요약) 지난번에 쓴 것, 없으면 설치된 것 중 첫째
     let provider = match provider.or(settings.summary_provider) {
         Some(p) => p,
@@ -578,67 +584,104 @@ fn add_note(app: AppHandle, state: State<AppState>, id: Option<String>, time: Op
             .map_or(0.0, |t| t.elapsed().as_secs_f32()),
         None => 0.0,
     };
-    let mut recording = state.store.get(&id).map_err(err)?;
-    let at = recording.notes.partition_point(|n| n.time <= time);
-    recording.notes.insert(at, store::Note { time, text: text.trim().to_string() });
-    state.store.save(&recording).map_err(err)?;
+    let recording = state
+        .store
+        .update(&id, |r| {
+            let at = r.notes.partition_point(|n| n.time <= time);
+            r.notes.insert(at, store::Note { time, text: text.trim().to_string() });
+        })
+        .map_err(err)?;
     let _ = app.emit("recording-changed", RecordingChanged { id });
     Ok(recording)
 }
 
 #[tauri::command]
 fn delete_note(app: AppHandle, state: State<AppState>, id: String, index: usize) -> CmdResult<Recording> {
-    let mut recording = state.store.get(&id).map_err(err)?;
-    if index < recording.notes.len() {
-        recording.notes.remove(index);
-    }
-    state.store.save(&recording).map_err(err)?;
+    let recording = state
+        .store
+        .update(&id, |r| {
+            if index < r.notes.len() {
+                r.notes.remove(index);
+            }
+        })
+        .map_err(err)?;
     let _ = app.emit("recording-changed", RecordingChanged { id });
     Ok(recording)
 }
 
 /// 화자 이름을 바꾼다. 목소리 기억이 켜져 있으면 이 녹음의 목소리를 그 이름으로 기억하고,
-/// 예전에 다른 이름으로 알아본 화자였다면 그 이름 쪽에서 이 녹음의 목소리를 뺀다
+/// 예전에 다른 이름으로 알아본 화자였다면 그 이름 쪽에서 이 녹음의 목소리를 뺀다.
+/// 목소리 기억은 덤이라 실패해도 이름은 바꾼다
 #[tauri::command]
 async fn name_speaker(app: AppHandle, id: String, speaker: i32, name: String) -> CmdResult<Recording> {
     tauri::async_runtime::spawn_blocking(move || -> eyre::Result<Recording> {
         let state = app.state::<AppState>();
-        let settings = state.store.get_settings(&state.home);
-        let mut recording = state.store.get(&id)?;
         let key = speaker.to_string();
         let name = name.trim().to_string();
-        let previous_voice = recording.voice_ids.remove(&key);
-        if name.is_empty() {
-            recording.speaker_names.remove(&key);
-        } else {
-            recording.speaker_names.insert(key.clone(), name.clone());
+        let mut previous_voice = None;
+        let recording = state.store.update(&id, |r| {
+            previous_voice = r.voice_ids.remove(&key);
+            if name.is_empty() {
+                r.speaker_names.remove(&key);
+            } else {
+                r.speaker_names.insert(key.clone(), name.clone());
+            }
+        })?;
+        if !state.store.get_settings(&state.home).remember_voices {
+            return Ok(recording);
         }
-
-        if settings.remember_voices {
-            if let Some(mut transcript) = state.store.get_transcript(&id)? {
-                // 0.3.0 이하에서 처리한 녹음은 목소리 특징이 없어 지금 뽑는다
-                if transcript.speaker_embeddings.is_empty() {
-                    let audio = state.store.audio_path(&recording)?;
-                    transcript.speaker_embeddings = engine::embeddings_for(&audio, &transcript.turns, &settings.models.embedding)?;
-                    state.store.save_transcript(&id, &transcript)?;
+        match remember_speaker(&state, &recording, speaker, &name, previous_voice.as_deref()) {
+            Ok(Some(voice)) => Ok(state.store.update(&id, |r| {
+                // 기억하는 사이 이름이 또 바뀌었으면 연결하지 않는다
+                if r.speaker_names.get(&key) == Some(&name) {
+                    r.voice_ids.insert(key.clone(), voice);
                 }
-                if let Some(embedding) = transcript.speaker_embeddings.get(&speaker) {
-                    if let Some(voice) = &previous_voice {
-                        state.voices.forget_sample(voice, embedding)?;
-                    }
-                    if !name.is_empty() {
-                        let voice = state.voices.remember(&name, embedding)?;
-                        recording.voice_ids.insert(key, voice);
-                    }
-                }
+            })?),
+            Ok(None) => Ok(recording),
+            Err(e) => {
+                eprintln!("목소리를 기억하지 못했습니다({id} 화자 {speaker}): {e:#}");
+                Ok(recording)
             }
         }
-        state.store.save(&recording)?;
-        Ok(recording)
     })
     .await
     .map_err(err)?
     .map_err(|e| format!("{e:#}"))
+}
+
+/// 화자의 목소리 특징을 이름에 더한다. 기억한 목소리 id를 돌려준다
+fn remember_speaker(state: &AppState, recording: &Recording, speaker: i32, name: &str, previous: Option<&str>) -> eyre::Result<Option<String>> {
+    let Some(transcript) = state.store.get_transcript(&recording.id)? else {
+        return Ok(None);
+    };
+    let embedding = match transcript.speaker_embeddings.get(&speaker) {
+        Some(e) => e.clone(),
+        None if transcript.speaker_embeddings.is_empty() => {
+            // 0.3.0 이하에서 처리한 녹음은 목소리 특징이 없어 지금 뽑는다. 그사이 다시 처리했으면 새 전사를 덮지 않는다
+            let settings = state.store.get_settings(&state.home);
+            let audio = state.store.audio_path(recording)?;
+            let embeddings = engine::embeddings_for(&audio, &transcript.turns, &settings.models.embedding)?;
+            let found = embeddings.get(&speaker).cloned();
+            if let Some(mut latest) = state.store.get_transcript(&recording.id)? {
+                if latest.speaker_embeddings.is_empty() && latest.turns.len() == transcript.turns.len() {
+                    latest.speaker_embeddings = embeddings;
+                    state.store.save_transcript(&recording.id, &latest)?;
+                }
+            }
+            match found {
+                Some(e) => e,
+                None => return Ok(None),
+            }
+        }
+        None => return Ok(None),
+    };
+    if let Some(voice) = previous {
+        state.voices.forget_sample(voice, &embedding)?;
+    }
+    if name.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(state.voices.remember(name, &embedding)?))
 }
 
 #[tauri::command]
@@ -660,22 +703,37 @@ fn delete_voice(state: State<AppState>, id: String) -> CmdResult<()> {
     state.voices.delete(&id).map_err(err)
 }
 
-/// 저장 창에서 고른 경로에 내보낸 파일을 쓴다. 본문은 바이트 그대로 받고, 경로는 x-path 헤더(URL 인코딩)로 받는다
+/// 저장 창을 띄워 내보낸 파일을 쓴다. 경로는 여기서 고르게 해, 화면 코드가 임의 경로에 쓰지 못하게 한다.
+/// 본문은 바이트 그대로, 제안할 파일 이름은 x-name 헤더(URL 인코딩)로 받는다. 취소하면 false
 #[tauri::command]
-fn save_export(request: tauri::ipc::Request) -> CmdResult<()> {
-    let encoded = request
+async fn save_export(app: AppHandle, request: tauri::ipc::Request<'_>) -> CmdResult<bool> {
+    use tauri_plugin_dialog::DialogExt;
+    let name = request
         .headers()
-        .get("x-path")
+        .get("x-name")
         .and_then(|v| v.to_str().ok())
-        .ok_or("저장할 경로가 없습니다")?;
-    let path = tauri::Url::parse(&format!("sori://export?p={encoded}"))
-        .ok()
-        .and_then(|u| u.query_pairs().find(|(k, _)| k == "p").map(|(_, v)| PathBuf::from(v.into_owned())))
-        .ok_or("저장할 경로를 읽지 못했습니다")?;
+        .and_then(|v| tauri::Url::parse(&format!("sori://export?n={v}")).ok())
+        .and_then(|u| u.query_pairs().find(|(k, _)| k == "n").map(|(_, v)| v.into_owned()))
+        .unwrap_or_else(|| "sori".into());
     let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
         return Err("내보낼 내용이 없습니다".into());
     };
-    std::fs::write(&path, bytes).map_err(|e| format!("{}에 저장하지 못했습니다: {e}", path.display()))
+    let bytes = bytes.clone();
+    let ext = Path::new(&name).extension().map(|e| e.to_string_lossy().into_owned()).unwrap_or_default();
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    let mut dialog = app.dialog().file().set_file_name(&name);
+    if !ext.is_empty() {
+        dialog = dialog.add_filter(ext.to_uppercase(), &[ext.as_str()]);
+    }
+    dialog.save_file(move |path| {
+        let _ = tx.send(path);
+    });
+    let Some(path) = rx.await.map_err(err)? else {
+        return Ok(false);
+    };
+    let path = path.into_path().map_err(err)?;
+    std::fs::write(&path, bytes).map_err(|e| format!("{}에 저장하지 못했습니다: {e}", path.display()))?;
+    Ok(true)
 }
 
 /// 회의 질문 창이 띄울 내용
@@ -689,7 +747,8 @@ fn meeting_prompt(state: State<AppState>) -> Option<meeting::Prompt> {
 fn meeting_prompt_respond(app: AppHandle, state: State<AppState>, accept: bool) {
     let prompt = state.meeting_prompt.lock().unwrap().take();
     if let Some(window) = app.get_webview_window(MEETING_WINDOW) {
-        let _ = window.close();
+        // close는 이벤트 루프를 거쳐 늦게 닫혀, 바로 같은 이름으로 새 창을 만들면 실패한다
+        let _ = window.destroy();
     }
     match prompt {
         Some(meeting::Prompt::Start { app: name }) if accept => {
@@ -707,7 +766,7 @@ const MEETING_WINDOW: &str = "meeting-prompt";
 fn show_meeting_prompt(app: &AppHandle, prompt: meeting::Prompt) {
     *app.state::<AppState>().meeting_prompt.lock().unwrap() = Some(prompt);
     if let Some(window) = app.get_webview_window(MEETING_WINDOW) {
-        let _ = window.close();
+        let _ = window.destroy();
     }
     let (width, height) = (360.0, 108.0);
     let (x, y) = app
@@ -763,12 +822,15 @@ async fn process_recording(app: AppHandle, request: ProcessRequest) -> CmdResult
     // 모델이 없으면 whisper.cpp의 알아보기 힘든 오류 대신 설치 방법을 알려 준다
     models::check(&state.store.get_settings(&state.home).models)?;
 
-    let mut recording = state.store.get(&id).map_err(err)?;
-    recording.status = Status::Processing;
-    recording.error = None;
-    recording.num_speakers = request.num_speakers;
-    recording.languages = request.languages.clone();
-    state.store.save(&recording).map_err(err)?;
+    state
+        .store
+        .update(&id, |r| {
+            r.status = Status::Processing;
+            r.error = None;
+            r.num_speakers = request.num_speakers;
+            r.languages = request.languages.clone();
+        })
+        .map_err(err)?;
 
     let cancel = Arc::new(AtomicBool::new(false));
     state.cancels.lock().unwrap().insert(id.clone(), cancel.clone());
@@ -820,12 +882,12 @@ async fn process_recording(app: AppHandle, request: ProcessRequest) -> CmdResult
     .unwrap_or_else(|e| Err(eyre::eyre!("처리하다 멈췄습니다: {e}")));
 
     state.cancels.lock().unwrap().remove(&id);
-    let mut recording = state.store.get(&id).map_err(err)?;
     match result {
         Ok(transcript) => {
             state.store.save_transcript(&id, &transcript).map_err(err)?;
-            // 다시 처리하면 화자 번호가 바뀔 수 있어, 예전 번호에 붙인 이름은 지운다
-            recording.speaker_names.clear();
+            // 다시 처리하면 화자 번호가 바뀔 수 있어, 예전 번호에 붙인 이름은 지우고 새로 붙인다
+            let mut names = std::collections::BTreeMap::new();
+            let mut voice_ids = std::collections::BTreeMap::new();
             // 마이크 쪽 화자가 한 명뿐이면 녹음한 본인이다
             let locals: Vec<i32> = transcript
                 .origins
@@ -834,36 +896,43 @@ async fn process_recording(app: AppHandle, request: ProcessRequest) -> CmdResult
                 .map(|(s, _)| *s)
                 .collect();
             if let [me] = locals.as_slice() {
-                recording.speaker_names.insert(me.to_string(), "나".to_string());
+                names.insert(me.to_string(), "나".to_string());
             }
-            recording.voice_ids.clear();
-            let settings = state.store.get_settings(&state.home);
-            if settings.remember_voices {
-                // 마이크 쪽 한 사람은 녹음한 본인이 확실하므로 "나"의 목소리로 기억해 둔다.
-                // 가져온 파일에서도 본인을 알아보게 된다
+            if state.store.get_settings(&state.home).remember_voices {
+                // 마이크 쪽 한 사람은 본인이 확실하므로 "나"의 목소리로 기억해 둔다. 가져온 파일에서도 본인을 알아본다
                 if let [me] = locals.as_slice() {
                     if let Some(e) = transcript.speaker_embeddings.get(me) {
                         if let Ok(voice) = state.voices.remember("나", e) {
-                            recording.voice_ids.insert(me.to_string(), voice);
+                            voice_ids.insert(me.to_string(), voice);
                         }
                     }
                 }
-                let named: std::collections::BTreeSet<i32> = recording.speaker_names.keys().filter_map(|k| k.parse().ok()).collect();
+                let named: std::collections::BTreeSet<i32> = names.keys().filter_map(|k| k.parse().ok()).collect();
                 for m in state.voices.match_speakers(&transcript.speaker_embeddings, &named) {
-                    recording.speaker_names.insert(m.speaker.to_string(), m.name);
-                    recording.voice_ids.insert(m.speaker.to_string(), m.voice_id);
+                    names.insert(m.speaker.to_string(), m.name);
+                    voice_ids.insert(m.speaker.to_string(), m.voice_id);
                 }
             }
-            recording.status = Status::Done;
-            recording.duration = Some(transcript.duration);
-            state.store.save(&recording).map_err(err)?;
+            state
+                .store
+                .update(&id, |r| {
+                    r.speaker_names = names;
+                    r.voice_ids = voice_ids;
+                    r.status = Status::Done;
+                    r.duration = Some(transcript.duration);
+                })
+                .map_err(err)?;
             Ok(transcript)
         }
         Err(e) => {
             let message = format!("{e:#}");
-            recording.status = Status::Failed;
-            recording.error = Some(message.clone());
-            state.store.save(&recording).map_err(err)?;
+            state
+                .store
+                .update(&id, |r| {
+                    r.status = Status::Failed;
+                    r.error = Some(message.clone());
+                })
+                .map_err(err)?;
             Err(message)
         }
     }

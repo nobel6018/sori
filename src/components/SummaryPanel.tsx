@@ -46,12 +46,21 @@ export function SummaryPanel({ recordingId, summaries, onSummarized }: Props) {
     };
   }, [recordingId, onSummarized]);
 
+  // 설정에서 템플릿을 고친 뒤에도 이 화면은 그대로 있으므로, 고를 때와 요약할 때 다시 읽는다
+  const reloadTemplates = async () => {
+    const settings = await api.getSettings();
+    setTemplates(settings.summaryTemplates);
+    const valid = settings.summaryTemplates.some((t) => t.id === template);
+    if (!valid) setTemplate(settings.defaultTemplate);
+    return valid ? template : settings.defaultTemplate;
+  };
+
   const run = async () => {
     if (!provider) return;
     setError(null);
     setShown(null);
     try {
-      await api.summarize(recordingId, provider, template);
+      await api.summarize(recordingId, provider, await reloadTemplates());
     } catch (e) {
       setError(String(e));
     }
@@ -86,6 +95,7 @@ export function SummaryPanel({ recordingId, summaries, onSummarized }: Props) {
         <select
           aria-label="요약 템플릿"
           value={template ?? ""}
+          onFocus={reloadTemplates}
           disabled={running || templates.length === 0}
           onChange={(e) => setTemplate(e.target.value)}
         >
@@ -150,7 +160,10 @@ export function SummaryPanel({ recordingId, summaries, onSummarized }: Props) {
               지우기
             </button>
           </div>
-          <Markdown remarkPlugins={[remarkGfm]}>{current.markdown}</Markdown>
+          {/* 요약은 LLM이 쓴 글이라, 외부 이미지를 그리면 그 주소로 요청이 나간다. 이미지는 그리지 않는다 */}
+          <Markdown remarkPlugins={[remarkGfm]} disallowedElements={["img"]}>
+            {current.markdown}
+          </Markdown>
           <p className="muted summary-meta">
             {current.template ? `${current.template}, ` : ""}
             {PROVIDER_LABEL[current.provider]}, {new Date(current.createdAt).toLocaleString("ko-KR")}

@@ -127,6 +127,8 @@ impl Settings {
 
 /// 녹음마다 폴더 하나를 쓴다. `meta.json`, 오디오 사본, `transcript.json`
 pub struct Store {
+    /// meta.json을 읽고 고쳐 쓰는 동안 다른 명령이 끼어들어 바꾼 값을 덮지 않게 한다
+    meta_lock: std::sync::Mutex<()>,
     root: PathBuf,
     settings_path: PathBuf,
     /// scripts/install-models가 모델을 받는 폴더
@@ -138,6 +140,7 @@ impl Store {
         let root = data_dir.join("recordings");
         fs::create_dir_all(&root)?;
         Ok(Self {
+            meta_lock: std::sync::Mutex::new(()),
             root,
             settings_path: data_dir.join("settings.json"),
             models_dir: data_dir.join("models"),
@@ -180,7 +183,19 @@ impl Store {
     }
 
     pub fn save(&self, recording: &Recording) -> Result<()> {
+        let _guard = self.meta_lock.lock().unwrap();
         write_json(&self.dir(&recording.id)?.join("meta.json"), recording)
+    }
+
+    /// 잠근 채 최신 meta.json을 다시 읽어 고치고 저장한다. 오래 걸리는 작업 뒤에 저장할 때는
+    /// 처음에 읽어 둔 값을 쓰지 말고 이것으로 필요한 필드만 바꾼다
+    pub fn update(&self, id: &str, change: impl FnOnce(&mut Recording)) -> Result<Recording> {
+        let _guard = self.meta_lock.lock().unwrap();
+        let path = self.dir(id)?.join("meta.json");
+        let mut recording: Recording = read_json(&path).wrap_err_with(|| format!("녹음을 찾을 수 없습니다: {id}"))?;
+        change(&mut recording);
+        write_json(&path, &recording)?;
+        Ok(recording)
     }
 
     pub fn import(&self, source: &Path) -> Result<Recording> {
@@ -318,7 +333,8 @@ fn read_json<T: DeserializeOwned>(path: &Path) -> Result<T> {
 
 /// 임시 파일에 쓰고 이름을 바꿔서, 쓰는 도중 앱이 꺼져도 기존 파일이 깨지지 않게 한다
 fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<()> {
-    let tmp = path.with_extension("json.tmp");
+    // 두 곳에서 같은 파일을 동시에 저장해도 임시 파일이 겹치지 않게 이름을 매번 다르게 한다
+    let tmp = path.with_extension(format!("{}.tmp", uuid::Uuid::new_v4().simple()));
     fs::write(&tmp, serde_json::to_vec_pretty(value)?)?;
     fs::rename(&tmp, path)?;
     Ok(())

@@ -67,8 +67,13 @@ impl VoiceBook {
         Self { path, lock: Mutex::new(()) }
     }
 
-    fn load(&self) -> Vec<Voice> {
-        fs::read(&self.path).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
+    /// 파일이 없으면 빈 목록. 있는데 못 읽으면 오류를 내, 빈 목록으로 덮어써 기억을 잃지 않게 한다
+    fn load(&self) -> Result<Vec<Voice>> {
+        match fs::read(&self.path) {
+            Ok(bytes) => serde_json::from_slice(&bytes).map_err(|e| eyre::eyre!("목소리 기억 파일을 읽지 못했습니다({}): {e}", self.path.display())),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
+            Err(e) => Err(eyre::eyre!("목소리 기억 파일을 열지 못했습니다({}): {e}", self.path.display())),
+        }
     }
 
     fn save(&self, voices: &[Voice]) -> Result<()> {
@@ -82,6 +87,7 @@ impl VoiceBook {
         let _guard = self.lock.lock().unwrap();
         let mut list: Vec<VoiceInfo> = self
             .load()
+            .unwrap_or_default()
             .into_iter()
             .map(|v| VoiceInfo { id: v.id, name: v.name, samples: v.samples.len(), updated_at: v.updated_at })
             .collect();
@@ -92,7 +98,7 @@ impl VoiceBook {
     /// 이름의 목소리에 표본을 더한다. 처음 보는 이름이면 새로 만든다. 목소리 id를 돌려준다
     pub fn remember(&self, name: &str, embedding: &[f32]) -> Result<String> {
         let _guard = self.lock.lock().unwrap();
-        let mut voices = self.load();
+        let mut voices = self.load()?;
         let sample = normalize(embedding.to_vec());
         let id = match voices.iter_mut().find(|v| v.name == name) {
             Some(v) => {
@@ -118,7 +124,7 @@ impl VoiceBook {
     /// 잘못 기억한 표본을 지운다. 이름을 바꿨을 때 예전 이름 쪽에서 이 녹음의 목소리를 뺀다
     pub fn forget_sample(&self, voice_id: &str, embedding: &[f32]) -> Result<()> {
         let _guard = self.lock.lock().unwrap();
-        let mut voices = self.load();
+        let mut voices = self.load()?;
         let sample = normalize(embedding.to_vec());
         if let Some(v) = voices.iter_mut().find(|v| v.id == voice_id) {
             v.samples.retain(|s| similarity(s, &sample) <= DUPLICATE);
@@ -129,7 +135,7 @@ impl VoiceBook {
 
     pub fn rename(&self, voice_id: &str, name: &str) -> Result<()> {
         let _guard = self.lock.lock().unwrap();
-        let mut voices = self.load();
+        let mut voices = self.load()?;
         if let Some(v) = voices.iter_mut().find(|v| v.id == voice_id) {
             v.name = name.to_string();
         }
@@ -138,7 +144,7 @@ impl VoiceBook {
 
     pub fn delete(&self, voice_id: &str) -> Result<()> {
         let _guard = self.lock.lock().unwrap();
-        let mut voices = self.load();
+        let mut voices = self.load()?;
         voices.retain(|v| v.id != voice_id);
         self.save(&voices)
     }
@@ -147,7 +153,7 @@ impl VoiceBook {
     pub fn match_speakers(&self, speakers: &BTreeMap<i32, Vec<f32>>, skip: &BTreeSet<i32>) -> Vec<Match> {
         let voices = {
             let _guard = self.lock.lock().unwrap();
-            self.load()
+            self.load().unwrap_or_default()
         };
         assign(&voices.iter().map(|v| (v.id.clone(), v.name.clone(), v.centroid())).collect::<Vec<_>>(), speakers, skip)
     }

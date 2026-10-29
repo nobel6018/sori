@@ -41,7 +41,8 @@ const KNOWN: [(&str, &str); 22] = [
 ];
 
 pub fn known_name(key: &str) -> Option<&'static str> {
-    let key = key.to_lowercase();
+    // Windows 실행 파일 경로(C:#Program Files#...#Zoom.exe)는 파일 이름만 본다. 폴더 이름에 "webex" 같은 글자가 든 다른 앱을 잘못 알아보지 않게 한다
+    let key = key.rsplit('#').next().unwrap_or(key).to_lowercase();
     KNOWN.iter().find(|(pattern, _)| key.contains(pattern)).map(|(_, name)| *name)
 }
 

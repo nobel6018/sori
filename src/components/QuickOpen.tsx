@@ -212,7 +212,9 @@ function Preview({ detail, focusTime }: { detail: RecordingDetail | null; focusT
       {!transcript && <p className="muted">아직 받아 적지 않은 녹음입니다.</p>}
       {summary && focusTime == null && (
         <section className="summary-body preview-summary">
-          <Markdown remarkPlugins={[remarkGfm]}>{summary.markdown}</Markdown>
+          <Markdown remarkPlugins={[remarkGfm]} disallowedElements={["img"]}>
+            {summary.markdown}
+          </Markdown>
         </section>
       )}
       {transcript && !summary && focusTime == null && <p className="muted">요약이 없습니다. 전사 앞부분입니다.</p>}

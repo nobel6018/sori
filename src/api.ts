@@ -247,9 +247,9 @@ export const api = {
   listVoices: () => invoke<VoiceInfo[]>("list_voices"),
   renameVoice: (id: string, name: string) => invoke<void>("rename_voice", { id, name }),
   deleteVoice: (id: string) => invoke<void>("delete_voice", { id }),
-  /** 저장 창에서 고른 경로에 바이트를 그대로 쓴다 */
-  saveExport: (path: string, bytes: Uint8Array) =>
-    invoke<void>("save_export", bytes, { headers: { "x-path": encodeURIComponent(path) } }),
+  /** 백엔드가 저장 창을 띄우고 고른 곳에 쓴다. 취소하면 false */
+  saveExport: (fileName: string, bytes: Uint8Array) =>
+    invoke<boolean>("save_export", bytes, { headers: { "x-name": encodeURIComponent(fileName) } }),
   meetingPrompt: () => invoke<MeetingPrompt | null>("meeting_prompt"),
   meetingPromptRespond: (accept: boolean) => invoke<void>("meeting_prompt_respond", { accept }),
   cancelSummary: (id: string) => invoke<void>("cancel_summary", { id }),

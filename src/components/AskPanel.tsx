@@ -16,19 +16,29 @@ interface Turn {
   error: string | null;
 }
 
-/** "[12:34]", "[1:02:03]", "[R3 12:34]", "[R3]"를 찾는다 */
-const CITATION = /\[(R\d+)?\s?((?:\d+:)?\d{1,2}:\d{2})?\]/g;
+/** 대괄호 안의 인용 하나: "12:34", "105:30", "1:02:03", "R3 12:34", "R3" */
+const CITE_PART = /^(R\d+)?\s*(\d+:\d{2}(?::\d{2})?)?$/;
 
 function toSeconds(stamp: string): number {
   return stamp.split(":").reduce((n, part) => n * 60 + Number(part), 0);
 }
 
-/** 답의 시각 표시를 sori-cite: 링크로 바꿔, 마크다운 링크 렌더러에서 눌리게 한다 */
-function linkCitations(markdown: string): string {
-  return markdown.replace(CITATION, (whole, key: string | undefined, stamp: string | undefined) => {
-    if (!key && !stamp) return whole;
-    const label = [key, stamp].filter(Boolean).join(" ");
-    return `[${label}](sori-cite:${key ?? ""}/${stamp ? toSeconds(stamp) : ""})`;
+/**
+ * 답의 시각 표시를 sori-cite: 링크로 바꿔, 마크다운 링크 렌더러에서 눌리게 한다.
+ * "[R3 12:34, R5 01:10]"처럼 한 괄호에 여러 개를 묶어 써도 하나씩 링크로 만든다.
+ * 뒤에 (가 붙은 대괄호는 원래 마크다운 링크라 건드리지 않는다
+ */
+export function linkCitations(markdown: string): string {
+  return markdown.replace(/\[([^\[\]\n]{1,80})\](?!\()/g, (whole, inner: string) => {
+    const parts = inner.split(/[,;]\s*/).map((p) => p.trim().match(CITE_PART));
+    if (parts.some((m) => !m || (!m[1] && !m[2]))) return whole;
+    return parts
+      .map((m) => {
+        const [, key, stamp] = m!;
+        const label = [key, stamp].filter(Boolean).join(" ");
+        return `[${label}](sori-cite:${key ?? ""}/${stamp ? toSeconds(stamp) : ""})`;
+      })
+      .join(" ");
   });
 }
 
@@ -55,6 +65,16 @@ export function AskPanel({ recordingId, onCite }: Props) {
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: "end" });
   }, [turns]);
+
+  // 창을 닫거나 화면이 바뀌면 답을 받을 곳이 없어진다. 기다리던 질문은 취소해, 다시 열었을 때 막히지 않게 한다
+  const runningRef = useRef(false);
+  runningRef.current = running;
+  useEffect(
+    () => () => {
+      if (runningRef.current) api.cancelAsk(recordingId);
+    },
+    [recordingId],
+  );
 
   const ask = async (q: string) => {
     const text = q.trim();
@@ -103,6 +123,8 @@ export function AskPanel({ recordingId, onCite }: Props) {
               <div className="ask-answer summary-body">
                 <Markdown
                   remarkPlugins={[remarkGfm]}
+                  // 답은 LLM이 쓴 글이라, 외부 이미지를 그리면 그 주소로 요청이 나간다
+                  disallowedElements={["img"]}
                   urlTransform={(url) => url}
                   components={{
                     a: ({ href, children }) => {

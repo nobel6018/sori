@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { save } from "@tauri-apps/plugin-dialog";
 import { AskPanel } from "./AskPanel";
 import { NotesPanel } from "./NotesPanel";
 import { SummaryPanel } from "./SummaryPanel";
@@ -114,10 +113,8 @@ export function RecordingView({ recording, progress, seekTo, onSeekDone, onChang
 
   const exportAs = async (format: ExportFormat) => {
     if (!detail) return;
-    const path = await save({ defaultPath: exportFileName(rec.title, format), filters: [{ name: EXPORT_LABEL[format], extensions: [format] }] });
-    if (!path) return;
     try {
-      await api.saveExport(path, await exportBytes(detail, format));
+      await api.saveExport(exportFileName(rec.title, format), await exportBytes(detail, format));
     } catch (e) {
       setError(String(e));
     }
