@@ -100,32 +100,35 @@ fn delete_recording(app: AppHandle, state: State<AppState>, id: String) -> CmdRe
     Ok(())
 }
 
-/// 메모나 북마크(글이 빈 메모)를 더한다. time이 없으면 지금 녹음한 시간
+/// 메모나 북마크(글이 빈 메모)를 더한다. time이 없으면 지금 녹음한 시간.
+/// 네이티브(Swift)를 부르는 명령은 모두 async + spawn_blocking이다. 동기 명령은 메인 스레드에서 돌아,
+/// 메인 스레드에서 답하는 Swift 쪽과 서로 기다리며 앱이 멈췄다(0.6.0 녹음 화면이 0:00에서 멈춤)
 #[tauri::command]
-fn add_note(app: AppHandle, state: State<AppState>, id: String, time: Option<f64>, text: String) -> CmdResult<Value> {
-    let time = match time {
-        Some(t) => t.max(0.0),
-        None => app.sori_native().recorder_state().map(|s| s.time).unwrap_or(0.0),
-    };
-    let device = sync::device_id(&state.store);
-    let note = json!({ "time": time, "text": text.trim(), "id": uuid::Uuid::new_v4().to_string(), "device": device });
-    let meta = state
-        .store
-        .update(&id, &mut |m| {
-            let notes = m["notes"].as_array_mut();
-            let notes = match notes {
-                Some(n) => n,
-                None => {
+async fn add_note(app: AppHandle, id: String, time: Option<f64>, text: String) -> CmdResult<Value> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let time = match time {
+            Some(t) => t.max(0.0),
+            None => app.sori_native().recorder_state().map(|s| s.time).unwrap_or(0.0),
+        };
+        let device = sync::device_id(&state.store);
+        let note = json!({ "time": time, "text": text.trim(), "id": uuid::Uuid::new_v4().to_string(), "device": device });
+        let meta = state
+            .store
+            .update(&id, &mut |m| {
+                if !m["notes"].is_array() {
                     m["notes"] = json!([]);
-                    m["notes"].as_array_mut().unwrap()
                 }
-            };
-            let at = notes.partition_point(|n| n["time"].as_f64().unwrap_or(0.0) <= time);
-            notes.insert(at, note.clone());
-        })
-        .map_err(err)?;
-    changed(&app, &id);
-    Ok(meta)
+                let notes = m["notes"].as_array_mut().unwrap();
+                let at = notes.partition_point(|n| n["time"].as_f64().unwrap_or(0.0) <= time);
+                notes.insert(at, note.clone());
+            })
+            .map_err(err)?;
+        changed(&app, &id);
+        Ok(meta)
+    })
+    .await
+    .map_err(err)?
 }
 
 #[tauri::command]
@@ -195,10 +198,14 @@ struct Recorder {
 }
 
 #[tauri::command]
-fn recorder_state(app: AppHandle, state: State<AppState>) -> Recorder {
-    let id = state.recording.lock().unwrap().clone();
-    let native = if id.is_some() { app.sori_native().recorder_state().unwrap_or_default() } else { RecorderState::default() };
-    Recorder { id, state: native }
+async fn recorder_state(app: AppHandle) -> CmdResult<Recorder> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let id = app.state::<AppState>().recording.lock().unwrap().clone();
+        let native = if id.is_some() { app.sori_native().recorder_state().unwrap_or_default() } else { RecorderState::default() };
+        Recorder { id, state: native }
+    })
+    .await
+    .map_err(err)
 }
 
 #[tauri::command]
@@ -227,11 +234,15 @@ async fn choose_icloud_folder(app: AppHandle) -> CmdResult<bool> {
 
 /// 동기화를 끄고 이 기기에만 저장한다. 이미 받은 녹음은 남는다
 #[tauri::command]
-fn use_local_only(app: AppHandle, state: State<AppState>) -> CmdResult<()> {
-    app.sori_native().forget_folder().map_err(err)?;
-    sync::save_settings(&state.store, &sync::SyncSettings { provider: sync::Provider::Local }).map_err(err)?;
-    sync::set_status(&app, |s| *s = sync::SyncStatus::default());
-    Ok(())
+async fn use_local_only(app: AppHandle) -> CmdResult<()> {
+    tauri::async_runtime::spawn_blocking(move || {
+        app.sori_native().forget_folder().map_err(err)?;
+        sync::save_settings(&app.state::<AppState>().store, &sync::SyncSettings { provider: sync::Provider::Local }).map_err(err)?;
+        sync::set_status(&app, |s| *s = sync::SyncStatus::default());
+        Ok(())
+    })
+    .await
+    .map_err(err)?
 }
 
 #[tauri::command]

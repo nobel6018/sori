@@ -12,6 +12,16 @@ class PathArgs: Decodable {
   let path: String
 }
 
+/// UI와 AVAudioRecorder는 메인 스레드에서 다룬다. 호출한 쪽이 이미 메인 스레드면 바로 실행한다.
+/// 메인 스레드에서 Rust가 응답을 기다리는 중에 main.async로 넘기면 서로 기다리며 앱이 멈춘다
+private func onMain(_ work: @escaping () -> Void) {
+  if Thread.isMainThread {
+    work()
+  } else {
+    DispatchQueue.main.async(execute: work)
+  }
+}
+
 class SoriNativePlugin: Plugin, UIDocumentPickerDelegate {
   private var recorder: AVAudioRecorder?
   private var pendingPick: Invoke?
@@ -39,7 +49,7 @@ class SoriNativePlugin: Plugin, UIDocumentPickerDelegate {
   @objc public func startRecording(_ invoke: Invoke) throws {
     let args = try invoke.parseArgs(PathArgs.self)
     AVAudioApplication.requestRecordPermission { granted in
-      DispatchQueue.main.async {
+      onMain {
         guard granted else {
           invoke.reject("마이크 권한이 없습니다. 설정 > 앱 > sori에서 마이크를 켜 주세요")
           return
@@ -79,7 +89,7 @@ class SoriNativePlugin: Plugin, UIDocumentPickerDelegate {
   }
 
   @objc public func stopRecording(_ invoke: Invoke) {
-    DispatchQueue.main.async {
+    onMain {
       guard let recorder = self.recorder else {
         invoke.resolve(["duration": 0])
         return
@@ -93,7 +103,7 @@ class SoriNativePlugin: Plugin, UIDocumentPickerDelegate {
   }
 
   @objc public func recorderState(_ invoke: Invoke) {
-    DispatchQueue.main.async {
+    onMain {
       guard let recorder = self.recorder else {
         invoke.resolve(["recording": false, "time": 0, "level": 0])
         return
@@ -109,7 +119,7 @@ class SoriNativePlugin: Plugin, UIDocumentPickerDelegate {
   // MARK: iCloud Drive 폴더
 
   @objc public func pickFolder(_ invoke: Invoke) {
-    DispatchQueue.main.async {
+    onMain {
       let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.folder])
       picker.delegate = self
       picker.allowsMultipleSelection = false
