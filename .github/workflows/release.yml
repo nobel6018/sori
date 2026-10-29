@@ -17,9 +17,10 @@ permissions:
   contents: write
 
 concurrency:
-  # main의 캐시 데우기는 새 push가 오면 앞의 것을 멈춘다. 태그 빌드는 멈추지 않는다
+  # 같은 ref는 하나씩 돈다. 도는 중인 것은 끝까지 두고(취소하면 캐시를 저장하지 못한다),
+  # 기다리는 것은 가장 최근 push 하나만 남는다
   group: release-${{ github.ref }}
-  cancel-in-progress: ${{ startsWith(github.ref, 'refs/heads/') }}
+  cancel-in-progress: false
 
 env:
   IS_TAG: ${{ startsWith(github.ref, 'refs/tags/') }}
