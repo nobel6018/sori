@@ -3,26 +3,24 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { api, SyncProvider, SyncSettings as SyncSettingsValue, SyncStatus } from "../api";
 import { IS_MAC } from "../shortcuts";
 
-const PROVIDERS: { id: SyncProvider; label: string; hint: string; ready: boolean }[] = [
-  { id: "local", label: "이 기기에만", hint: "동기화하지 않습니다", ready: true },
-  {
-    id: "icloud",
-    label: "iCloud Drive",
-    hint: IS_MAC ? "iCloud Drive의 sori 폴더" : "iCloud for Windows의 iCloud Drive 폴더",
-    ready: true,
-  },
-  { id: "onedrive", label: "OneDrive", hint: "준비 중", ready: false },
-  { id: "googleDrive", label: "Google Drive", hint: "준비 중", ready: false },
+const PROVIDERS: { id: SyncProvider; label: string; hint: string }[] = [
+  { id: "local", label: "이 기기에만", hint: "동기화하지 않습니다" },
+  { id: "icloud", label: "iCloud Drive", hint: IS_MAC ? "iCloud Drive의 sori 폴더" : "iCloud for Windows의 iCloud Drive 폴더" },
+  { id: "onedrive", label: "OneDrive", hint: "OneDrive 앱이 동기화하는 폴더의 sori 폴더" },
 ];
 
 /** 설정 화면의 동기화 항목. 고른 값은 설정 저장과 함께 반영된다 @see docs/sync.md */
 export function SyncSettings({ value, onChange }: { value: SyncSettingsValue; onChange: (v: SyncSettingsValue) => void }) {
   const [status, setStatus] = useState<SyncStatus | null>(null);
-  const [defaultFolder, setDefaultFolder] = useState("");
+  const [defaultFolder, setDefaultFolder] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (value.provider === "local") return;
+    api.defaultSyncFolder(value.provider).then(setDefaultFolder);
+  }, [value.provider]);
 
   useEffect(() => {
     api.syncStatus().then(setStatus);
-    api.defaultIcloudFolder().then(setDefaultFolder);
     const unlisten = api.onSyncStatus(setStatus);
     return () => {
       unlisten.then((f) => f());
@@ -30,7 +28,7 @@ export function SyncSettings({ value, onChange }: { value: SyncSettingsValue; on
   }, []);
 
   const pickFolder = async () => {
-    const dir = await open({ directory: true, defaultPath: value.folder ?? defaultFolder });
+    const dir = await open({ directory: true, defaultPath: value.folder ?? defaultFolder ?? undefined });
     if (typeof dir === "string") onChange({ ...value, folder: dir });
   };
 
@@ -47,17 +45,22 @@ export function SyncSettings({ value, onChange }: { value: SyncSettingsValue; on
             role="radio"
             aria-checked={value.provider === p.id}
             className={value.provider === p.id ? "on" : ""}
-            disabled={!p.ready}
             title={p.hint}
-            onClick={() => onChange({ ...value, provider: p.id })}
+            // 고른 폴더는 클라우드마다 다르므로 바꾸면 새 클라우드의 기본 폴더로 돌아간다
+            onClick={() => p.id !== value.provider && onChange({ provider: p.id, folder: null })}
           >
             {p.label}
           </button>
         ))}
       </div>
-      {value.provider === "icloud" && (
+      {value.provider !== "local" && (
         <div className="path-row">
-          <input readOnly value={value.folder ?? defaultFolder} aria-label="iCloud 폴더" />
+          <input
+            readOnly
+            value={value.folder ?? defaultFolder ?? ""}
+            placeholder="폴더를 찾지 못했습니다. 바꾸기로 골라 주세요"
+            aria-label="동기화 폴더"
+          />
           <button onClick={pickFolder}>바꾸기</button>
         </div>
       )}

@@ -21,6 +21,7 @@ const INTERVAL: Duration = Duration::from_secs(120);
 /// 변경 요청이 몰려 오면(메모 여러 개 등) 잠깐 기다렸다 한 번에 맞춘다
 const DEBOUNCE: Duration = Duration::from_secs(3);
 
+/// 동기화 위치. 둘 다 운영체제가 동기화하는 폴더를 쓴다(FolderRemote)
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Provider {
@@ -29,7 +30,6 @@ pub enum Provider {
     Local,
     Icloud,
     Onedrive,
-    GoogleDrive,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -37,7 +37,7 @@ pub enum Provider {
 pub struct SyncSettings {
     #[serde(default)]
     pub provider: Provider,
-    /// iCloud Drive 안의 sori 폴더. None이면 기본 위치
+    /// 고른 클라우드 안의 sori 폴더. None이면 기본 위치(default_folder)
     #[serde(default)]
     pub folder: Option<PathBuf>,
 }
@@ -69,39 +69,60 @@ impl Syncer {
     }
 }
 
-/// 기본 iCloud Drive 폴더. macOS는 ~/Library/Mobile Documents, Windows는 iCloud for Windows의 기본 위치
-pub fn default_icloud_folder(home: &Path) -> PathBuf {
-    if cfg!(target_os = "macos") {
-        home.join("Library/Mobile Documents/com~apple~CloudDocs/sori")
-    } else {
-        home.join("iCloudDrive").join("sori")
+/// 클라우드별 기본 sori 폴더. 클라우드 앱이 없어 찾지 못하면 None
+pub fn default_folder(provider: Provider, home: &Path) -> Option<PathBuf> {
+    match provider {
+        Provider::Local => None,
+        // macOS는 ~/Library/Mobile Documents, Windows는 iCloud for Windows의 기본 위치
+        Provider::Icloud if cfg!(target_os = "macos") => Some(home.join("Library/Mobile Documents/com~apple~CloudDocs/sori")),
+        Provider::Icloud => Some(home.join("iCloudDrive").join("sori")),
+        Provider::Onedrive => onedrive_root(home).map(|r| r.join("sori")),
     }
+}
+
+/// OneDrive 앱이 동기화하는 폴더.
+/// macOS는 ~/Library/CloudStorage/OneDrive-Personal(개인) 또는 OneDrive-회사이름(회사)이다. 개인 계정을 먼저 고른다.
+/// Windows는 OneDrive 앱이 환경 변수에 위치를 적어 둔다
+fn onedrive_root(home: &Path) -> Option<PathBuf> {
+    if cfg!(target_os = "macos") {
+        let mut found: Vec<PathBuf> = std::fs::read_dir(home.join("Library/CloudStorage"))
+            .ok()?
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_name().to_string_lossy().starts_with("OneDrive"))
+            .map(|e| e.path())
+            .collect();
+        found.sort_by_key(|p| !p.ends_with("OneDrive-Personal"));
+        return found.into_iter().next();
+    }
+    ["OneDriveConsumer", "OneDrive", "OneDriveCommercial"]
+        .iter()
+        .filter_map(std::env::var_os)
+        .map(PathBuf::from)
+        .chain(std::iter::once(home.join("OneDrive")))
+        .find(|p| p.is_dir())
 }
 
 /// 설정에 맞는 클라우드와 그 구분값. 로컬 전용이면 None
 pub fn remote_for(settings: &SyncSettings, home: &Path) -> Result<Option<(Box<dyn Remote>, String)>> {
-    match settings.provider {
-        Provider::Local => Ok(None),
-        Provider::Icloud => {
-            let folder = settings.folder.clone().unwrap_or_else(|| default_icloud_folder(home));
-            let drive = folder.parent().ok_or_else(|| eyre!("iCloud 폴더 경로가 잘못됐습니다"))?;
-            if !drive.is_dir() {
-                return Err(eyre!(
-                    "iCloud Drive 폴더가 없습니다: {}. {}",
-                    drive.display(),
-                    if cfg!(target_os = "macos") {
-                        "시스템 설정 > Apple 계정 > iCloud에서 iCloud Drive를 켜 주세요"
-                    } else {
-                        "iCloud for Windows를 설치하고 iCloud Drive를 켜 주세요"
-                    }
-                ));
-            }
-            std::fs::create_dir_all(&folder).wrap_err_with(|| format!("폴더를 만들지 못했습니다: {}", folder.display()))?;
-            let key = format!("icloud:{}", folder.display());
-            Ok(Some((Box::new(FolderRemote::new(folder)), key)))
-        }
-        Provider::Onedrive | Provider::GoogleDrive => Err(eyre!("OneDrive와 Google Drive 연결은 아직 준비 중입니다")),
+    let (name, hint) = match settings.provider {
+        Provider::Local => return Ok(None),
+        Provider::Icloud if cfg!(target_os = "macos") => ("iCloud Drive", "시스템 설정 > Apple 계정 > iCloud에서 iCloud Drive를 켜 주세요"),
+        Provider::Icloud => ("iCloud Drive", "iCloud for Windows를 설치하고 iCloud Drive를 켜 주세요"),
+        Provider::Onedrive => ("OneDrive", "OneDrive 앱을 설치하고 로그인해 주세요"),
+    };
+    let folder = settings
+        .folder
+        .clone()
+        .or_else(|| default_folder(settings.provider, home))
+        .ok_or_else(|| eyre!("{name} 폴더를 찾지 못했습니다. {hint}"))?;
+    // sori 폴더는 만들어 주지만, 그 위의 클라우드 폴더가 없으면 클라우드 앱이 꺼져 있는 것이다
+    let drive = folder.parent().ok_or_else(|| eyre!("{name} 폴더 경로가 잘못됐습니다"))?;
+    if !drive.is_dir() {
+        return Err(eyre!("{name} 폴더가 없습니다: {}. {hint}", drive.display()));
     }
+    std::fs::create_dir_all(&folder).wrap_err_with(|| format!("폴더를 만들지 못했습니다: {}", folder.display()))?;
+    let key = format!("{name}:{}", folder.display());
+    Ok(Some((Box::new(FolderRemote::new(folder)), key)))
 }
 
 /// 동기화를 곧 한 번 하게 한다. 로컬 전용이면 아무것도 하지 않는다
@@ -471,6 +492,20 @@ mod tests {
         run(&local_b, &b);
         run(&local_a, &a);
         assert_eq!(a.get(&rec.id).unwrap().title, "B에서 고친 제목");
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn onedrive는_개인_계정_폴더를_먼저_고르고_없으면_회사_폴더를_쓴다() {
+        let home = scratch("home");
+        let cloud = home.join("Library/CloudStorage");
+        std::fs::create_dir_all(cloud.join("OneDrive-NULLSPACE")).unwrap();
+        assert_eq!(default_folder(Provider::Onedrive, &home), Some(cloud.join("OneDrive-NULLSPACE/sori")));
+
+        std::fs::create_dir_all(cloud.join("OneDrive-Personal")).unwrap();
+        assert_eq!(default_folder(Provider::Onedrive, &home), Some(cloud.join("OneDrive-Personal/sori")));
+
+        assert_eq!(default_folder(Provider::Onedrive, &scratch("empty")), None);
     }
 
     #[cfg(target_os = "macos")]

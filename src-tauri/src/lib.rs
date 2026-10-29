@@ -1108,7 +1108,7 @@ pub fn run() {
             sync_status,
             sync_now,
             download_audio,
-            default_icloud_folder,
+            default_sync_folder,
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
@@ -1222,8 +1222,8 @@ fn sync_now(app: AppHandle) {
 }
 
 #[tauri::command]
-fn default_icloud_folder(state: State<AppState>) -> PathBuf {
-    sync::default_icloud_folder(&state.home)
+fn default_sync_folder(state: State<AppState>, provider: sync::Provider) -> Option<PathBuf> {
+    sync::default_folder(provider, &state.home)
 }
 
 /// 다른 기기에서 온 녹음의 오디오를 받는다. 진행은 "audio-download" 이벤트로 알린다

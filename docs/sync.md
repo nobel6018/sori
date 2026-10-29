@@ -3,18 +3,18 @@
 데스크톱(macOS, Windows)과 모바일(iOS, Android) 앱이 녹음, 전사, 요약, 메모를 주고받는 방식입니다.
 서버는 없고, 사용자가 이미 쓰는 클라우드에 파일로 저장합니다.
 
-## 로그인 방식
+## 저장 위치
 
-| 방식 | 저장 위치 | 데스크톱 | iOS | Android | 구현 |
-|---|---|---|---|---|---|
-| 로컬 전용 | 기기 안 | O | O | O | 동기화하지 않음 |
-| iCloud Drive | `iCloud Drive/sori` 폴더 | O (Windows는 iCloud for Windows) | O (Files 폴더 선택) | X | `FolderRemote` |
-| OneDrive | 앱 폴더 `앱/sori` | O | O | O | `OneDriveRemote` (Microsoft Graph) |
-| Google Drive | `sori` 폴더 | O | O | O | `GoogleDriveRemote` (Drive API, `drive.file` 권한) |
+| 방식 | 저장 위치 | 데스크톱 | iOS | Android |
+|---|---|---|---|---|
+| 이 기기에만 | 기기 안 | O | O | O |
+| iCloud Drive | `iCloud Drive/sori` | O (Windows는 iCloud for Windows) | O (Files에서 폴더 선택) | X |
+| OneDrive | `OneDrive/sori` | O (OneDrive 앱) | O (Files에서 폴더 선택) | X |
 
+- 둘 다 운영체제의 클라우드 앱이 동기화하는 폴더에 파일을 읽고 쓰는 방식(`FolderRemote`)입니다. sori 안에 로그인 화면이 없고, 각 클라우드 앱의 계정을 그대로 씁니다
 - iCloud는 무료 Apple ID로 서명한 앱(AltStore, SideStore)에서 CloudKit을 쓸 수 없어 폴더 방식으로 접근합니다
-- OneDrive와 Google Drive는 Android에서 폴더 방식이 막혀 있어 API로 접근합니다. 로그인은 앱 안의 OAuth 화면에서 합니다
-- 어느 방식이든 각 사용자는 자기 클라우드 계정의 데이터만 봅니다
+- OneDrive 기본 폴더: macOS는 `~/Library/CloudStorage/OneDrive-Personal`(개인 계정)을 먼저, 없으면 `OneDrive-회사이름`을 고릅니다. Windows는 OneDrive 앱이 적어 둔 환경 변수(`OneDriveConsumer`, `OneDrive`, `OneDriveCommercial`)를 봅니다. 설정에서 다른 폴더를 고를 수 있습니다
+- Android는 Files 연동이 클라우드 폴더 접근을 지원하지 않아, Android 앱을 만들 때 OneDrive, Google Drive API 방식을 다시 검토합니다(2026-10-29 사용자 결정으로 보류)
 
 ## 클라우드에 놓이는 파일
 
@@ -73,9 +73,10 @@
 | 위치 | 역할 |
 |---|---|
 | `crates/sori-sync/src/remote.rs` `Remote` | 클라우드 공통 동작(목록, 읽기, 쓰기, 지우기) |
-| `crates/sori-sync/src/folder.rs` `FolderRemote` | 폴더 방식(iCloud Drive) |
+| `crates/sori-sync/src/folder.rs` `FolderRemote` | 폴더 방식(iCloud Drive, OneDrive) |
 | `crates/sori-sync/src/engine.rs` `sync`, `download_audio` | 동기화 순서와 충돌 규칙 |
 | `crates/sori-sync/src/local.rs` `Local` | 기기 저장소에 접근하는 방법. 데스크톱과 모바일이 각자 구현 |
+| `src-tauri/src/sync.rs` `default_folder`, `remote_for` | 클라우드별 기본 폴더 찾기 |
 | `src-tauri/src/sync.rs` `start`, `run_once`, `DesktopLocal` | 데스크톱 연결: 2분마다와 변경 직후(3초 모아서) 실행, 오디오 압축, 화면 알림, 다른 기기 녹음 자동 처리 |
 | `src-tauri/src/store.rs` `update_raw`, `create_raw`, `Recording::updated_at` | 엔진이 meta.json을 고치는 통로. 앱이 나누는 필드를 바꾸면 `updatedAt`을 새로 적는다 |
 | `src/components/SyncSettings.tsx` | 설정 화면의 동기화 항목, 사이드바 상태 |
@@ -85,8 +86,9 @@
 | 단계 | 상태 |
 |---|---|
 | 동기화 엔진, iCloud Drive(폴더), 데스크톱 연결 | 0.5.0 |
-| OneDrive, Google Drive (OAuth 앱 등록 필요) | 준비 중 |
-| 모바일 앱 (Tauri 2, iOS와 Android) | 준비 중 |
+| OneDrive(폴더) | 0.5.1 |
+| iOS 앱 (Tauri 2, AltStore로 직접 설치) | 준비 중 |
+| Android 앱, API 방식 클라우드 | 보류 |
 
 ## 알려진 함정
 
