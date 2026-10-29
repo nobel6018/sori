@@ -663,7 +663,7 @@ fn remember_speaker(state: &AppState, recording: &Recording, speaker: i32, name:
             // 0.3.0 이하에서 처리한 녹음은 목소리 특징이 없어 지금 뽑는다. 그사이 다시 처리했으면 새 전사를 덮지 않는다
             let settings = state.store.get_settings(&state.home);
             let audio = state.store.audio_path(recording)?;
-            let embeddings = engine::embeddings_for(&audio, &transcript.turns, &settings.models.embedding)?;
+            let embeddings = engine::embeddings_for(&audio, &transcript.turns, &settings.models.embedding, engine::worker::current_exe().as_deref())?;
             let found = embeddings.get(&speaker).cloned();
             if let Some(mut latest) = state.store.get_transcript(&recording.id)? {
                 if latest.speaker_embeddings.is_empty() && latest.turns.len() == transcript.turns.len() {
@@ -1096,9 +1096,13 @@ pub fn run() {
         });
 }
 
-/// 처리나 요약 도중 앱을 끄면, 프로세스 종료 정리(C++ 전역 객체 해제)가 아직 돌고 있는 whisper, onnxruntime
-/// 스레드와 엉켜 예외가 나고 "예기치 않게 종료됨"이 떴다. 진행 중인 일을 멈추고, 화자 분리 작업 프로세스가
-/// 끝나길 잠깐 기다린 뒤, 전역 정리를 건너뛰고 끝낸다. 녹음 중이면 파일을 마무리한다
+/// 앱을 끌 때 비정상 종료("예기치 않게 종료됨")가 나지 않게 정리한다. 원인이 둘이었다.
+/// 1. whisper 모델(Metal)을 앱 상태에 들고 있으면, 프로세스 종료 정리에서 ggml Metal 장치가
+///    "쓰는 GPU 메모리가 없어야 한다"고 검사하다 abort한다(ggml-metal-device.m GGML_ASSERT([rsets->data count] == 0)).
+///    처리 중이 아니어도 한 번이라도 받아 적은 뒤 끄면 났다. 모델을 먼저 해제한다
+/// 2. 처리나 요약 도중이면 아직 도는 whisper, onnxruntime 스레드가 종료 정리와 엉킨다.
+///    진행 중인 일을 멈추고 잠깐 기다린 뒤 전역 정리를 건너뛰고 끝낸다
+/// 녹음 중이면 파일을 마무리한다. 재현: examples/exit_check.rs, docs/processing.md
 fn exit_cleanly(app: &AppHandle) {
     let state = app.state::<AppState>();
     if let Some((id, active)) = state.recorder.lock().unwrap().take() {
@@ -1124,7 +1128,12 @@ fn exit_cleanly(app: &AppHandle) {
         });
         any
     };
-    if busy || summarizing {
+    // 처리 스레드가 모델을 함께 쥐고 있으면(Arc 둘 이상) 여기서 놓아도 해제되지 않는다
+    let whisper = state.whisper.lock().unwrap().take();
+    let whisper_in_use = whisper.as_ref().is_some_and(|(_, ctx)| Arc::strong_count(ctx) > 1);
+    drop(whisper);
+
+    if busy || summarizing || whisper_in_use {
         // 화자 분리 프로세스는 0.1초마다 취소를 확인해 끝낸다. 요약 CLI도 취소 신호를 받아 끝낸다
         std::thread::sleep(Duration::from_millis(500));
         for id in state.cancels.lock().unwrap().keys() {

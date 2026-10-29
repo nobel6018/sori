@@ -1,6 +1,6 @@
 [package]
 name = "sori"
-version = "0.4.4"
+version = "0.4.5"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2024"
@@ -64,7 +64,8 @@ cuda = ["whisper-rs/cuda"]
 codegen-units = 1
 lto = true
 opt-level = 3
-panic = "abort"
+# abort면 백그라운드 작업 하나의 panic이 앱 전체를 죽인다. unwind면 그 작업만 오류로 끝난다(lib.rs의 JoinError 처리)
+panic = "unwind"
 strip = true
 
 # 개발 빌드에서도 whisper.cpp, onnxruntime, 디코더는 최적화한다. 안 하면 전사가 수십 배 느려진다

@@ -16,8 +16,8 @@ fn main() -> eyre::Result<()> {
     let half = t.duration / 2.0;
     let first: Vec<_> = t.turns.iter().filter(|x| x.end <= half).cloned().collect();
     let second: Vec<_> = t.turns.iter().filter(|x| x.start >= half).cloned().collect();
-    let a = engine::embeddings_for(&audio, &first, &model)?;
-    let b = engine::embeddings_for(&audio, &second, &model)?;
+    let a = engine::embeddings_for(&audio, &first, &model, None)?;
+    let b = engine::embeddings_for(&audio, &second, &model, None)?;
     println!("앞 절반 화자 {:?}, 뒤 절반 화자 {:?}", a.keys().collect::<Vec<_>>(), b.keys().collect::<Vec<_>>());
     for (sa, ea) in &a {
         let row: Vec<String> = b.iter().map(|(sb, eb)| format!("{sb}:{:.2}", similarity(ea, eb))).collect();
