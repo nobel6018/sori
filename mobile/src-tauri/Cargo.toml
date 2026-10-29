@@ -1,0 +1,26 @@
+[package]
+name = "sori-mobile"
+version = "0.6.0"
+description = "sori iPhone 앱: 녹음, 메모, 전사와 요약 읽기, iCloud Drive 동기화 (docs/mobile.md)"
+edition = "2024"
+publish = false
+
+[lib]
+name = "sori_mobile_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["protocol-asset"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+eyre = "0.6.14"
+chrono = { version = "0.4.45", features = ["serde"] }
+uuid = { version = "1.29.0", features = ["v4"] }
+sori-sync = { path = "../../crates/sori-sync" }
+tauri-plugin-sori-native = { path = "../plugin" }
+
+[profile.release]
+panic = "unwind"

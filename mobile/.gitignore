@@ -1,0 +1,6 @@
+dist
+src-tauri/target
+src-tauri/gen/schemas
+plugin/target
+plugin/.tauri
+plugin/ios/.build

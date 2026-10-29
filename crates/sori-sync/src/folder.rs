@@ -11,13 +11,31 @@ use eyre::{eyre, Result, WrapErr};
 
 use crate::remote::{Progress, Remote, RemoteFile};
 
+/// 파일을 읽기 전에 클라우드에서 받아 오게 하는 함수
+pub type Materialize = Box<dyn Fn(&Path) -> Result<()> + Send + Sync>;
+
 pub struct FolderRemote {
     root: PathBuf,
+    materialize: Option<Materialize>,
 }
 
 impl FolderRemote {
     pub fn new(root: PathBuf) -> Self {
-        Self { root }
+        Self { root, materialize: None }
+    }
+
+    /// iOS는 받지 않은 iCloud 파일을 그냥 읽으면 실패한다. 읽기 전에 NSFileCoordinator로 받아 오는 함수를 넣는다.
+    /// macOS는 읽기만 해도 운영체제가 받아 와서 필요 없다
+    pub fn with_materialize(mut self, materialize: Materialize) -> Self {
+        self.materialize = Some(materialize);
+        self
+    }
+
+    fn fetch(&self, path: &Path) -> Result<()> {
+        match &self.materialize {
+            Some(m) => m(path).wrap_err_with(|| format!("iCloud에서 파일을 받지 못했습니다: {}", path.display())),
+            None => Ok(()),
+        }
     }
 
     fn path(&self, rel: &str) -> Result<PathBuf> {
@@ -100,6 +118,7 @@ impl Remote for FolderRemote {
 
     fn read(&self, path: &str) -> Result<Vec<u8>> {
         let p = self.path(path)?;
+        self.fetch(&p)?;
         fs::read(&p).wrap_err_with(|| format!("파일을 읽지 못했습니다: {}", p.display()))
     }
 
@@ -129,8 +148,10 @@ impl Remote for FolderRemote {
     }
 
     fn download(&self, path: &str, dest: &Path, progress: Progress) -> Result<()> {
+        let source = self.path(path)?;
+        self.fetch(&source)?;
         let tmp = tmp_beside(dest);
-        if let Err(e) = copy_with_progress(&self.path(path)?, &tmp, progress) {
+        if let Err(e) = copy_with_progress(&source, &tmp, progress) {
             let _ = fs::remove_file(&tmp);
             return Err(e);
         }

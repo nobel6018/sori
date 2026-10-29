@@ -30,6 +30,19 @@ function SyncSettingsMac({ value, onChange }: { value: SyncSettingsValue; onChan
     };
   }, []);
 
+  // 켜고 설정을 저장하면 바로 이 기기의 녹음을 모두 올린다. 고르는 순간에 무엇이 올라가는지 알린다
+  const choose = async (provider: SyncProvider) => {
+    if (provider === value.provider) return;
+    if (provider !== "local") {
+      const count = (await api.listRecordings()).length;
+      const ok = confirm(
+        `설정을 저장하면 이 기기의 녹음 ${count}개(오디오, 전사, 요약, 메모)를 iCloud Drive의 sori 폴더에 올립니다. 계속할까요?`,
+      );
+      if (!ok) return;
+    }
+    onChange({ ...value, provider });
+  };
+
   const pickFolder = async () => {
     const dir = await open({ directory: true, defaultPath: value.folder ?? defaultFolder ?? undefined });
     if (typeof dir === "string") onChange({ ...value, folder: dir });
@@ -49,7 +62,7 @@ function SyncSettingsMac({ value, onChange }: { value: SyncSettingsValue; onChan
             aria-checked={value.provider === p.id}
             className={value.provider === p.id ? "on" : ""}
             title={p.hint}
-            onClick={() => onChange({ ...value, provider: p.id })}
+            onClick={() => choose(p.id)}
           >
             {p.label}
           </button>

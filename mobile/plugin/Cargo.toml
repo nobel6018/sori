@@ -1,0 +1,16 @@
+[package]
+name = "tauri-plugin-sori-native"
+version = "0.1.0"
+edition = "2024"
+description = "sori iPhone 앱의 네이티브 기능: 녹음, iCloud 폴더 선택, iCloud 파일 받기"
+publish = false
+links = "tauri-plugin-sori-native"
+
+[dependencies]
+tauri = { version = "2.12.5" }
+serde = "1.0"
+serde_json = "1"
+thiserror = "2"
+
+[build-dependencies]
+tauri-plugin = { version = "2.7.2", features = ["build"] }

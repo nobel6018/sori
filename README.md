@@ -78,6 +78,10 @@ Windows (PowerShell):
 
 자세한 구조와 충돌 규칙은 [docs/sync.md](docs/sync.md)에 있습니다.
 
+## iPhone 앱
+
+iPhone에서 녹음과 메모를 하고, Mac이 만든 전사와 요약을 읽습니다. Release의 `sori-ios.ipa`를 AltStore로 설치합니다. 설치 방법은 [docs/mobile.md](docs/mobile.md)에 있습니다.
+
 ## 단축키, 링크, Raycast
 
 - 전역 단축키: 녹음 시작/멈춤 ⌥⇧⌘R(Windows Ctrl+Alt+Shift+R), 창 앞으로 ⌥⇧⌘S. 설정에서 바꿉니다

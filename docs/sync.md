@@ -85,4 +85,4 @@ Mac 데스크톱과 iOS 앱이 녹음, 전사, 요약, 메모를 주고받는 �
 |---|---|
 | 동기화 엔진, iCloud Drive(폴더), 데스크톱 연결 | 0.5.0 |
 | OneDrive(폴더) | 0.5.1에 넣었다가 0.5.2에서 뺌 |
-| iOS 앱 (Tauri 2, AltStore로 직접 설치) | 준비 중 |
+| iOS 앱 (Tauri 2, AltStore로 직접 설치, docs/mobile.md) | 0.6.0 |

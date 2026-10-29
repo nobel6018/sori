@@ -10,6 +10,6 @@ mod remote;
 mod state;
 
 pub use engine::{download_audio, remote_audio_name, sync, SyncReport};
-pub use folder::FolderRemote;
+pub use folder::{FolderRemote, Materialize};
 pub use local::{AudioUpload, Local};
 pub use remote::{Progress, Remote, RemoteFile};
