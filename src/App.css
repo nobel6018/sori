@@ -1185,6 +1185,30 @@ kbd {
 .segmented button + button {
   border-left: 1px solid var(--border);
 }
+/* 일반 버튼의 hover는 테두리 색을 밝히는데, 여기서는 칸 사이 구분선만 하얗게 튀어 보였다 */
+.segmented button:hover:not(:disabled) {
+  border-color: var(--border);
+  background: rgb(127 127 127 / 0.12);
+}
+.segmented button.on:hover:not(:disabled) {
+  background: var(--accent-soft);
+}
+
+/* ⌘(윈도우는 Ctrl)를 누르고 있으면 뜨는 단축키 미리보기. 키를 떼면 사라지고 클릭을 가로채지 않는다 */
+.shortcut-peek-backdrop {
+  pointer-events: none;
+}
+.shortcut-peek {
+  width: min(920px, 94vw);
+}
+.shortcut-peek .shortcut-sections {
+  columns: 3 260px;
+  column-gap: 28px;
+}
+.shortcut-peek section {
+  break-inside: avoid;
+  margin-bottom: 10px;
+}
 .segmented button.on {
   background: var(--accent-soft);
   color: var(--accent);

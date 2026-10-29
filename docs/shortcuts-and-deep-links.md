@@ -35,7 +35,7 @@ sori가 앞에 없어도 동작합니다. 설정에서 바꾸고, Backspace로 �
 
 ## 앱 안 단축키
 
-⌘/(Windows는 Ctrl+/)로 앱 안에서 전체 목록을 봅니다. 목록의 원본은 `src/shortcuts.ts`의 `SHORTCUTS`입니다.
+⌘/(Windows는 Ctrl+/)로 앱 안에서 전체 목록을 봅니다. 목록의 원본은 `src/shortcuts.ts`의 `SHORTCUTS`입니다. ⌘(Windows는 Ctrl) 하나만 0.6초 누르고 있으면 같은 목록이 미리보기로 뜨고, 키를 떼거나 다른 키를 누르면 닫힙니다(`src/App.tsx`의 `peekOpen`, `ShortcutHelp`의 `peek`). ⌘C처럼 곧바로 다른 키를 누르는 평소 사용에는 뜨지 않고, ⌘Tab으로 앱을 옮기면 창 blur에서 닫습니다.
 
 - 글자 입력칸에 커서가 있으면 Space, 화살표, ⌘⌫ 같은 키는 입력칸의 원래 동작을 따릅니다. ⌘K, ⌘O, ⌘↩처럼 입력칸에서 쓰지 않는 조합만 동작합니다
 - 한글 조합 중에 누른 키는 무시합니다. 조합 중 Enter와 Space는 글자를 완성하는 키입니다

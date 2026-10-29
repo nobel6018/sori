@@ -5,7 +5,7 @@ import { api, AppAction, AUDIO_EXTENSIONS, ModelCatalog, modelsReady, ProgressEv
 import { AskPanel } from "./components/AskPanel";
 import { QuickOpen } from "./components/QuickOpen";
 import { ShortcutHelp } from "./components/ShortcutHelp";
-import { AppCommand, Command, matchShortcut, sendCommand } from "./shortcuts";
+import { AppCommand, Command, IS_MAC, matchShortcut, sendCommand } from "./shortcuts";
 import { ModelSetup } from "./components/ModelSetup";
 import { Recorder } from "./components/Recorder";
 import { Sidebar } from "./components/Sidebar";
@@ -30,6 +30,8 @@ export default function App() {
     [],
   );
   const [helpOpen, setHelpOpen] = useState(false);
+  /** ⌘(윈도우는 Ctrl)만 잠깐 누르고 있으면 단축키 미리보기를 띄운다 */
+  const [peekOpen, setPeekOpen] = useState(false);
   const [askOpen, setAskOpen] = useState(false);
   /** 링크나 검색 결과로 녹음을 열 때 옮겨 갈 재생 위치. nonce로 같은 시각을 다시 골라도 반영한다 */
   const [seekTo, setSeekTo] = useState<{ id: string; time: number; nonce: number } | null>(null);
@@ -204,6 +206,38 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, [modalOpen]);
 
+  // ⌘ 하나만 0.6초 누르고 있으면 미리보기를 띄우고, 떼거나 다른 키를 함께 누르면 닫는다.
+  // ⌘C처럼 바로 다른 키를 누르는 평소 사용에서는 뜨지 않는다. ⌘Tab으로 다른 앱에 가면 keyup이 오지 않아 blur에서도 닫는다
+  useEffect(() => {
+    const modKey = IS_MAC ? "Meta" : "Control";
+    let timer: number | undefined;
+    const close = () => {
+      window.clearTimeout(timer);
+      timer = undefined;
+      setPeekOpen(false);
+    };
+    const onDown = (e: KeyboardEvent) => {
+      if (e.key === modKey && !e.repeat && !e.shiftKey && !e.altKey) {
+        close();
+        timer = window.setTimeout(() => setPeekOpen(true), 600);
+      } else if (e.key !== modKey) {
+        close();
+      }
+    };
+    const onUp = (e: KeyboardEvent) => e.key === modKey && close();
+    window.addEventListener("keydown", onDown, true);
+    window.addEventListener("keyup", onUp, true);
+    window.addEventListener("blur", close);
+    window.addEventListener("mousedown", close, true);
+    return () => {
+      close();
+      window.removeEventListener("keydown", onDown, true);
+      window.removeEventListener("keyup", onUp, true);
+      window.removeEventListener("blur", close);
+      window.removeEventListener("mousedown", close, true);
+    };
+  }, []);
+
   useEffect(() => {
     refresh();
     const unlistenProgress = api.onProgress((e) => {
@@ -303,6 +337,7 @@ export default function App() {
         />
       )}
       {helpOpen && <ShortcutHelp onClose={() => setHelpOpen(false)} />}
+      {peekOpen && !helpOpen && !modalOpen && <ShortcutHelp peek onClose={() => setPeekOpen(false)} />}
       {askOpen && (
         <div className="modal-backdrop" onClick={() => setAskOpen(false)} onKeyDown={(e) => e.key === "Escape" && setAskOpen(false)}>
           <div className="modal ask-modal" role="dialog" aria-label="모든 녹음에 물어보기" onClick={(e) => e.stopPropagation()}>
