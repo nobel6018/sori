@@ -10,6 +10,7 @@ import { recordingMarkdown, toBlocks, transcriptMarkdown } from "../markdown";
 import { IS_MAC, useCommands } from "../shortcuts";
 
 const STAGE_LABEL: Record<Stage, string> = {
+  waiting: "앞 녹음의 처리가 끝나길 기다리는 중. 한 번에 하나씩 처리합니다",
   decoding: "오디오 읽는 중",
   diarizing: "화자 나누는 중",
   transcribing: "받아 적는 중",
@@ -337,7 +338,7 @@ export function RecordingView({ recording, progress, seekTo, onSeekDone, onChang
           )}
         </div>
         <p className="hint muted">
-          화자 수를 알면 꼭 적어 주세요. 자동 추정은 회의실처럼 울리는 녹음에서 화자를 지나치게 많이 나눕니다. 언어를 고르지 않으면 구간마다 자동 감지합니다.
+          화자 수를 알면 적어 주세요. 자동 추정은 시험한 녹음 6개 중 5개를 맞혔지만, 목소리가 비슷하거나 울리는 방에서는 틀릴 수 있습니다. 언어를 고르지 않으면 구간마다 자동 감지합니다.
         </p>
       </section>
       )}
@@ -345,7 +346,11 @@ export function RecordingView({ recording, progress, seekTo, onSeekDone, onChang
       {running && (
         <div className="progress" aria-live="polite">
           <div className="progress-label">
-            {progress ? `${STAGE_LABEL[progress.stage]} ${Math.round(progress.progress * 100)}%` : "준비 중"}
+            {!progress
+              ? "준비 중"
+              : progress.stage === "waiting"
+                ? STAGE_LABEL.waiting
+                : `${STAGE_LABEL[progress.stage]} ${Math.round(progress.progress * 100)}%`}
           </div>
           <div className="progress-track">
             <div className="progress-bar" style={{ width: `${(progress?.progress ?? 0) * 100}%` }} />

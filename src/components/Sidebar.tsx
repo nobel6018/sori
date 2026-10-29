@@ -48,7 +48,11 @@ export function Sidebar({ recordings, selectedId, progress, onSelect, onImport, 
                 <span className="recording-title">{r.title}</span>
                 <span className="recording-meta">
                   <span className={`badge badge-${r.status}`}>
-                    {r.status === "processing" && p ? `${Math.round(p.progress * 100)}%` : STATUS_LABEL[r.status]}
+                    {r.status === "processing" && p
+                      ? p.stage === "waiting"
+                        ? "대기열"
+                        : `${Math.round(p.progress * 100)}%`
+                      : STATUS_LABEL[r.status]}
                   </span>
                   {r.duration != null && <span>{formatTime(r.duration)}</span>}
                   <span>{new Date(r.createdAt).toLocaleDateString("ko-KR")}</span>

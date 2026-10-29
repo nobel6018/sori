@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
 export type Status = "recording" | "new" | "processing" | "done" | "failed";
-export type Stage = "decoding" | "diarizing" | "transcribing";
+export type Stage = "waiting" | "decoding" | "diarizing" | "transcribing";
 
 export interface Recording {
   id: string;

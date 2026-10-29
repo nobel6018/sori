@@ -3949,7 +3949,7 @@ dependencies = [
 
 [[package]]
 name = "sori"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "chrono",
  "cpal",
@@ -3963,6 +3963,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sherpa-rs",
+ "sherpa-rs-sys",
  "symphonia",
  "tauri",
  "tauri-build",

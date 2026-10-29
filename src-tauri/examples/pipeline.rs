@@ -32,7 +32,7 @@ fn main() -> eyre::Result<()> {
         &audio,
         &whisper,
         &models,
-        &ProcessOptions { num_speakers, languages, tracks: None },
+        &ProcessOptions { num_speakers, languages, tracks: None, diarize_worker: None },
         Arc::new(AtomicBool::new(false)),
         |stage, p| eprint!("\r{stage:?} {:>3.0}%   ", p * 100.0),
     )?;

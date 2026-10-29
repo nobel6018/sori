@@ -1,6 +1,6 @@
 [package]
 name = "sori"
-version = "0.4.1"
+version = "0.4.2"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2024"
@@ -24,6 +24,8 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 whisper-rs = "0.16"
 sherpa-rs = { version = "0.6.8", default-features = false, features = ["download-binaries", "static"] }
+# 화자 분리는 sherpa-rs가 스레드를 1개로 고정해 두어 C API를 직접 부른다(src/engine/diarize.rs)
+sherpa-rs-sys = { version = "=0.6.8", default-features = false }
 symphonia = { version = "0.5", features = ["aac", "isomp4", "mp3", "wav", "flac", "ogg", "vorbis", "pcm", "alac", "mkv"] }
 rubato = "0.16"
 hound = "3.5"

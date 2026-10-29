@@ -27,6 +27,7 @@ fn main() -> eyre::Result<()> {
             num_speakers: Some(3),
             languages: vec!["ko".into(), "zh".into(), "en".into()],
             tracks: None,
+            diarize_worker: None,
         },
         Arc::new(AtomicBool::new(false)),
         |_, _| {},

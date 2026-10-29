@@ -10,7 +10,7 @@ fn main() -> eyre::Result<()> {
     let a: Vec<String> = std::env::args().collect();
     let settings: Settings = serde_json::from_slice(&std::fs::read(&a[2])?)?;
     let whisper = engine::load_whisper(&settings.models.whisper)?;
-    let options = ProcessOptions { num_speakers: None, languages: settings.default_languages.clone(), tracks: None };
+    let options = ProcessOptions { num_speakers: None, languages: settings.default_languages.clone(), tracks: None, diarize_worker: None };
     let t = engine::process(&PathBuf::from(&a[1]), &whisper, &settings.models, &options, Arc::new(AtomicBool::new(false)), |_, _| {})?;
     println!("길이 {:.1}s, 화자 구간 {}개, 발화 {}개", t.duration, t.turns.len(), t.utterances.len());
     for u in &t.utterances {

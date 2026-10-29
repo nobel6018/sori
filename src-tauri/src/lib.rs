@@ -835,7 +835,15 @@ async fn process_recording(app: AppHandle, request: ProcessRequest) -> CmdResult
     let cancel = Arc::new(AtomicBool::new(false));
     state.cancels.lock().unwrap().insert(id.clone(), cancel.clone());
 
-    let _guard = state.pipeline.lock().await;
+    // 한 번에 하나만 처리한다. 둘 다 CPU와 GPU를 다 써서 동시에 돌려도 합친 시간은 줄지 않고 각각 느려진다.
+    // 기다리는 동안 멈춘 것처럼 보이지 않게 알린다
+    let _guard = match state.pipeline.try_lock() {
+        Ok(guard) => guard,
+        Err(_) => {
+            let _ = app.emit("progress", ProgressEvent { id: id.clone(), stage: Stage::Waiting, progress: 0.0 });
+            state.pipeline.lock().await
+        }
+    };
     let worker_app = app.clone();
     let worker_id = id.clone();
     let worker_cancel = cancel.clone();
@@ -863,6 +871,7 @@ async fn process_recording(app: AppHandle, request: ProcessRequest) -> CmdResult
                 num_speakers: request.num_speakers,
                 languages: request.languages,
                 tracks,
+                diarize_worker: engine::worker::current_exe(),
             },
             cancel,
             move |stage, progress| {
@@ -1068,15 +1077,60 @@ pub fn run() {
         .run(|app, event| {
             // Finder에서 "다음으로 열기 > sori"를 고르거나 Dock 아이콘에 파일을 끌어다 놓은 경우
             #[cfg(target_os = "macos")]
-            if let tauri::RunEvent::Opened { urls } = event {
+            if let tauri::RunEvent::Opened { urls } = &event {
                 let files = opened_files(urls.iter().filter_map(|u| u.to_file_path().ok()));
                 if !files.is_empty() {
                     actions::dispatch(app, actions::Action::Import { paths: files, process: false });
                 }
             }
-            #[cfg(not(target_os = "macos"))]
-            let _ = (app, event);
+            if let tauri::RunEvent::Exit = &event {
+                exit_cleanly(app);
+            }
         });
+}
+
+/// 처리나 요약 도중 앱을 끄면, 프로세스 종료 정리(C++ 전역 객체 해제)가 아직 돌고 있는 whisper, onnxruntime
+/// 스레드와 엉켜 예외가 나고 "예기치 않게 종료됨"이 떴다. 진행 중인 일을 멈추고, 화자 분리 작업 프로세스가
+/// 끝나길 잠깐 기다린 뒤, 전역 정리를 건너뛰고 끝낸다. 녹음 중이면 파일을 마무리한다
+fn exit_cleanly(app: &AppHandle) {
+    let state = app.state::<AppState>();
+    if let Some((id, active)) = state.recorder.lock().unwrap().take() {
+        let _ = active.stop();
+        if let Ok(recording) = state.store.get(&id) {
+            let duration = finalize_tracks(&state.store, &recording).ok();
+            let _ = state.store.update(&id, |r| {
+                r.status = Status::New;
+                r.duration = duration;
+            });
+        }
+    }
+    let busy = {
+        let cancels = state.cancels.lock().unwrap();
+        cancels.values().for_each(|c| c.store(true, Ordering::Relaxed));
+        !cancels.is_empty()
+    };
+    let summarizing = {
+        let mut summaries = state.summaries.lock().unwrap();
+        let any = !summaries.is_empty();
+        summaries.drain().for_each(|(_, tx)| {
+            let _ = tx.send(());
+        });
+        any
+    };
+    if busy || summarizing {
+        // 화자 분리 프로세스는 0.1초마다 취소를 확인해 끝낸다. 요약 CLI도 취소 신호를 받아 끝낸다
+        std::thread::sleep(Duration::from_millis(500));
+        for id in state.cancels.lock().unwrap().keys() {
+            let _ = state.store.update(id, |r| {
+                r.status = Status::Failed;
+                r.error = Some("처리 도중 앱을 종료했습니다. 다시 처리해 주세요".into());
+            });
+        }
+        unsafe extern "C" {
+            fn _exit(code: i32) -> !;
+        }
+        unsafe { _exit(0) }
+    }
 }
 
 fn home_dir(app: &AppHandle) -> PathBuf {

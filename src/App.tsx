@@ -209,7 +209,7 @@ export default function App() {
     const unlistenProgress = api.onProgress((e) => {
       setProgress((prev) => ({ ...prev, [e.id]: e }));
       // 첫 이벤트는 백엔드가 상태를 "처리 중"으로 저장한 뒤에 오므로 이때 목록을 다시 읽는다
-      if (e.stage === "decoding" && e.progress === 0) refresh();
+      if ((e.stage === "decoding" || e.stage === "waiting") && e.progress === 0) refresh();
     });
     const unlistenDrop = getCurrentWebview().onDragDropEvent((e) => {
       if (e.payload.type === "enter" || e.payload.type === "over") setDragging(true);
