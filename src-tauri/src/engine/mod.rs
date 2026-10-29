@@ -4,6 +4,7 @@ pub mod origin;
 pub mod recluster;
 pub mod transcribe;
 pub mod voiceprint;
+pub mod split;
 pub mod worker;
 
 use std::path::{Path, PathBuf};
@@ -56,6 +57,8 @@ pub struct ProcessOptions {
     pub tracks: Option<(PathBuf, PathBuf)>,
     /// 있으면 화자 분리를 이 실행 파일의 작업 프로세스로 돌려, 취소하면 바로 멈추게 한다(worker.rs)
     pub diarize_worker: Option<PathBuf>,
+    /// false면 화자를 나누지 않고 받아 적기만 한다. 혼자 말한 녹음, 강의에서 더 빠르다
+    pub diarize: bool,
 }
 
 pub fn load_whisper(path: &Path) -> Result<WhisperContext> {
@@ -84,36 +87,11 @@ pub fn process(
     check_cancel()?;
     let duration = samples.len() as f32 / audio::SAMPLE_RATE as f32;
 
-    let progress = on_progress.clone();
-    let progress = move |p| progress(Stage::Diarizing, p);
-    let turns = match &options.diarize_worker {
-        Some(exe) => worker::diarize_in_child(exe, audio_path, &models.segmentation, &models.embedding, options.num_speakers, &cancel, progress)?,
-        None => diarize::diarize(
-            &samples,
-            &models.segmentation,
-            &models.embedding,
-            &DiarizeOptions {
-                num_speakers: options.num_speakers,
-                ..Default::default()
-            },
-            progress,
-        )?,
-    };
-    // 화자 분리가 말소리를 못 찾았으면 녹음 전체를 한 사람으로 보고 whisper에 맡긴다.
-    // whisper가 더 작은 말소리도 받아 적고, 정말 말이 없으면 빈 전사가 된다
-    let turns = if turns.is_empty() && duration > 0.0 {
-        vec![SpeakerTurn { start: 0.0, end: duration, speaker: 0 }]
+    let turns = if options.diarize {
+        diarize_turns(audio_path, &samples, duration, models, options, &cancel, on_progress.clone())?
     } else {
-        turns
-    };
-    // sherpa의 묶음은 10초 창 안에서 먼저 화자를 정해 비슷한 목소리가 섞이고, 자동 모드는
-    // 기준값 하나로 정해 회의 녹음을 수십 명으로 쪼갰다(32분 회의가 100명).
-    // 구간마다 목소리 특징을 따로 뽑아 다시 묶는다. 화자 수를 알면 그 수로, 모르면 유사도 기준으로 멈춘다
-    check_cancel()?;
-    let turns = match options.num_speakers {
-        Some(1) => turns.into_iter().map(|t| SpeakerTurn { speaker: 0, ..t }).collect(),
-        Some(k) if k >= 2 => recluster::recluster(&turns, &samples, &models.embedding, recluster::Speakers::Count(k as usize))?,
-        _ => recluster::recluster(&turns, &samples, &models.embedding, recluster::Speakers::Auto(recluster::AUTO_THRESHOLD))?,
+        // 전사만: 화자를 나누지 않고 조용한 곳에서 잘라 모두 화자 한 명으로 받아 적는다
+        split::split_by_silence(&samples)
     };
 
     check_cancel()?;
@@ -129,9 +107,11 @@ pub fn process(
         cancel,
         |p| on_progress(Stage::Transcribing, p),
     )?;
+    let utterances = drop_repeats(utterances);
 
     // 트랙 분석은 덤이라 실패해도 전사 결과는 돌려준다
-    let origins = match &options.tracks {
+    // 화자를 나누지 않았으면 한 화자에 마이크와 원격 목소리가 섞여 있어 가르지 않는다
+    let origins = match options.tracks.as_ref().filter(|_| options.diarize) {
         Some((mic, system)) => match (audio::load_mono_16k(mic), audio::load_mono_16k(system)) {
             (Ok(mic), Ok(system)) => origin::classify(&turns, &mic, &system),
             _ => Default::default(),
@@ -139,8 +119,13 @@ pub fn process(
         None => Default::default(),
     };
 
-    // 목소리 기억도 덤이다. 실패하면 이름 자동 붙이기만 빠진다
-    let speaker_embeddings = voiceprint::speaker_embeddings(&turns, &samples, &models.embedding).unwrap_or_default();
+    // 목소리 기억도 덤이다. 실패하면 이름 자동 붙이기만 빠진다. 화자를 나누지 않았으면 여러 사람 목소리가
+    // 한 화자로 섞여 있어 기억하지 않는다
+    let speaker_embeddings = if options.diarize {
+        voiceprint::speaker_embeddings(&turns, &samples, &models.embedding).unwrap_or_default()
+    } else {
+        Default::default()
+    };
 
     Ok(Transcript {
         duration,
@@ -151,8 +136,79 @@ pub fn process(
     })
 }
 
+/// 같은 화자가 바로 앞과 똑같은 문장을 말한 것으로 나오면 지운다. whisper가 조각 경계에서
+/// 앞 문장을 한 번 더 내는 경우가 있었다(전사만 모드, 3개 언어 시험 녹음 104.7초)
+fn drop_repeats(utterances: Vec<transcribe::Utterance>) -> Vec<transcribe::Utterance> {
+    let mut out: Vec<transcribe::Utterance> = Vec::with_capacity(utterances.len());
+    for u in utterances {
+        let repeat = out.last().is_some_and(|p| p.speaker == u.speaker && p.text.trim() == u.text.trim() && u.start - p.end < 2.0);
+        if !repeat {
+            out.push(u);
+        }
+    }
+    out
+}
+
+/// 화자 분리와 다시 묶기. 말소리를 못 찾으면 조용한 곳에서 잘라 화자 한 명으로 둔다
+fn diarize_turns(
+    audio_path: &Path,
+    samples: &[f32],
+    duration: f32,
+    models: &ModelPaths,
+    options: &ProcessOptions,
+    cancel: &AtomicBool,
+    on_progress: impl Fn(Stage, f32) + Send + Sync + Clone + 'static,
+) -> Result<Vec<SpeakerTurn>> {
+    let progress = move |p| on_progress(Stage::Diarizing, p);
+    let turns = match &options.diarize_worker {
+        Some(exe) => worker::diarize_in_child(exe, audio_path, &models.segmentation, &models.embedding, options.num_speakers, cancel, progress)?,
+        None => diarize::diarize(
+            samples,
+            &models.segmentation,
+            &models.embedding,
+            &DiarizeOptions {
+                num_speakers: options.num_speakers,
+                ..Default::default()
+            },
+            progress,
+        )?,
+    };
+    // 화자 분리가 말소리를 못 찾았으면(작게 말했거나 아주 짧은 녹음) whisper에 맡긴다.
+    // whisper가 더 작은 말소리도 받아 적고, 정말 말이 없으면 빈 전사가 된다
+    if turns.is_empty() && duration > 0.0 {
+        return Ok(split::split_by_silence(samples));
+    }
+    if cancel.load(std::sync::atomic::Ordering::Relaxed) {
+        eyre::bail!("취소했습니다");
+    }
+    // sherpa의 묶음은 10초 창 안에서 먼저 화자를 정해 비슷한 목소리가 섞이고, 자동 모드는
+    // 기준값 하나로 정해 회의 녹음을 수십 명으로 쪼갰다(32분 회의가 100명).
+    // 구간마다 목소리 특징을 따로 뽑아 다시 묶는다. 화자 수를 알면 그 수로, 모르면 유사도 기준으로 멈춘다
+    Ok(match options.num_speakers {
+        Some(1) => turns.into_iter().map(|t| SpeakerTurn { speaker: 0, ..t }).collect(),
+        Some(k) if k >= 2 => recluster::recluster(&turns, samples, &models.embedding, recluster::Speakers::Count(k as usize))?,
+        _ => recluster::recluster(&turns, samples, &models.embedding, recluster::Speakers::Auto(recluster::AUTO_THRESHOLD))?,
+    })
+}
+
 /// 목소리 특징 없이 저장된 예전 전사에서 화자별 특징을 새로 뽑는다
 pub fn embeddings_for(audio_path: &Path, turns: &[SpeakerTurn], embedding_model: &Path) -> Result<std::collections::BTreeMap<i32, Vec<f32>>> {
     let samples = audio::load_mono_16k(audio_path)?;
     voiceprint::speaker_embeddings(turns, &samples, embedding_model)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn u(start: f32, speaker: i32, text: &str) -> transcribe::Utterance {
+        transcribe::Utterance { start, end: start + 1.0, speaker, text: text.into(), lang: "ko".into() }
+    }
+
+    #[test]
+    fn 바로_이어지는_같은_문장만_지운다() {
+        let out = drop_repeats(vec![u(0.0, 0, "네"), u(1.2, 0, "네 "), u(10.0, 0, "네"), u(11.0, 1, "네")]);
+
+        assert_eq!(out.iter().map(|x| x.start).collect::<Vec<_>>(), vec![0.0, 10.0, 11.0]);
+    }
 }

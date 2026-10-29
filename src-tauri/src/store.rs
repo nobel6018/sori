@@ -48,6 +48,9 @@ pub struct Recording {
     /// 화자 번호(문자열) → 기억한 목소리 id. 이름을 목소리로 알아봐 붙인 화자만 있다
     #[serde(default)]
     pub voice_ids: BTreeMap<String, String>,
+    /// 마지막으로 처리할 때 화자를 나눴는지. 다시 처리할 때 같은 방식을 미리 고른다
+    #[serde(default = "yes")]
+    pub diarize: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -90,6 +93,9 @@ pub struct Settings {
     /// 화자 이름을 붙이면 목소리를 기억하고, 다음 녹음에서 같은 사람에게 이름을 붙인다
     #[serde(default = "yes")]
     pub remember_voices: bool,
+    /// 자동 처리와 새 녹음의 기본 방식. false면 화자를 나누지 않고 받아 적기만 한다
+    #[serde(default = "yes")]
+    pub default_diarize: bool,
     /// 회의 앱이 마이크를 쓰기 시작하면 녹음할지 묻는다
     #[serde(default = "yes")]
     pub meeting_detection: bool,
@@ -118,6 +124,7 @@ impl Settings {
             auto_process: true,
             auto_summarize: false,
             remember_voices: true,
+            default_diarize: true,
             meeting_detection: true,
             summary_templates: Vec::new(),
             default_template: None,
@@ -247,6 +254,7 @@ impl Store {
             tracks: Vec::new(),
             notes: Vec::new(),
             voice_ids: BTreeMap::new(),
+            diarize: true,
         };
         self.save(&recording)?;
         Ok(recording)

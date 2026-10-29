@@ -17,6 +17,8 @@ export interface Recording {
   numSpeakers: number | null;
   languages: string[];
   tracks: string[];
+  /** 마지막 처리에서 화자를 나눴는지 */
+  diarize: boolean;
   /** 녹음하며 남긴 메모. 글이 비면 북마크 */
   notes: Note[];
   /** 화자 번호 → 목소리로 알아본 기억 id */
@@ -89,6 +91,8 @@ export interface Settings {
   summaryPrompt: string | null;
   shortcuts: GlobalShortcuts;
   autoProcess: boolean;
+  /** 자동 처리와 새 녹음의 기본 방식. false면 전사만 */
+  defaultDiarize: boolean;
   autoSummarize: boolean;
   rememberVoices: boolean;
   meetingDetection: boolean;
@@ -220,8 +224,9 @@ export const api = {
   updateRecording: (recording: Recording) => invoke<void>("update_recording", { recording }),
   deleteRecording: (id: string) => invoke<void>("delete_recording", { id }),
   cancelProcessing: (id: string) => invoke<void>("cancel_processing", { id }),
-  processRecording: (id: string, numSpeakers: number | null, languages: string[]) =>
-    invoke<Transcript>("process_recording", { request: { id, numSpeakers, languages } }),
+  /** diarize가 null이면 설정의 기본 방식 */
+  processRecording: (id: string, numSpeakers: number | null, languages: string[], diarize: boolean | null = null) =>
+    invoke<Transcript>("process_recording", { request: { id, numSpeakers, languages, diarize } }),
   listInputDevices: () => invoke<InputDevice[]>("list_input_devices"),
   startRecording: () => invoke<Recording>("start_recording"),
   stopRecording: () => invoke<Recording>("stop_recording"),

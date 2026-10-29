@@ -93,6 +93,9 @@ struct ProcessRequest {
     id: String,
     num_speakers: Option<i32>,
     languages: Vec<String>,
+    /// None이면 설정의 기본 방식(자동 처리)
+    #[serde(default)]
+    diarize: Option<bool>,
 }
 
 #[tauri::command]
@@ -822,6 +825,7 @@ async fn process_recording(app: AppHandle, request: ProcessRequest) -> CmdResult
     // 모델이 없으면 whisper.cpp의 알아보기 힘든 오류 대신 설치 방법을 알려 준다
     models::check(&state.store.get_settings(&state.home).models)?;
 
+    let diarize = request.diarize.unwrap_or_else(|| state.store.get_settings(&state.home).default_diarize);
     state
         .store
         .update(&id, |r| {
@@ -829,6 +833,7 @@ async fn process_recording(app: AppHandle, request: ProcessRequest) -> CmdResult
             r.error = None;
             r.num_speakers = request.num_speakers;
             r.languages = request.languages.clone();
+            r.diarize = diarize;
         })
         .map_err(err)?;
 
@@ -872,6 +877,7 @@ async fn process_recording(app: AppHandle, request: ProcessRequest) -> CmdResult
                 languages: request.languages,
                 tracks,
                 diarize_worker: engine::worker::current_exe(),
+                diarize,
             },
             cancel,
             move |stage, progress| {

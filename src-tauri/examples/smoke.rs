@@ -28,6 +28,7 @@ fn main() -> eyre::Result<()> {
             languages: vec!["ko".into(), "zh".into(), "en".into()],
             tracks: None,
             diarize_worker: None,
+            diarize: true,
         },
         Arc::new(AtomicBool::new(false)),
         |_, _| {},

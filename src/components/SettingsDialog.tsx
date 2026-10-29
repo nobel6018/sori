@@ -216,6 +216,17 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
           </div>
         </div>
         <label className="setting-toggle">
+          <input
+            type="checkbox"
+            checked={settings.defaultDiarize}
+            onChange={(e) => setSettings({ ...settings, defaultDiarize: e.target.checked })}
+          />
+          <span>
+            기본으로 화자도 나누기
+            <span className="muted"> 끄면 자동 처리와 새 녹음이 전사만 합니다. 혼자 말한 메모나 강의가 많다면 끄세요. 녹음마다 바꿀 수 있습니다</span>
+          </span>
+        </label>
+        <label className="setting-toggle">
           <input type="checkbox" checked={settings.autoProcess} onChange={(e) => setSettings({ ...settings, autoProcess: e.target.checked })} />
           <span>
             녹음을 멈추거나 파일을 가져오면 바로 받아 적기

@@ -31,6 +31,7 @@ export function RecordingView({ recording, progress, seekTo, onSeekDone, onChang
   const [detail, setDetail] = useState<RecordingDetail | null>(null);
   const [numSpeakers, setNumSpeakers] = useState<string>(recording.numSpeakers?.toString() ?? "");
   const [languages, setLanguages] = useState<string[]>(recording.languages);
+  const [diarize, setDiarize] = useState(recording.diarize ?? true);
   const [running, setRunning] = useState(recording.status === "processing");
   const [error, setError] = useState<string | null>(recording.error);
   const [currentTime, setCurrentTime] = useState(0);
@@ -59,9 +60,11 @@ export function RecordingView({ recording, progress, seekTo, onSeekDone, onChang
   const load = useCallback(async () => {
     const d = await api.getRecording(recording.id);
     setDetail(d);
-    if (d.recording.languages.length === 0 && d.transcript === null) {
+    if (d.transcript === null) {
+      // 아직 처리하지 않은 녹음은 설정의 기본값을 미리 고른다
       const settings = await api.getSettings();
-      setLanguages(settings.defaultLanguages);
+      if (d.recording.languages.length === 0) setLanguages(settings.defaultLanguages);
+      setDiarize(settings.defaultDiarize);
     }
   }, [recording.id]);
 
@@ -90,7 +93,7 @@ export function RecordingView({ recording, progress, seekTo, onSeekDone, onChang
     setError(null);
     const n = numSpeakers.trim() === "" ? null : Number(numSpeakers);
     try {
-      const pending = api.processRecording(rec.id, n, languages);
+      const pending = api.processRecording(rec.id, diarize ? n : null, languages, diarize);
       await onChanged();
       await pending;
     } catch (e) {
@@ -300,6 +303,18 @@ export function RecordingView({ recording, progress, seekTo, onSeekDone, onChang
 
       {rec.status !== "recording" && (
       <section className="process-panel">
+        <div className="field">
+          <span>처리 방식</span>
+          <div className="segmented" role="radiogroup" aria-label="처리 방식">
+            <button role="radio" aria-checked={diarize} className={diarize ? "on" : ""} disabled={running} onClick={() => setDiarize(true)}>
+              전사 + 화자 나누기
+            </button>
+            <button role="radio" aria-checked={!diarize} className={!diarize ? "on" : ""} disabled={running} onClick={() => setDiarize(false)}>
+              전사만
+            </button>
+          </div>
+        </div>
+        {diarize && (
         <label className="field">
           <span>화자 수</span>
           <input
@@ -312,6 +327,7 @@ export function RecordingView({ recording, progress, seekTo, onSeekDone, onChang
             onChange={(e) => setNumSpeakers(e.target.value)}
           />
         </label>
+        )}
         <div className="field">
           <span>녹음 언어</span>
           <div className="chips">
@@ -338,7 +354,10 @@ export function RecordingView({ recording, progress, seekTo, onSeekDone, onChang
           )}
         </div>
         <p className="hint muted">
-          화자 수를 알면 적어 주세요. 자동 추정은 시험한 녹음 6개 중 5개를 맞혔지만, 목소리가 비슷하거나 울리는 방에서는 틀릴 수 있습니다. 언어를 고르지 않으면 구간마다 자동 감지합니다.
+          {diarize
+            ? "화자 수를 알면 적어 주세요. 자동 추정은 시험한 녹음 6개 중 5개를 맞혔지만, 목소리가 비슷하거나 울리는 방에서는 틀릴 수 있습니다. "
+            : "전사만 하면 화자를 나누지 않아 4배쯤 빠릅니다. 혼자 말한 메모나 강의에 맞습니다. 여러 언어가 섞인 녹음은 언어가 섞인 채 옮겨지니 화자 나누기를 고르세요. "}
+          언어를 고르지 않으면 구간마다 자동 감지합니다.
         </p>
       </section>
       )}
