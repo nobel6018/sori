@@ -1248,14 +1248,34 @@ kbd {
   gap: 8px;
 }
 .sync-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.sync-text {
   font-size: 12px;
   color: var(--muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.sync-badge.error {
+.sync-text.error {
   color: var(--danger);
+}
+.sync-now {
+  font-size: 12px;
+  padding: 4px 10px;
+  white-space: nowrap;
+}
+.spin {
+  display: inline-block;
+  animation: spin 1s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 .audio-download {
   display: flex;

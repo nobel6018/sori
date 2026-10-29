@@ -76,7 +76,7 @@ export function Sidebar({ recordings, selectedId, progress, onSelect, onImport, 
   );
 }
 
-/** 동기화를 켰을 때만 보인다. 누르면 바로 동기화한다 */
+/** 동기화를 켰을 때만 보인다. 상태 글과 "지금 동기화" 버튼. 버튼은 변경을 모으는 대기 없이 바로 맞춘다 */
 function SyncBadge() {
   const [status, setStatus] = useState<SyncStatus | null>(null);
   useEffect(() => {
@@ -88,13 +88,13 @@ function SyncBadge() {
   }, []);
   if (!status || status.provider === "local") return null;
   return (
-    <button
-      className={`ghost sync-badge ${status.error ? "error" : ""}`}
-      title={status.error ?? "눌러서 지금 동기화"}
-      disabled={status.running}
-      onClick={() => api.syncNow()}
-    >
-      {status.running ? "동기화 중" : status.error ? "동기화 오류" : describe(status)}
-    </button>
+    <div className="sync-badge">
+      <span className={`sync-text ${status.error ? "error" : ""}`} title={status.error ?? undefined}>
+        {status.running ? (status.message ?? "동기화 중") : status.error ? "동기화 오류" : describe(status)}
+      </span>
+      <button className="sync-now" disabled={status.running} onClick={() => api.syncNow()} title="iCloud Drive와 지금 맞춥니다">
+        <span className={status.running ? "spin" : ""}>↻</span> 동기화
+      </button>
+    </div>
   );
 }

@@ -18,7 +18,7 @@ use crate::store::Store;
 use crate::AppState;
 
 /// 앱이 앞에 있는 동안 다른 기기의 변경을 확인하는 간격. 휴대폰은 앱을 열 때와 녹음을 멈출 때도 맞춘다
-const INTERVAL: Duration = Duration::from_secs(60);
+const INTERVAL: Duration = Duration::from_secs(20);
 const DEBOUNCE: Duration = Duration::from_millis(1500);
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -50,7 +50,8 @@ pub struct SyncStatus {
 }
 
 pub struct Syncer {
-    trigger: Mutex<Option<mpsc::Sender<()>>>,
+    /// true면 사용자가 누른 "지금 동기화"라 모으지 않고 바로 맞춘다
+    trigger: Mutex<Option<mpsc::Sender<bool>>>,
     status: Mutex<SyncStatus>,
 }
 
@@ -80,21 +81,40 @@ pub fn sori_folder(picked: &Path) -> PathBuf {
 }
 
 pub fn request(app: &AppHandle) {
+    send(app, false);
+}
+
+/// 사용자가 누른 동기화. 변경을 모으는 대기 없이 바로 맞춘다
+pub fn request_now(app: &AppHandle) {
+    send(app, true);
+}
+
+fn send(app: &AppHandle, now: bool) {
     if let Some(tx) = app.state::<AppState>().syncer.trigger.lock().unwrap().as_ref() {
-        let _ = tx.send(());
+        let _ = tx.send(now);
     }
 }
 
 pub fn start(app: AppHandle) {
-    let (tx, rx) = mpsc::channel::<()>();
+    let (tx, rx) = mpsc::channel::<bool>();
     *app.state::<AppState>().syncer.trigger.lock().unwrap() = Some(tx);
     std::thread::spawn(move || {
         let mut first = true;
         loop {
             if !first {
                 match rx.recv_timeout(INTERVAL) {
-                    Ok(()) => {
-                        std::thread::sleep(DEBOUNCE);
+                    Ok(now) => {
+                        // 메모를 여러 개 남기는 등 변경이 몰리면 잠깐 모았다 한 번에 맞춘다. 그 사이 "지금"이 오면 바로 간다
+                        if !now {
+                            let deadline = std::time::Instant::now() + DEBOUNCE;
+                            while let Some(left) = deadline.checked_duration_since(std::time::Instant::now()) {
+                                match rx.recv_timeout(left) {
+                                    Ok(true) | Err(mpsc::RecvTimeoutError::Timeout) => break,
+                                    Ok(false) => continue,
+                                    Err(mpsc::RecvTimeoutError::Disconnected) => return,
+                                }
+                            }
+                        }
                         while rx.try_recv().is_ok() {}
                     }
                     Err(mpsc::RecvTimeoutError::Timeout) => {}

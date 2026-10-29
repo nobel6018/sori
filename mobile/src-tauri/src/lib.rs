@@ -215,7 +215,7 @@ fn sync_status(state: State<AppState>) -> sync::SyncStatus {
 
 #[tauri::command]
 fn sync_now(app: AppHandle) {
-    sync::request(&app);
+    sync::request_now(&app);
 }
 
 /// iCloud Drive에서 동기화 폴더를 고른다. 취소하면 false

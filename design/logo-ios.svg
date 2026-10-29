@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="100 100 824 824" width="1024" height="1024">
+<!-- iPhone 앱 아이콘. iOS가 모서리를 직접 깎으므로 logo.svg의 둥근 모서리, 여백, 그림자를 빼고 배경을 꽉 채운다 -->
+<defs>
+  <linearGradient id="cream" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fbf8f1"/><stop offset="1" stop-color="#ece6d8"/></linearGradient>
+</defs>
+<rect x="100" y="100" width="824" height="824" fill="url(#cream)"/>
+<rect x="245.0" y="457.0" width="54" height="110.0" rx="27.0" fill="#2f7a64"/><rect x="325.0" y="387.0" width="54" height="250.0" rx="27.0" fill="#2f7a64"/><rect x="405.0" y="302.0" width="54" height="420.0" rx="27.0" fill="#c9603a"/><rect x="485.0" y="232.0" width="54" height="560.0" rx="27.0" fill="#c9603a"/><rect x="565.0" y="347.0" width="54" height="330.0" rx="27.0" fill="#c9603a"/><rect x="645.0" y="417.0" width="54" height="190.0" rx="27.0" fill="#4566b5"/><rect x="725.0" y="467.0" width="54" height="90.0" rx="27.0" fill="#4566b5"/>
+</svg>

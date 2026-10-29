@@ -1218,7 +1218,7 @@ fn sync_status(state: State<AppState>) -> sync::SyncStatus {
 
 #[tauri::command]
 fn sync_now(app: AppHandle) {
-    sync::request(&app);
+    sync::request_now(&app);
 }
 
 #[tauri::command]

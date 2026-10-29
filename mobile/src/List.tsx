@@ -22,8 +22,9 @@ export function List({
         <h1>sori</h1>
         <div className="bar-actions">
           {sync && sync.provider !== "local" && (
-            <button className={`pill ${sync.error ? "error" : ""}`} onClick={onRefresh} disabled={sync.running}>
-              {syncLabel(sync)}
+            <button className={`sync-button ${sync.error ? "error" : ""}`} onClick={onRefresh} disabled={sync.running} aria-label="지금 동기화">
+              <span className={sync.running ? "spin" : ""}>↻</span>
+              <span className="sync-label">{syncLabel(sync)}</span>
             </button>
           )}
           <button className="text-button" onClick={onSettings}>

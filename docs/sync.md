@@ -75,7 +75,7 @@ Mac 데스크톱과 iOS 앱이 녹음, 전사, 요약, 메모를 주고받는 �
 | `crates/sori-sync/src/engine.rs` `sync`, `download_audio` | 동기화 순서와 충돌 규칙 |
 | `crates/sori-sync/src/local.rs` `Local` | 기기 저장소에 접근하는 방법. 데스크톱과 모바일이 각자 구현 |
 | `src-tauri/src/sync.rs` `default_folder`, `remote_for` | iCloud Drive 기본 폴더 찾기 |
-| `src-tauri/src/sync.rs` `start`, `run_once`, `DesktopLocal` | 데스크톱 연결: 2분마다와 변경 직후(3초 모아서) 실행, 오디오 압축, 화면 알림, 다른 기기 녹음 자동 처리 |
+| `src-tauri/src/sync.rs` `start`, `run_once`, `DesktopLocal` | 데스크톱 연결: 30초마다와 변경 직후(3초 모아서) 실행. "지금 동기화"는 모으지 않고 바로, 오디오 압축, 화면 알림, 다른 기기 녹음 자동 처리 |
 | `src-tauri/src/store.rs` `update_raw`, `create_raw`, `Recording::updated_at` | 엔진이 meta.json을 고치는 통로. 앱이 나누는 필드를 바꾸면 `updatedAt`을 새로 적는다 |
 | `src/components/SyncSettings.tsx` | 설정 화면의 동기화 항목, 사이드바 상태 |
 

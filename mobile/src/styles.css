@@ -158,6 +158,39 @@ textarea {
   font-size: 14px;
   min-height: 36px;
 }
+/* 목록 위 "지금 동기화". 누르면 대기 없이 바로 맞춘다 */
+.sync-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  padding: 0 14px;
+  font-size: 14px;
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.sync-button.error {
+  color: var(--danger);
+  border-color: var(--danger);
+  background: transparent;
+}
+.sync-button .sync-label {
+  color: var(--text);
+  font-size: 13px;
+}
+.sync-button:disabled {
+  opacity: 0.8;
+}
+.spin {
+  display: inline-block;
+  animation: spin 1s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
 .pill {
   min-height: 32px;
   padding: 0 12px;

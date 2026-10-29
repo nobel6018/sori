@@ -24,7 +24,7 @@ App Store에 올리지 않고 AltStore로 본인 iPhone에만 설치합니다. �
 | 메모, 북마크 | 녹음 중에는 녹음한 시각에, 녹음 뒤에는 재생 위치에 남긴다. 기기별 메모 파일로 Mac과 합친다 |
 | 전사, 요약 | Mac이 만든 transcript.json, summaries.json을 읽기만 한다 |
 | 오디오 | 다른 기기에서 온 녹음은 "오디오 받기"를 눌러야 받는다 |
-| 동기화 | 앱을 열 때, 녹음을 멈출 때, 메모를 고칠 때, 앱이 앞에 있는 동안 1분마다 |
+| 동기화 | 앱을 열 때, 녹음을 멈출 때, 메모를 고칠 때, 앱이 앞에 있는 동안 20초마다. 목록 위 "↻ 동기화"는 기다리지 않고 바로 맞춘다 |
 
 ## iCloud Drive 접근
 
@@ -41,6 +41,7 @@ App Store에 올리지 않고 AltStore로 본인 iPhone에만 설치합니다. �
 | `mobile/src-tauri/src/sync.rs` `MobileLocal`, `remote` | 동기화 엔진(crates/sori-sync) 연결, 폴더 권한 열기 |
 | `mobile/plugin/ios/Sources/SoriNativePlugin.swift` | 녹음, 폴더 고르기와 권한 저장, iCloud 파일 받기 |
 | `mobile/src-tauri/Info.ios.plist` | 마이크 권한 설명, 백그라운드 오디오 |
+| `design/logo-ios.svg`, `design/logo-ios-1024.png` | 앱 아이콘. iOS가 모서리를 깎으므로 데스크톱 로고의 여백, 둥근 모서리, 그림자를 뺐다. `pnpm tauri icon ../design/logo-ios-1024.png`로 만들고 알파 채널을 없앤다(투명한 곳은 검게 보인다) |
 | `mobile/src-tauri/gen/apple/project.yml` | Xcode 프로젝트. 서명 없이 빌드하도록 `CODE_SIGNING_ALLOWED: NO` |
 | `.github/workflows/release.yml` `ios` | 태그를 올리면 `sori-ios.ipa`를 만들어 Release에 붙인다 |
 
