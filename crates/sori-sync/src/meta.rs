@@ -4,7 +4,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 /// 기기끼리 나누는 meta.json 필드. 상태(처리 중 등), 오류, 트랙, 목소리 id는 기기마다 다르므로 뺐다.
-/// tags, tagsEditedAt(사람이 태그를 고친 시각), autoTaggedAt(AI가 분류한 시각), location은 0.8.0에 더했다(docs/organize.md).
+/// tags, tagsEditedAt(사람이 태그를 고친 시각), autoTaggedAt(AI가 분류한 시각), location은 0.8.0에,
+/// event(겹치는 캘린더 일정), titleEditedAt(사람이 제목을 고친 시각)은 0.9.0에 더했다(docs/organize.md).
 /// 여기 없는 필드는 올리지 않으므로, 0.7.x 앱이 녹음을 고치면 이 필드들이 클라우드에서 빠진다. 기기들을 함께 올린다
 pub const SHARED: &[&str] = &[
     "id",
@@ -21,6 +22,8 @@ pub const SHARED: &[&str] = &[
     "tagsEditedAt",
     "autoTaggedAt",
     "location",
+    "event",
+    "titleEditedAt",
 ];
 
 /// 로컬 meta.json에서 나누는 필드만 뽑는다

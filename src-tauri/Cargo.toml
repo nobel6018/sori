@@ -52,6 +52,8 @@ objc2-foundation = { version = "0.3", features = ["NSProcessInfo", "NSString", "
 # 녹음한 곳: Wi-Fi 위치와 주소(docs/organize.md)
 objc2-core-location = { version = "0.3", default-features = false, features = ["std", "block2", "CLLocation", "CLLocationManager", "CLGeocoder", "CLPlacemark", "CLError"] }
 block2 = "0.6"
+# 녹음 시각과 겹치는 일정 찾기, 할 일을 미리 알림에 넣기(docs/organize.md)
+objc2-event-kit = { version = "0.3", default-features = false, features = ["std", "block2", "EKEventStore", "EKEvent", "EKCalendarItem", "EKParticipant", "EKReminder", "EKCalendar", "EKObject", "EKTypes", "EKError"] }
 # 회의 앱 감지: 마이크를 쓰는 프로세스 목록(macOS 14.0 이상)
 objc2-core-audio = { version = "0.3", default-features = false, features = ["std", "AudioHardware"] }
 objc2-core-foundation = { version = "0.3", default-features = false, features = ["std", "CFString"] }

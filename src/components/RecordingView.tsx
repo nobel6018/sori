@@ -3,6 +3,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { AskPanel } from "./AskPanel";
 import { TagEditor } from "./TagEditor";
+import { TodoPanel } from "./TodoPanel";
 import { NotesPanel } from "./NotesPanel";
 import { SummaryPanel } from "./SummaryPanel";
 import { TranscriptList } from "./TranscriptList";
@@ -134,6 +135,21 @@ export function RecordingView({ recording, allTags, progress, seekTo, onSeekDone
       await api.setTags(rec.id, tags);
     } catch (e) {
       setError(String(e));
+    }
+    await load();
+    await onChanged();
+  };
+
+  const [organizing, setOrganizing] = useState(false);
+  const organize = async () => {
+    setOrganizing(true);
+    setError(null);
+    try {
+      await api.organize(rec.id, true);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setOrganizing(false);
     }
     await load();
     await onChanged();
@@ -327,7 +343,23 @@ export function RecordingView({ recording, allTags, progress, seekTo, onSeekDone
             녹음한 곳: {rec.location.place || `${rec.location.lat.toFixed(4)}, ${rec.location.lon.toFixed(4)}`}
           </button>
         )}
+        {rec.event && (
+          <span className="event-line" title={rec.event.attendees.length ? `참석자: ${rec.event.attendees.join(", ")}` : undefined}>
+            일정: {rec.event.title}
+          </span>
+        )}
+        {transcript && (
+          <button
+            className="ghost organize-button"
+            onClick={organize}
+            disabled={organizing}
+            title="AI로 제목, 태그, 할 일 후보를 다시 정리합니다. 손으로 고친 제목과 태그는 그대로 둡니다"
+          >
+            {organizing ? "정리 중" : rec.autoTaggedAt ? "AI로 다시 정리" : "AI로 정리"}
+          </button>
+        )}
       </div>
+      <TodoPanel recordingId={rec.id} version={rec.autoTaggedAt} />
 
       {rec.status === "recording" && (
         <>
@@ -469,6 +501,14 @@ export function RecordingView({ recording, allTags, progress, seekTo, onSeekDone
         </div>
       )}
 
+      {rec.event && rec.event.attendees.length > 0 && (
+        // 일정 참석자를 화자 이름 후보로 띄운다
+        <datalist id={`attendees-${rec.id}`}>
+          {rec.event.attendees.map((a) => (
+            <option key={a} value={a} />
+          ))}
+        </datalist>
+      )}
       {transcript && tab === "transcript" && speakers.length > 0 && (
         <section className="speakers">
           <button
@@ -486,6 +526,7 @@ export function RecordingView({ recording, allTags, progress, seekTo, onSeekDone
                 autoFocus
                 className={`speaker-input spk-${s % 8}`}
                 defaultValue={speakerName(rec, s)}
+                list={rec.event?.attendees.length ? `attendees-${rec.id}` : undefined}
                 onBlur={(e) => {
                   setEditingSpeaker(null);
                   const name = e.target.value.trim();

@@ -1437,3 +1437,62 @@ kbd {
   color: var(--accent);
   text-decoration: underline;
 }
+
+/* AI 정리: 일정, 할 일 후보 (docs/organize.md) */
+.event-line {
+  color: var(--muted);
+  font-size: 13px;
+}
+.organize-button {
+  font-size: 13px;
+  padding: 2px 8px;
+  color: var(--muted);
+}
+.todo-panel {
+  margin: 8px 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+}
+.todo-panel h3 {
+  margin: 0 0 6px;
+  font-size: 13px;
+  color: var(--muted);
+  font-weight: 600;
+}
+.todo-panel ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.todo-panel li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+}
+.todo-panel li.added {
+  opacity: 0.6;
+}
+.todo-panel .todo-text {
+  flex: 1;
+  min-width: 0;
+}
+.todo-panel input.todo-text {
+  border-color: transparent;
+  background: transparent;
+}
+.todo-panel input.todo-text:focus {
+  border-color: var(--border);
+}
+.todo-panel input[type="date"] {
+  width: 140px;
+}
+.todo-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  font-size: 12px;
+}

@@ -77,8 +77,8 @@ export default function App() {
         api
           .processRecording(r.id, null, settings.defaultLanguages)
           .then(() => (settings.autoSummarize ? api.summarize(r.id, null, null) : undefined))
-          // 요약이 있으면 요약을 보고 분류한다. 분류는 덤이라 실패해도 알리지 않고 기록만 남긴다
-          .then(() => (settings.autoTag ? api.autoTag(r.id).catch((e) => console.warn(`자동 분류 실패 ${r.title}: ${e}`)) : undefined))
+          // 요약이 있으면 요약을 보고 정리한다. 정리는 덤이라 실패해도 알리지 않고 기록만 남긴다
+          .then(() => (settings.autoTag ? api.organize(r.id).catch((e) => console.warn(`AI 정리 실패 ${r.title}: ${e}`)) : undefined))
           .catch((e) => setError(`${r.title}: ${e}`))
           .finally(refresh);
       }

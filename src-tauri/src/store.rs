@@ -71,6 +71,40 @@ pub struct Recording {
     /// 녹음을 시작한 곳. 설정에서 끄면 남기지 않는다
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<Location>,
+    /// 녹음 시각과 겹치는 캘린더 일정. AI 정리 때 찾는다
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub event: Option<CalendarEvent>,
+    /// 사람이 제목을 고친 시각. 있으면 AI가 제목을 바꾸지 않는다
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title_edited_at: Option<DateTime<Utc>>,
+}
+
+/// 녹음 시각과 겹치는 캘린더 일정
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CalendarEvent {
+    pub title: String,
+    pub start: DateTime<Utc>,
+    pub end: DateTime<Utc>,
+    /// 참석자 이름(나 빼고). 화자 이름 후보로 쓴다
+    #[serde(default)]
+    pub attendees: Vec<String>,
+    #[serde(default)]
+    pub calendar: Option<String>,
+}
+
+/// AI가 뽑은 할 일 후보. 사용자가 확인한 것만 미리 알림에 넣는다(todos.json, 이 Mac에만)
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Todo {
+    pub id: String,
+    pub text: String,
+    /// 기한(YYYY-MM-DD)
+    #[serde(default)]
+    pub due: Option<String>,
+    /// 미리 알림에 넣은 시각. 넣은 것은 다시 넣지 않는다
+    #[serde(default)]
+    pub added_at: Option<DateTime<Utc>>,
 }
 
 /// 녹음을 시작한 곳. iPhone은 GPS, Mac은 Wi-Fi로 받는다
@@ -104,6 +138,8 @@ impl Recording {
             && self.tags_edited_at == other.tags_edited_at
             && self.auto_tagged_at == other.auto_tagged_at
             && self.location == other.location
+            && self.event == other.event
+            && self.title_edited_at == other.title_edited_at
     }
 }
 
@@ -150,9 +186,12 @@ pub struct Settings {
     /// 받아 적기가 끝나면 기본 템플릿으로 요약한다. 구독 사용량을 쓰므로 기본은 끈다
     #[serde(default)]
     pub auto_summarize: bool,
-    /// 받아 적기가 끝나면 AI(요약과 같은 CLI)로 태그를 붙인다. 사람이 고친 태그는 덮어쓰지 않는다(docs/organize.md)
+    /// 받아 적기가 끝나면 AI(요약과 같은 CLI)로 제목, 태그, 할 일 후보를 붙인다. 사람이 고친 제목과 태그는 덮어쓰지 않는다(docs/organize.md)
     #[serde(default = "yes")]
     pub auto_tag: bool,
+    /// AI 정리 때 녹음 시각과 겹치는 캘린더 일정을 찾아 제목과 참석자를 쓴다
+    #[serde(default = "yes")]
+    pub use_calendar: bool,
     /// 녹음을 시작할 때 위치(Wi-Fi 기반)를 남긴다
     #[serde(default = "yes")]
     pub record_location: bool,
@@ -193,6 +232,7 @@ impl Settings {
             auto_process: true,
             auto_summarize: false,
             auto_tag: true,
+            use_calendar: true,
             record_location: true,
             remember_voices: true,
             default_diarize: true,
@@ -427,6 +467,8 @@ impl Store {
             tags_edited_at: None,
             auto_tagged_at: None,
             location: None,
+            event: None,
+            title_edited_at: None,
         };
         self.save(&recording)?;
         Ok(recording)
@@ -469,6 +511,19 @@ impl Store {
             return read_json(&path);
         }
         Ok(self.get_summary(id)?.into_iter().collect())
+    }
+
+    /// AI가 뽑은 할 일 후보. 없으면 빈 목록
+    pub fn get_todos(&self, id: &str) -> Result<Vec<Todo>> {
+        let path = self.dir(id)?.join("todos.json");
+        if !path.exists() {
+            return Ok(Vec::new());
+        }
+        read_json(&path)
+    }
+
+    pub fn save_todos(&self, id: &str, todos: &[Todo]) -> Result<()> {
+        write_json(&self.dir(id)?.join("todos.json"), &todos)
     }
 
     pub fn save_summary(&self, id: &str, summary: &Summary) -> Result<()> {

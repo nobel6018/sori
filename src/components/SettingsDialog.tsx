@@ -260,8 +260,15 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
         <label className="setting-toggle">
           <input type="checkbox" checked={settings.autoTag} onChange={(e) => setSettings({ ...settings, autoTag: e.target.checked })} />
           <span>
-            받아 적기가 끝나면 AI로 태그 붙이기
-            <span className="muted"> 요약과 같은 CLI를 씁니다. 쓰던 태그를 먼저 고르고, 손으로 고친 태그는 덮어쓰지 않습니다. iPhone에서 온 녹음도 받아 적은 뒤 분류합니다</span>
+            받아 적기가 끝나면 AI로 정리하기(제목, 태그, 할 일)
+            <span className="muted"> 요약과 같은 CLI를 씁니다. 쓰던 태그를 먼저 고르고, 손으로 고친 제목과 태그는 덮어쓰지 않습니다. 할 일은 후보로만 두고 확인한 것만 미리 알림에 넣습니다. iPhone에서 온 녹음도 받아 적은 뒤 정리합니다</span>
+          </span>
+        </label>
+        <label className="setting-toggle">
+          <input type="checkbox" checked={settings.useCalendar} onChange={(e) => setSettings({ ...settings, useCalendar: e.target.checked })} />
+          <span>
+            정리할 때 캘린더 일정 쓰기
+            <span className="muted"> 녹음 시각과 겹치는 일정의 제목과 참석자로 녹음 제목과 화자 이름 후보를 정합니다. 처음에 macOS가 허락을 묻습니다</span>
           </span>
         </label>
         <BulkTag />
@@ -450,7 +457,7 @@ function VoiceList({ enabled, onToggle }: { enabled: boolean; onToggle: (on: boo
   );
 }
 
-/** 아직 태그가 없는 예전 녹음을 AI로 하나씩 분류한다. 한꺼번에 돌리면 구독 사용량 한도에 금방 걸린다
+/** 아직 AI로 정리하지 않은 예전 녹음을 하나씩 정리한다. 한꺼번에 돌리면 구독 사용량 한도에 금방 걸린다
  * @see docs/organize.md */
 function BulkTag() {
   const [state, setState] = useState<{ done: number; total: number; failed: number } | null>(null);
@@ -458,33 +465,33 @@ function BulkTag() {
   const [message, setMessage] = useState<string | null>(null);
 
   const run = async () => {
-    const targets = (await api.listRecordings()).filter((r) => r.status === "done" && !r.tags?.length && !r.tagsEditedAt && !r.autoTaggedAt);
+    const targets = (await api.listRecordings()).filter((r) => r.status === "done" && !r.autoTaggedAt);
     if (targets.length === 0) {
-      setMessage("분류할 녹음이 없습니다. 받아 적기가 끝났고 태그가 없는 녹음만 분류합니다");
+      setMessage("정리할 녹음이 없습니다. 받아 적기가 끝났고 아직 AI로 정리하지 않은 녹음만 정리합니다");
       return;
     }
-    if (!confirm(`태그 없는 녹음 ${targets.length}개를 AI로 분류할까요? 하나씩 차례로 하고, 구독 사용량을 씁니다.`)) return;
+    if (!confirm(`아직 정리하지 않은 녹음 ${targets.length}개를 AI로 정리할까요? 하나씩 차례로 하고, 구독 사용량을 씁니다. 손으로 고친 제목과 태그는 그대로 둡니다.`)) return;
     setRunning(true);
     setMessage(null);
     let failed = 0;
     for (let i = 0; i < targets.length; i++) {
       setState({ done: i, total: targets.length, failed });
       try {
-        await api.autoTag(targets[i].id);
+        await api.organize(targets[i].id);
       } catch (e) {
         failed += 1;
-        console.warn(`분류 실패 ${targets[i].title}: ${e}`);
+        console.warn(`정리 실패 ${targets[i].title}: ${e}`);
       }
     }
     setState({ done: targets.length, total: targets.length, failed });
     setRunning(false);
-    setMessage(failed ? `${targets.length - failed}개를 분류했고 ${failed}개는 실패했습니다` : `${targets.length}개를 분류했습니다`);
+    setMessage(failed ? `${targets.length - failed}개를 정리했고 ${failed}개는 실패했습니다` : `${targets.length}개를 정리했습니다`);
   };
 
   return (
     <div className="setting-row bulk-tag">
       <button onClick={run} disabled={running}>
-        {running && state ? `분류 중 ${state.done}/${state.total}` : "태그 없는 녹음 AI로 분류"}
+        {running && state ? `정리 중 ${state.done}/${state.total}` : "아직 정리하지 않은 녹음 AI로 정리"}
       </button>
       {message && <span className="muted">{message}</span>}
     </div>

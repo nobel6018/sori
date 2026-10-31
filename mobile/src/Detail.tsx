@@ -93,6 +93,7 @@ export function Detail({ id, allTags, onBack }: { id: string; allTags: [string, 
               .catch((e) => setError(String(e)))
           }
         />
+        {meta.event && <p className="muted small event-line">일정: {meta.event.title}</p>}
         {meta.location && (
           <button className="place-link" onClick={() => api.openUrl(mapUrl(meta.location!)).catch((e) => setError(String(e)))}>
             녹음한 곳: {meta.location.place || `${meta.location.lat.toFixed(4)}, ${meta.location.lon.toFixed(4)}`} ›

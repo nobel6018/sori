@@ -140,6 +140,8 @@ fn rename_recording(app: AppHandle, state: State<AppState>, id: String, title: S
         .store
         .update(&id, &mut |m| {
             m["title"] = json!(title);
+            // 사람이 고친 제목은 Mac의 AI 정리가 바꾸지 않는다(docs/organize.md)
+            m["titleEditedAt"] = json!(Utc::now().to_rfc3339());
             // 다른 기기와 동시에 고쳤을 때 늦게 고친 쪽을 고르는 기준(docs/sync.md)
             m["updatedAt"] = json!(Utc::now().to_rfc3339());
         })

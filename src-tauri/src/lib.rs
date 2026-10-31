@@ -8,6 +8,7 @@ pub mod models;
 mod recorder;
 pub mod store;
 mod location;
+mod calendar;
 pub mod search;
 pub mod summarize;
 mod tagger;
@@ -271,6 +272,10 @@ fn update_recording(app: AppHandle, state: State<AppState>, recording: Recording
     state
         .store
         .update(&recording.id, |r| {
+            // 사람이 제목을 고쳤으면 AI 정리가 다시 바꾸지 않게 남긴다
+            if r.title != recording.title {
+                r.title_edited_at = Some(chrono::Utc::now());
+            }
             r.title = recording.title;
             r.num_speakers = recording.num_speakers;
             r.languages = recording.languages;
@@ -466,21 +471,33 @@ fn summary_running(state: State<AppState>, id: String) -> bool {
     state.summaries.lock().unwrap().contains_key(&id)
 }
 
-/// AI로 태그를 붙인다. 사람이 태그를 고친 녹음은 건너뛰고, 이미 AI가 붙였으면 force일 때만 다시 한다.
+/// AI로 녹음을 정리한다: 겹치는 캘린더 일정을 찾고, 제목, 태그, 할 일 후보를 한 번에 받는다.
+/// 이미 정리했으면 force일 때만 다시 한다. 사람이 고친 제목과 태그는 그대로 두고, 미리 알림에 넣은 할 일은 남긴다.
 /// 건너뛰면 None. 받아 적기가 끝난 녹음만 된다
 /// @see docs/organize.md
 #[tauri::command]
-async fn auto_tag_recording(app: AppHandle, id: String, force: Option<bool>) -> CmdResult<Option<Recording>> {
+async fn organize_recording(app: AppHandle, id: String, force: Option<bool>) -> CmdResult<Option<Recording>> {
     let state = app.state::<AppState>();
     let recording = state.store.get(&id).map_err(err)?;
-    if recording.tags_edited_at.is_some() || (recording.auto_tagged_at.is_some() && force != Some(true)) {
+    if recording.auto_tagged_at.is_some() && force != Some(true) {
         return Ok(None);
     }
     let Some(_guard) = tagger::begin(&id) else { return Ok(None) };
     let transcript = state.store.get_transcript(&id).map_err(err)?.ok_or("먼저 전사를 끝내 주세요")?;
+    let settings = state.store.get_settings(&state.home);
+
+    // 일정은 한 번 찾으면 남긴다. 처음에는 macOS가 캘린더 허락을 묻는다
+    let mut recording = recording;
+    if settings.use_calendar && recording.event.is_none() {
+        let start = recording.created_at;
+        let end = start + chrono::Duration::milliseconds((recording.duration.unwrap_or(0.0) * 1000.0) as i64);
+        if let Ok(Some(event)) = tauri::async_runtime::spawn_blocking(move || calendar::event_for(start, end)).await {
+            recording = state.store.update(&id, |r| r.event = Some(event)).map_err(err)?;
+        }
+    }
+
     let summary = state.store.get_summary(&id).ok().flatten().map(|s| s.markdown);
     let vocab = tagger::vocabulary(&state.store.list().map_err(err)?, &id);
-    let settings = state.store.get_settings(&state.home);
     let provider = match settings.summary_provider {
         Some(p) => p,
         None => tauri::async_runtime::spawn_blocking(summarize::statuses)
@@ -489,25 +506,75 @@ async fn auto_tag_recording(app: AppHandle, id: String, force: Option<bool>) -> 
             .into_iter()
             .find(|s| s.path.is_some())
             .map(|s| s.provider)
-            .ok_or("claude 또는 codex CLI가 없어 자동 분류할 수 없습니다")?,
+            .ok_or("claude 또는 codex CLI가 없어 AI로 정리할 수 없습니다")?,
     };
     let prompt = tagger::build_prompt(&recording, &transcript, summary.as_deref(), &vocab);
     // 취소 버튼은 없다. 보내는 쪽을 끝까지 들고 있어야 run이 취소로 읽지 않는다
     let (_cancel_tx, cancel_rx) = tokio::sync::oneshot::channel();
     let answer = summarize::run(provider, prompt, cancel_rx).await.map_err(|e| format!("{e:#}"))?;
-    let tags = tagger::parse_answer(&answer).map_err(|e| format!("{e:#}"))?;
-    // AI가 도는 1분 사이 사람이 태그를 고쳤으면 그대로 둔다
+    let organized = tagger::parse_answer(&answer).map_err(|e| format!("{e:#}"))?;
+
+    // 미리 알림에 넣은 할 일은 남기고, 아직 넣지 않은 후보만 새로 바꾼다
+    let mut todos: Vec<store::Todo> = state.store.get_todos(&id).map_err(err)?.into_iter().filter(|t| t.added_at.is_some()).collect();
+    for (text, due) in organized.todos {
+        if !todos.iter().any(|t| t.text == text) {
+            todos.push(store::Todo { id: uuid::Uuid::new_v4().to_string(), text, due, added_at: None });
+        }
+    }
+    state.store.save_todos(&id, &todos).map_err(err)?;
+
+    // AI가 도는 1분 사이 사람이 고쳤으면 그대로 둔다
     let saved = state
         .store
         .update(&id, |r| {
-            if r.tags_edited_at.is_none() {
-                r.tags = tags;
-                r.auto_tagged_at = Some(chrono::Utc::now());
+            if r.tags_edited_at.is_none() && !organized.tags.is_empty() {
+                r.tags = organized.tags;
             }
+            if let Some(title) = organized.title {
+                if r.title_edited_at.is_none() && tagger::is_default_title(&r.title) {
+                    r.title = title;
+                }
+            }
+            r.auto_tagged_at = Some(chrono::Utc::now());
         })
         .map_err(err)?;
     sync::request(&app);
     Ok(Some(saved))
+}
+
+#[tauri::command]
+fn get_todos(state: State<AppState>, id: String) -> CmdResult<Vec<store::Todo>> {
+    state.store.get_todos(&id).map_err(err)
+}
+
+/// 할 일 후보를 고치거나 지운 결과를 저장한다
+#[tauri::command]
+fn save_todos(state: State<AppState>, id: String, todos: Vec<store::Todo>) -> CmdResult<()> {
+    state.store.save_todos(&id, &todos).map_err(err)
+}
+
+/// 사용자가 확인한 할 일을 미리 알림에 넣는다. 이미 넣은 것은 건너뛴다. 넣은 개수를 돌려준다
+#[tauri::command]
+async fn add_todos_to_reminders(app: AppHandle, id: String, todo_ids: Vec<String>) -> CmdResult<usize> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let recording = state.store.get(&id).map_err(err)?;
+        let mut todos = state.store.get_todos(&id).map_err(err)?;
+        let picked: Vec<store::Todo> = todos.iter().filter(|t| t.added_at.is_none() && todo_ids.contains(&t.id)).cloned().collect();
+        if picked.is_empty() {
+            return Ok(0);
+        }
+        let note = format!("sori #{} {}", recording.number, recording.title);
+        let added = calendar::add_reminders(&picked, &note).map_err(|e| format!("{e:#}"))?;
+        let now = chrono::Utc::now();
+        for t in todos.iter_mut().filter(|t| picked.iter().any(|p| p.id == t.id)) {
+            t.added_at = Some(now);
+        }
+        state.store.save_todos(&id, &todos).map_err(err)?;
+        Ok(added)
+    })
+    .await
+    .map_err(err)?
 }
 
 /// template이 없으면 설정의 기본 템플릿으로 요약한다
@@ -1155,7 +1222,10 @@ pub fn run() {
             get_recording,
             update_recording,
             set_tags,
-            auto_tag_recording,
+            organize_recording,
+            get_todos,
+            save_todos,
+            add_todos_to_reminders,
             delete_recording,
             cancel_processing,
             process_recording,

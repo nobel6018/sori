@@ -33,6 +33,29 @@ export interface Recording {
   autoTaggedAt?: string;
   /** 녹음을 시작한 곳 */
   location?: RecordingLocation | null;
+  /** 녹음 시각과 겹치는 캘린더 일정 */
+  event?: CalendarEvent | null;
+  /** 사람이 제목을 고친 시각. 있으면 AI가 제목을 바꾸지 않는다 */
+  titleEditedAt?: string;
+}
+
+export interface CalendarEvent {
+  title: string;
+  start: string;
+  end: string;
+  /** 참석자 이름(나 빼고). 화자 이름 후보 */
+  attendees: string[];
+  calendar?: string | null;
+}
+
+/** AI가 뽑은 할 일 후보. 확인한 것만 미리 알림에 넣는다 */
+export interface Todo {
+  id: string;
+  text: string;
+  /** 기한(YYYY-MM-DD) */
+  due?: string | null;
+  /** 미리 알림에 넣은 시각 */
+  addedAt?: string | null;
 }
 
 export interface RecordingLocation {
@@ -137,8 +160,10 @@ export interface Settings {
   /** 자동 처리와 새 녹음의 기본 방식. false면 전사만 */
   defaultDiarize: boolean;
   autoSummarize: boolean;
-  /** 받아 적기가 끝나면 AI로 태그를 붙인다(docs/organize.md) */
+  /** 받아 적기가 끝나면 AI로 제목, 태그, 할 일 후보를 붙인다(docs/organize.md) */
   autoTag: boolean;
+  /** AI 정리 때 겹치는 캘린더 일정을 쓴다 */
+  useCalendar: boolean;
   /** 녹음을 시작할 때 위치를 남긴다 */
   recordLocation: boolean;
   rememberVoices: boolean;
@@ -271,8 +296,11 @@ export const api = {
   getRecording: (id: string) => invoke<RecordingDetail>("get_recording", { id }),
   updateRecording: (recording: Recording) => invoke<void>("update_recording", { recording }),
   setTags: (id: string, tags: string[]) => invoke<Recording>("set_tags", { id, tags }),
-  /** 건너뛰면(사람이 고친 태그, 이미 분류함) null */
-  autoTag: (id: string, force = false) => invoke<Recording | null>("auto_tag_recording", { id, force }),
+  /** AI로 제목, 태그, 할 일 후보를 정리한다. 이미 정리했으면(force가 아니면) null */
+  organize: (id: string, force = false) => invoke<Recording | null>("organize_recording", { id, force }),
+  getTodos: (id: string) => invoke<Todo[]>("get_todos", { id }),
+  saveTodos: (id: string, todos: Todo[]) => invoke<void>("save_todos", { id, todos }),
+  addTodosToReminders: (id: string, todoIds: string[]) => invoke<number>("add_todos_to_reminders", { id, todoIds }),
   deleteRecording: (id: string) => invoke<void>("delete_recording", { id }),
   cancelProcessing: (id: string) => invoke<void>("cancel_processing", { id }),
   /** diarize가 null이면 설정의 기본 방식 */
