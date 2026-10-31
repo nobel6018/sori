@@ -62,7 +62,8 @@ iOS 18 이상이 필요합니다. 녹음 중 화면(Live Activity)을 그리는 
 - 시작 인텐트는 `AudioRecordingIntent`와 `LiveActivityIntent`를 함께 선언합니다. `LiveActivityIntent`가 있어야 단축어 실행기가 Live Activity 시작 허가(activity request assertion)를 붙여 줍니다. 없던 0.7.2는 `visibility` 오류로 실패했습니다(기기 로그: `Requester is not targeted by an activity request assertion`)
 - 백그라운드에서 시작하면 오디오 세션을 `.mixWithOthers`로 켭니다(`SoriNativePlugin.startRecording`). 백그라운드 앱은 다른 앱의 소리를 멈출 수 없어, 섞지 않는 세션은 "Session activation failed"(-12985)로 실패했습니다. 그래서 음악이 나오는 중에 동작 버튼으로 녹음하면 음악이 멈추지 않고 함께 녹음됩니다
 - 섞을지는 앱 상태(`applicationState`)가 아니라 단축어에서 왔는지(`begin_recording`의 `from_intent`)로 정합니다. 정지에서 막 깨어난 앱은 `applicationState`가 active로 나와 섞지 않는 세션으로 실패했습니다(0.7.4, `!int` 560557684)
-- 백그라운드에서 시작하면 audiomxd가 가끔 재생 권한 검사(`IsAllowedToStartPlaying`: "does not have assertions to start mixable playback")로 `record()`를 거절합니다. 같은 조건에서 성공할 때는 녹음 검사(`IsAllowedToStartRecording`)를 통과합니다. 원인은 아직 모릅니다(백그라운드 시작 6번에 1번꼴). 같은 세션으로 다시 하는 것은 소용없어, 세션을 껐다 켜며 3번까지 시도하고 몇 번째에 됐는지 기기 로그(`sori: ...번째 시도`)에 남깁니다
+- 백그라운드에서 시작하면 audiomxd가 가끔 녹음 대신 재생 권한 검사(`IsAllowedToStartPlaying`: "does not have assertions to start mixable playback")로 `record()`를 거절합니다. 성공할 때는 녹음 검사(`IsAllowedToStartRecording`)를 임시 허가로 통과합니다. 임시 허가는 매번 들어오고 앱 상태, 시각으로도 갈리지 않아 원인을 모릅니다(0.7.6 테스트에서 9번 중 6번). Apple 포럼에도 백그라운드 녹음 시작이 막힌다는 보고가 있습니다. 같은 세션으로, 세션을 껐다 켜서 다시 해도 소용없었습니다
+- 그래서 시작 인텐트는 백그라운드에서 먼저 시도하고, 실패하면 `continueInForeground`(iOS 26)로 앱을 앞으로 띄워 다시 시작합니다(`RecordingControl.start`, `supportedModes`). 앱이 앞에 있으면 늘 됩니다. 화면이 잠겨 있으면 잠금 해제를 요구합니다
 - 시작이 실패하면 오디오 세션을 끕니다. 켜진 채 남으면 다음 시작에서 카테고리를 바꾸는 것을 iOS가 다른 앱 소리를 끊으려는 시도로 보고 `!int`로 거절해, 실패 한 번이 뒤의 시도를 줄줄이 실패시켰습니다(0.7.5)
 - 동작 버튼으로 녹음을 멈추면 Dynamic Island에 완료 표시(동그라미 체크)가 몇 초 뜹니다. 그동안 다시 누르면 iOS가 새로 실행하지 않고 끝난 실행기를 다시 써서 아무 일도 일어나지 않습니다(SpringBoard: `found running executor`). 앱에서 바꿀 수 없습니다
 - 띄우지 못하면 iOS가 준 오류 이름(`visibility`, `unsupportedTarget` 등)을 알림 문구에 그대로 넣습니다

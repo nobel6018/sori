@@ -76,11 +76,6 @@ class SoriNativePlugin: Plugin, UIDocumentPickerDelegate {
           if args.background == true || UIApplication.shared.applicationState != .active {
             options.insert(.mixWithOthers)
           }
-          // 앞선 시작이 실패해 세션이 켜진 채 남아 있으면, 켜진 세션의 카테고리를 바꾸는 것을 iOS가 다른 앱 소리를
-          // 끊으려는 시도로 보고 !int로 거절한다. 실패 한 번이 뒤의 시도를 줄줄이 실패시켰다(0.7.5). 끈 뒤에 설정한다
-          if self.recorder == nil {
-            try? session.setActive(false)
-          }
           try session.setCategory(.playAndRecord, mode: .default, options: options)
           try session.setActive(true)
           // 말소리용 AAC 모노 64kbps. 1시간에 약 28MB
@@ -92,40 +87,23 @@ class SoriNativePlugin: Plugin, UIDocumentPickerDelegate {
           ]
           let recorder = try AVAudioRecorder(url: URL(fileURLWithPath: args.path), settings: settings)
           recorder.isMeteringEnabled = true
-          self.record(recorder, invoke: invoke, attempt: 1)
+          // 백그라운드에서 시작하면 audiomxd가 가끔 녹음 대신 재생 권한 검사("does not have assertions to start
+          // mixable playback")로 record()를 거절한다. 같은 세션으로, 세션을 껐다 켜서 다시 해도 소용없었다(0.7.5, 0.7.6).
+          // 실패하면 단축어 쪽(RecordingControl.start)이 앱을 앞으로 띄워 다시 시작한다
+          guard recorder.record() else {
+            try? session.setActive(false)
+            invoke.reject("녹음을 시작하지 못했습니다")
+            return
+          }
+          self.recorder = recorder
+          invoke.resolve()
         } catch {
+          // 세션이 켜진 채 남으면 다음 시작의 카테고리 설정을 iOS가 다른 앱 소리를 끊으려는 시도로 보고 !int로
+          // 거절해, 실패 한 번이 뒤의 시도를 줄줄이 실패시켰다(0.7.5). 실패하면 꼭 끈다
           try? AVAudioSession.sharedInstance().setActive(false)
           invoke.reject("녹음을 시작하지 못했습니다: \(error.localizedDescription)")
         }
       }
-    }
-  }
-
-  /// 백그라운드에서 시작하면 audiomxd가 가끔 재생 권한 검사("does not have assertions to start mixable playback")로
-  /// record()를 거절한다. 원인을 아직 모른다. 같은 세션으로 0.5초 뒤 다시 하는 것은 소용없었다(0.7.5).
-  /// 세션을 껐다 켜서 3번까지 시도하고 몇 번째에 됐는지 남긴다. 끝내 실패하면 세션을 꺼 둔다
-  private func record(_ recorder: AVAudioRecorder, invoke: Invoke, attempt: Int) {
-    if recorder.record() {
-      if attempt > 1 { NSLog("sori: \(attempt)번째 시도에서 녹음을 시작했습니다") }
-      self.recorder = recorder
-      invoke.resolve()
-      return
-    }
-    NSLog("sori: 녹음 시작 \(attempt)번째 시도 실패")
-    let session = AVAudioSession.sharedInstance()
-    try? session.setActive(false)
-    guard attempt < 3 else {
-      invoke.reject("녹음을 시작하지 못했습니다(3번 시도). 몇 초 뒤 다시 눌러 주세요")
-      return
-    }
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-      do {
-        try session.setActive(true)
-      } catch {
-        invoke.reject("녹음을 시작하지 못했습니다: \(error.localizedDescription)")
-        return
-      }
-      self.record(recorder, invoke: invoke, attempt: attempt + 1)
     }
   }
 

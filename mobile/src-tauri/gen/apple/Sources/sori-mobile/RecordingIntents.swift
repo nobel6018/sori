@@ -10,8 +10,12 @@ struct StartRecordingIntent: AudioRecordingIntent, LiveActivityIntent {
   static let title: LocalizedStringResource = "녹음 시작"
   static let description = IntentDescription("앱을 열지 않고 바로 녹음을 시작합니다. 녹음하는 동안 잠금 화면과 Dynamic Island에 경과 시간이 보입니다")
 
+  /// 백그라운드로 시작하고, 필요하면(녹음 시작을 iOS가 거절하면) 앱을 앞으로 띄운다
+  @available(iOS 26.0, *)
+  static var supportedModes: IntentModes { [.background, .foreground(.dynamic)] }
+
   func perform() async throws -> some IntentResult {
-    try await RecordingControl.start()
+    try await RecordingControl.start(continuing: self)
     return .result()
   }
 }
@@ -21,11 +25,14 @@ struct ToggleRecordingIntent: AudioRecordingIntent, LiveActivityIntent {
   static let title: LocalizedStringResource = "녹음 시작/멈춤"
   static let description = IntentDescription("녹음 중이 아니면 바로 녹음을 시작하고, 녹음 중이면 멈춥니다")
 
+  @available(iOS 26.0, *)
+  static var supportedModes: IntentModes { [.background, .foreground(.dynamic)] }
+
   func perform() async throws -> some IntentResult {
     if await RecordingControl.isRecording() {
       try await RecordingControl.stop()
     } else {
-      try await RecordingControl.start()
+      try await RecordingControl.start(continuing: self)
     }
     return .result()
   }

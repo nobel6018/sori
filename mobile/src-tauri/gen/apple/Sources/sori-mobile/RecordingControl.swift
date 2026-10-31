@@ -4,6 +4,7 @@
 // @see docs/mobile.md
 
 import ActivityKit
+import AppIntents
 import Foundation
 
 struct RecordingError: Error, CustomLocalizedStringResourceConvertible {
@@ -12,7 +13,21 @@ struct RecordingError: Error, CustomLocalizedStringResourceConvertible {
 }
 
 enum RecordingControl {
-  static func start() async throws {
+  /// 백그라운드에서 먼저 시도하고, iOS가 거절하면 앱을 앞으로 띄워 다시 시작한다.
+  /// 백그라운드 녹음 시작은 iOS가 임시 허가를 주고도 가끔 거절한다(원인 미확정, docs/mobile.md). 앞에서는 늘 된다
+  static func start(continuing intent: some AppIntent) async throws {
+    do {
+      try await startInBackground()
+    } catch {
+      guard #available(iOS 26.0, *) else { throw error }
+      NSLog("sori: 백그라운드 녹음 시작 실패, 앱을 앞으로 띄워 다시 시작합니다: \(error)")
+      // 화면이 잠겨 있으면 잠금 해제를 요구한다. 거절하면 오류가 그대로 단축어에 간다
+      try await intent.continueInForeground(nil, alwaysConfirm: false)
+      try await callRust { sori_intent_start_recording() }
+    }
+  }
+
+  private static func startInBackground() async throws {
     // AudioRecordingIntent는 녹음하는 동안 Live Activity를 띄워야 한다. 못 띄우면 시스템이 녹음을 끊는다
     guard ActivityAuthorizationInfo().areActivitiesEnabled else {
       throw RecordingError(message: "실시간 현황이 꺼져 있어 녹음할 수 없습니다. 설정 > 앱 > sori에서 실시간 현황을 켜 주세요")
