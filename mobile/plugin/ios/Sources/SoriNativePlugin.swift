@@ -64,6 +64,11 @@ class SoriNativePlugin: Plugin, UIDocumentPickerDelegate {
           } else {
             options.insert(.allowBluetooth)
           }
+          // 동작 버튼, 단축어로 백그라운드에서 시작하면 다른 앱의 소리를 멈출 수 없어 세션 켜기가 실패한다
+          // (audiomxd: "can't stop others because it is in the background", -12985). 이때는 섞어서 켠다
+          if UIApplication.shared.applicationState != .active {
+            options.insert(.mixWithOthers)
+          }
           try session.setCategory(.playAndRecord, mode: .default, options: options)
           try session.setActive(true)
           // 말소리용 AAC 모노 64kbps. 1시간에 약 28MB
