@@ -2,6 +2,7 @@
 //! 받아 적기와 요약은 하지 않는다(모델이 크고 휴대폰에서 느림).
 //! @see docs/mobile.md
 
+mod intents;
 mod store;
 mod sync;
 
@@ -145,48 +146,69 @@ fn delete_note(app: AppHandle, state: State<AppState>, id: String, note_id: Stri
     Ok(meta)
 }
 
-#[tauri::command]
-async fn start_recording(app: AppHandle) -> CmdResult<Value> {
-    tauri::async_runtime::spawn_blocking(move || {
-        let state = app.state::<AppState>();
-        if state.recording.lock().unwrap().is_some() {
+/// 녹음을 시작한다. 화면의 녹음 버튼과 단축어, 동작 버튼(intents.rs)이 함께 쓴다.
+/// 메인 스레드에서 부르면 안 된다(add_note 설명 참고)
+pub(crate) fn begin_recording(app: &AppHandle) -> CmdResult<Value> {
+    let state = app.state::<AppState>();
+    // 화면 버튼과 동작 버튼이 겹쳐 눌려도 하나만 시작하도록, 확인과 자리 잡기를 한 번에 한다
+    let (meta, id) = {
+        let mut current = state.recording.lock().unwrap();
+        if current.is_some() {
             return Err("이미 녹음 중입니다".to_string());
         }
         let title = format!("녹음 {}", chrono::Local::now().format("%Y-%m-%d %H:%M"));
         let meta = state.store.create_recording(&title).map_err(err)?;
         let id = meta["id"].as_str().unwrap_or_default().to_string();
-        let path = state.store.audio_path(&meta).map_err(err)?;
-        if let Err(e) = app.sori_native().start_recording(&path.to_string_lossy()) {
-            let _ = state.store.delete(&id);
-            return Err(e.to_string());
-        }
-        *state.recording.lock().unwrap() = Some(id);
-        Ok(meta)
-    })
-    .await
-    .map_err(err)?
+        *current = Some(id.clone());
+        (meta, id)
+    };
+    let started = state
+        .store
+        .audio_path(&meta)
+        .map_err(err)
+        .and_then(|path| app.sori_native().start_recording(&path.to_string_lossy()).map_err(err));
+    if let Err(e) = started {
+        *state.recording.lock().unwrap() = None;
+        let _ = state.store.delete(&id);
+        return Err(e);
+    }
+    intents::activity_started();
+    let _ = app.emit("recorder-changed", json!({ "id": id }));
+    Ok(meta)
+}
+
+/// 녹음을 멈추고 바로 동기화한다. 화면의 멈춤 버튼, Live Activity 멈춤 버튼, 동작 버튼이 함께 쓴다
+pub(crate) fn end_recording(app: &AppHandle) -> CmdResult<Value> {
+    let state = app.state::<AppState>();
+    let id = state.recording.lock().unwrap().clone().ok_or("녹음 중이 아닙니다")?;
+    let duration = app.sori_native().stop_recording().map_err(err)?;
+    *state.recording.lock().unwrap() = None;
+    intents::activity_stopped();
+    let _ = app.emit("recorder-changed", json!({ "id": id }));
+    let meta = state
+        .store
+        .update(&id, &mut |m| {
+            m["status"] = json!("new");
+            m["duration"] = json!(duration);
+        })
+        .map_err(err)?;
+    // 녹음은 이 기기에만 있는 동안 잃을 수 있어(앱 서명 만료 등) 바로 올린다
+    changed(app, &id);
+    Ok(meta)
+}
+
+pub(crate) fn is_recording(app: &AppHandle) -> bool {
+    app.state::<AppState>().recording.lock().unwrap().is_some()
+}
+
+#[tauri::command]
+async fn start_recording(app: AppHandle) -> CmdResult<Value> {
+    tauri::async_runtime::spawn_blocking(move || begin_recording(&app)).await.map_err(err)?
 }
 
 #[tauri::command]
 async fn stop_recording(app: AppHandle) -> CmdResult<Value> {
-    tauri::async_runtime::spawn_blocking(move || {
-        let state = app.state::<AppState>();
-        let id = state.recording.lock().unwrap().clone().ok_or("녹음 중이 아닙니다")?;
-        let duration = app.sori_native().stop_recording().map_err(err)?;
-        *state.recording.lock().unwrap() = None;
-        let meta = state
-            .store
-            .update(&id, &mut |m| {
-                m["status"] = json!("new");
-                m["duration"] = json!(duration);
-            })
-            .map_err(err)?;
-        // 녹음은 이 기기에만 있는 동안 잃을 수 있어(앱 서명 만료 등) 바로 올린다
-        changed(&app, &id);
-        Ok(meta)
-    })
-    .await
-    .map_err(err)?
+    tauri::async_runtime::spawn_blocking(move || end_recording(&app)).await.map_err(err)?
 }
 
 #[derive(Serialize)]
@@ -266,8 +288,12 @@ pub fn run() {
                     }
                 }
             }
+            // 녹음 도중 앱이 꺼졌으면 Live Activity만 남아 있다
+            intents::activity_stopped();
             app.manage(AppState { store, recording: Mutex::new(None), syncer: sync::Syncer::new() });
             sync::start(app.handle().clone());
+            // 단축어가 앱을 띄웠으면 이 시점부터 녹음을 시작할 수 있다
+            intents::set_app(app.handle().clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

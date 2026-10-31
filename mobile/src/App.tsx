@@ -22,15 +22,24 @@ export function App() {
   useEffect(() => {
     refresh();
     api.syncStatus().then(setSync);
-    // 앱을 다시 켰을 때 녹음이 이어지고 있으면 녹음 화면으로 돌아간다
-    api.recorderState().then((s) => s.id && setRecorder(s));
+    // 앱을 다시 켰거나 동작 버튼, 단축어로 녹음이 바뀌었으면 녹음 화면을 그 상태에 맞춘다
+    const syncRecorder = () => api.recorderState().then((s) => setRecorder(s.id ? s : null));
+    syncRecorder();
     const subs = [
       api.onSyncStatus(setSync),
       api.onRecordingsSynced(refresh),
       api.onRecordingChanged(() => refresh()),
+      api.onRecorderChanged(() => {
+        syncRecorder();
+        refresh();
+      }),
     ];
     // 앱으로 돌아오면 다른 기기의 변경(Mac에서 끝난 전사 등)을 바로 가져온다
-    const onVisible = () => document.visibilityState === "visible" && api.syncNow();
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      syncRecorder();
+      api.syncNow();
+    };
     document.addEventListener("visibilitychange", onVisible);
     return () => {
       subs.forEach((s) => s.then((f) => f()));

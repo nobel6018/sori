@@ -2,7 +2,7 @@ name: sori-mobile
 options:
   bundleIdPrefix: com.nobel6018.sori.mobile
   deploymentTarget:
-    iOS: 17.0
+    iOS: 18.0
 fileGroups: [../../src]
 configs:
   debug: debug
@@ -37,6 +37,8 @@ targets:
       - path: Externals
         excludes: ["**/*.a"]
       - path: sori-mobile_iOS
+      # 위젯 확장과 함께 쓰는 Live Activity 데이터, 멈춤 인텐트
+      - path: Shared
       - path: assets
         buildPhase: resources
         type: folder
@@ -77,8 +79,12 @@ targets:
         CODE_SIGNING_ALLOWED: NO
         CODE_SIGNING_REQUIRED: NO
         CODE_SIGN_IDENTITY: ""
+        # 단축어 인텐트(Swift)가 Rust 함수(src/intents.rs)를 부른다
+        SWIFT_OBJC_BRIDGING_HEADER: Sources/sori-mobile/sori-bridge.h
+        SWIFT_VERSION: "5.0"
       groups: [app]
     dependencies:
+      - target: sori-widgets
       - framework: libapp.a
         embed: false
       - sdk: CoreGraphics.framework
@@ -96,3 +102,41 @@ targets:
         outputFiles:
           - $(SRCROOT)/Externals/x86_64/${CONFIGURATION}/libapp.a
           - $(SRCROOT)/Externals/arm64/${CONFIGURATION}/libapp.a
+  # 녹음 중 Live Activity를 그리는 위젯 확장(docs/mobile.md). 앱 안의 PlugIns/로 들어간다
+  sori-widgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Widgets
+      - path: Shared
+    info:
+      path: Widgets/Info.plist
+      properties:
+        CFBundleDisplayName: sori
+        CFBundleShortVersionString: 0.0.0
+        CFBundleVersion: "0.0.0"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_NAME: sori-widgets
+        PRODUCT_BUNDLE_IDENTIFIER: com.nobel6018.sori.mobile.widgets
+        SWIFT_VERSION: "5.0"
+        # StopRecordingIntent의 Rust 호출은 앱에서만 컴파일한다
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) WIDGET_EXTENSION
+        ARCHS: [arm64]
+        EXCLUDED_ARCHS[sdk=iphoneos*]: x86_64
+        CODE_SIGNING_ALLOWED: NO
+        CODE_SIGNING_REQUIRED: NO
+        CODE_SIGN_IDENTITY: ""
+    dependencies:
+      - sdk: WidgetKit.framework
+      - sdk: SwiftUI.framework
+    postBuildScripts:
+      # 확장의 버전은 앱과 같아야 설치된다. 앱 버전은 Tauri가 tauri.conf.json으로 정하므로 빌드 때 옮겨 적는다
+      - script: |
+          version=$(/usr/bin/plutil -extract version raw "${SRCROOT}/../../tauri.conf.json")
+          plist="${TARGET_BUILD_DIR}/${INFOPLIST_PATH}"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${version}" -c "Set :CFBundleVersion ${version}" "$plist"
+        name: Sync version with app
+        basedOnDependencyAnalysis: false

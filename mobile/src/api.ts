@@ -52,6 +52,8 @@ export const api = {
   downloadAudio: (id: string) => invoke<void>("download_audio", { id }),
   onSyncStatus: (h: (s: SyncStatus) => void) => listen<SyncStatus>("sync-status", (e) => h(e.payload)),
   onRecordingsSynced: (h: () => void) => listen("recordings-synced", () => h()),
+  /** 녹음이 시작되거나 멈췄다. 화면 밖(동작 버튼, 단축어, Live Activity 멈춤 버튼)에서 바뀐 것도 온다 */
+  onRecorderChanged: (h: () => void) => listen("recorder-changed", () => h()),
   onRecordingChanged: (h: (id: string) => void) => listen<{ id: string }>("recording-changed", (e) => h(e.payload.id)),
   onAudioDownload: (h: (p: { id: string; done: number; total: number }) => void) =>
     listen<{ id: string; done: number; total: number }>("audio-download", (e) => h(e.payload)),

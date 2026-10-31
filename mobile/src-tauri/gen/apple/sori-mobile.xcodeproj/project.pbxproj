@@ -7,22 +7,59 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		01A215DD333E74C084201680 /* RecordingIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = A215F77387747FF3E727221D /* RecordingIntents.swift */; };
 		0ED4FDDC984B68C3439E0AB3 /* assets in Resources */ = {isa = PBXBuildFile; fileRef = 04E968D607247E0F36825238 /* assets */; };
+		1AA95A4065A4D7BED596366C /* RecordingActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A959D64BF9EDE0D172B5FBC /* RecordingActivity.swift */; };
 		1E88070E12A870FAF1C2F9C6 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = BED9AC62B0BF583137AEF0CE /* LaunchScreen.storyboard */; };
 		27892AEFEC50F261541A8B82 /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F9772319375479CF2163E558 /* Security.framework */; };
+		282F8EB4E657CE19AD7EE725 /* SoriWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED77E146F6934C7CC284550F /* SoriWidgets.swift */; };
 		48A034EC96AFFE79CCD12A18 /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E387058B9C30651F51739A6A /* Metal.framework */; };
 		58D1A4680B4BC0666867E27A /* main.mm in Sources */ = {isa = PBXBuildFile; fileRef = 2E7CEE90B6DF20E687AE4CE5 /* main.mm */; };
 		5A1F164F91192CEF65E64983 /* MetalKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FC00DBBEB39F7D06D419B98E /* MetalKit.framework */; };
 		629310157DC9D07C81269C47 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 52430CAC7450D5815452BAD1 /* Assets.xcassets */; };
+		636DD952025EC847F09B9A02 /* StopRecordingIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 081BC60CCB9FDCAF62EB328D /* StopRecordingIntent.swift */; };
 		654889A892650C761AADBD2E /* QuartzCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2E0E92E1A70A2965908E8CBB /* QuartzCore.framework */; };
+		86730CE1AFACE03F81046279 /* sori-widgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = F22D87EE9BE57D41806D4289 /* sori-widgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		8CF8AB902FDD2908EA6900AD /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FE6D92DDB29B4C84E5F15757 /* SwiftUI.framework */; };
 		8F9361788429D04EBADD85CF /* UIKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CB943D9622C485DA13FC5A08 /* UIKit.framework */; };
 		9C0FAB90A0099F3E0557C2BB /* WebKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 350F7007C12B188F63B1D813 /* WebKit.framework */; };
+		9E4B42CEB64A54A4CB7D5EF8 /* RecordingControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = B58BF66CA4860DBE4B53CBE5 /* RecordingControl.swift */; };
+		A852729F8494B0F0E99402D6 /* RecordingActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A959D64BF9EDE0D172B5FBC /* RecordingActivity.swift */; };
 		B9C0D997A5E16A749CD976A0 /* CoreGraphics.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E1269B020130FEE853D6C923 /* CoreGraphics.framework */; };
+		C0BB0F4E3FCB415643ADF163 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E6A8650997BC18B78081FBD7 /* WidgetKit.framework */; };
+		D26F93CCA99AB4EA9CB93849 /* StopRecordingIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 081BC60CCB9FDCAF62EB328D /* StopRecordingIntent.swift */; };
 		E028C3346E4490301C0B566E /* libapp.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 2C25CD5581F9FF42CCD47795 /* libapp.a */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		BE95C292CD0251F422D2EEBB /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 1C2C96DBB9D63A86C9A832E2 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E77E73403DF8BE13AAA8EA50;
+			remoteInfo = "sori-widgets";
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		B5D7DAFDD17686FADDB32559 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				86730CE1AFACE03F81046279 /* sori-widgets.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
 		04E968D607247E0F36825238 /* assets */ = {isa = PBXFileReference; lastKnownFileType = folder; path = assets; sourceTree = SOURCE_ROOT; };
+		081BC60CCB9FDCAF62EB328D /* StopRecordingIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StopRecordingIntent.swift; sourceTree = "<group>"; };
+		235FD2B74A39FFE3C5C8C134 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		2A959D64BF9EDE0D172B5FBC /* RecordingActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingActivity.swift; sourceTree = "<group>"; };
 		2C25CD5581F9FF42CCD47795 /* libapp.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = libapp.a; sourceTree = "<group>"; };
 		2E0E92E1A70A2965908E8CBB /* QuartzCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuartzCore.framework; path = System/Library/Frameworks/QuartzCore.framework; sourceTree = SDKROOT; };
 		2E7CEE90B6DF20E687AE4CE5 /* main.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = main.mm; sourceTree = "<group>"; };
@@ -32,19 +69,36 @@
 		6223C82A8A6DC39BBEBBD42C /* sori-mobile_iOS.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "sori-mobile_iOS.entitlements"; sourceTree = "<group>"; };
 		628E717004E27516CB2155BD /* sori-mobile_iOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = "sori-mobile_iOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		75D10825919FED1722E893B6 /* bindings.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = bindings.h; sourceTree = "<group>"; };
+		75FA2F69430B2500658D9ACF /* intents.rs */ = {isa = PBXFileReference; path = intents.rs; sourceTree = "<group>"; };
 		7E640145F1DB5F1E285D3C27 /* store.rs */ = {isa = PBXFileReference; path = store.rs; sourceTree = "<group>"; };
 		8D0A2E77E38DCF1F79021B90 /* sync.rs */ = {isa = PBXFileReference; path = sync.rs; sourceTree = "<group>"; };
+		A215F77387747FF3E727221D /* RecordingIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingIntents.swift; sourceTree = "<group>"; };
 		AA996C3D061EA68C083E40E2 /* main.rs */ = {isa = PBXFileReference; path = main.rs; sourceTree = "<group>"; };
+		B58BF66CA4860DBE4B53CBE5 /* RecordingControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingControl.swift; sourceTree = "<group>"; };
 		BED9AC62B0BF583137AEF0CE /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
 		CB943D9622C485DA13FC5A08 /* UIKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UIKit.framework; path = System/Library/Frameworks/UIKit.framework; sourceTree = SDKROOT; };
 		CCC8ABCC7808FD3022563CF2 /* lib.rs */ = {isa = PBXFileReference; path = lib.rs; sourceTree = "<group>"; };
+		D909DDB64B7D8CDFAD9D63D7 /* sori-bridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "sori-bridge.h"; sourceTree = "<group>"; };
 		E1269B020130FEE853D6C923 /* CoreGraphics.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreGraphics.framework; path = System/Library/Frameworks/CoreGraphics.framework; sourceTree = SDKROOT; };
 		E387058B9C30651F51739A6A /* Metal.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = System/Library/Frameworks/Metal.framework; sourceTree = SDKROOT; };
+		E6A8650997BC18B78081FBD7 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		ED77E146F6934C7CC284550F /* SoriWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoriWidgets.swift; sourceTree = "<group>"; };
+		F22D87EE9BE57D41806D4289 /* sori-widgets.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = "sori-widgets.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
 		F9772319375479CF2163E558 /* Security.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Security.framework; path = System/Library/Frameworks/Security.framework; sourceTree = SDKROOT; };
 		FC00DBBEB39F7D06D419B98E /* MetalKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MetalKit.framework; path = System/Library/Frameworks/MetalKit.framework; sourceTree = SDKROOT; };
+		FE6D92DDB29B4C84E5F15757 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		9C1D369E998DDFCBF6DBE4C1 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C0BB0F4E3FCB415643ADF163 /* WidgetKit.framework in Frameworks */,
+				8CF8AB902FDD2908EA6900AD /* SwiftUI.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		A426620F7AF98CA47B9C17DE /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -71,10 +125,22 @@
 			path = Sources;
 			sourceTree = "<group>";
 		};
+		51411F4BAEBB74B02E1E3CFF /* Widgets */ = {
+			isa = PBXGroup;
+			children = (
+				235FD2B74A39FFE3C5C8C134 /* Info.plist */,
+				ED77E146F6934C7CC284550F /* SoriWidgets.swift */,
+			);
+			path = Widgets;
+			sourceTree = "<group>";
+		};
 		5713A18434A408312C8F083E /* sori-mobile */ = {
 			isa = PBXGroup;
 			children = (
 				2E7CEE90B6DF20E687AE4CE5 /* main.mm */,
+				B58BF66CA4860DBE4B53CBE5 /* RecordingControl.swift */,
+				A215F77387747FF3E727221D /* RecordingIntents.swift */,
+				D909DDB64B7D8CDFAD9D63D7 /* sori-bridge.h */,
 				E74BBFC2B7FF417A6EA42F1D /* bindings */,
 			);
 			path = "sori-mobile";
@@ -96,18 +162,30 @@
 				52430CAC7450D5815452BAD1 /* Assets.xcassets */,
 				BED9AC62B0BF583137AEF0CE /* LaunchScreen.storyboard */,
 				CA47D04EA4447892ED32E5DC /* Externals */,
+				7924A3F3FE4F6FFA463020E7 /* Shared */,
 				6154347501CD4046F08C0B51 /* sori-mobile_iOS */,
 				28BB371F141CA1402AD079FC /* Sources */,
 				9E53A8B38EDC088ED696630E /* src */,
+				51411F4BAEBB74B02E1E3CFF /* Widgets */,
 				E150DB790D97A63450EB4879 /* Frameworks */,
 				8BFBC2CA0A978CCFD2D73BFD /* Products */,
 			);
+			sourceTree = "<group>";
+		};
+		7924A3F3FE4F6FFA463020E7 /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				2A959D64BF9EDE0D172B5FBC /* RecordingActivity.swift */,
+				081BC60CCB9FDCAF62EB328D /* StopRecordingIntent.swift */,
+			);
+			path = Shared;
 			sourceTree = "<group>";
 		};
 		8BFBC2CA0A978CCFD2D73BFD /* Products */ = {
 			isa = PBXGroup;
 			children = (
 				628E717004E27516CB2155BD /* sori-mobile_iOS.app */,
+				F22D87EE9BE57D41806D4289 /* sori-widgets.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -115,6 +193,7 @@
 		9E53A8B38EDC088ED696630E /* src */ = {
 			isa = PBXGroup;
 			children = (
+				75FA2F69430B2500658D9ACF /* intents.rs */,
 				CCC8ABCC7808FD3022563CF2 /* lib.rs */,
 				AA996C3D061EA68C083E40E2 /* main.rs */,
 				7E640145F1DB5F1E285D3C27 /* store.rs */,
@@ -140,8 +219,10 @@
 				FC00DBBEB39F7D06D419B98E /* MetalKit.framework */,
 				2E0E92E1A70A2965908E8CBB /* QuartzCore.framework */,
 				F9772319375479CF2163E558 /* Security.framework */,
+				FE6D92DDB29B4C84E5F15757 /* SwiftUI.framework */,
 				CB943D9622C485DA13FC5A08 /* UIKit.framework */,
 				350F7007C12B188F63B1D813 /* WebKit.framework */,
+				E6A8650997BC18B78081FBD7 /* WidgetKit.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -154,18 +235,18 @@
 			path = bindings;
 			sourceTree = "<group>";
 		};
-		"TEMP_444BF2A2-125E-42B6-8580-DA6F8FA2D5E2" /* x86_64 */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			path = x86_64;
-			sourceTree = "<group>";
-		};
-		"TEMP_97A14889-8439-4300-9845-490403FAA84A" /* arm64 */ = {
+		"TEMP_3D85BE2E-169B-4289-A39E-CD21CF3076EC" /* arm64 */ = {
 			isa = PBXGroup;
 			children = (
 			);
 			path = arm64;
+			sourceTree = "<group>";
+		};
+		"TEMP_7E0E5F43-5B4C-4CD5-AF85-9FF0B5314667" /* x86_64 */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = x86_64;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -179,10 +260,12 @@
 				4F8E35628138BDFF44D5BFD0 /* Sources */,
 				64E2F5C7B78E6F74B8550DCD /* Resources */,
 				A426620F7AF98CA47B9C17DE /* Frameworks */,
+				B5D7DAFDD17686FADDB32559 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				D7DEDC70598240B4DFAC4075 /* PBXTargetDependency */,
 			);
 			name = "sori-mobile_iOS";
 			packageProductDependencies = (
@@ -190,6 +273,25 @@
 			productName = "sori-mobile_iOS";
 			productReference = 628E717004E27516CB2155BD /* sori-mobile_iOS.app */;
 			productType = "com.apple.product-type.application";
+		};
+		E77E73403DF8BE13AAA8EA50 /* sori-widgets */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 0D3A45F3FC6446AA828A24B1 /* Build configuration list for PBXNativeTarget "sori-widgets" */;
+			buildPhases = (
+				1E0AC04EC1F20BAE7E43994D /* Sources */,
+				9C1D369E998DDFCBF6DBE4C1 /* Frameworks */,
+				F89241776F2CF643238FB36A /* Sync version with app */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = "sori-widgets";
+			packageProductDependencies = (
+			);
+			productName = "sori-widgets";
+			productReference = F22D87EE9BE57D41806D4289 /* sori-widgets.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -217,6 +319,7 @@
 			projectRoot = "";
 			targets = (
 				15BF52CC6C1F4FFEC35CD1E7 /* sori-mobile_iOS */,
+				E77E73403DF8BE13AAA8EA50 /* sori-widgets */,
 			);
 		};
 /* End PBXProject section */
@@ -256,20 +359,86 @@
 			shellPath = /bin/sh;
 			shellScript = "pnpm tauri ios xcode-script -v --platform \"${PLATFORM_DISPLAY_NAME:?}\" --sdk-root \"${SDKROOT:?}\" --framework-search-paths \"${FRAMEWORK_SEARCH_PATHS:?}\" --header-search-paths \"${HEADER_SEARCH_PATHS:?}\" --gcc-preprocessor-definitions \"${GCC_PREPROCESSOR_DEFINITIONS:-}\" --configuration \"${CONFIGURATION:?}\" ${FORCE_COLOR} ${ARCHS:?}\n";
 		};
+		F89241776F2CF643238FB36A /* Sync version with app */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Sync version with app";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "version=$(/usr/bin/plutil -extract version raw \"${SRCROOT}/../../tauri.conf.json\")\nplist=\"${TARGET_BUILD_DIR}/${INFOPLIST_PATH}\"\n/usr/libexec/PlistBuddy -c \"Set :CFBundleShortVersionString ${version}\" -c \"Set :CFBundleVersion ${version}\" \"$plist\"\n";
+		};
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		1E0AC04EC1F20BAE7E43994D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1AA95A4065A4D7BED596366C /* RecordingActivity.swift in Sources */,
+				282F8EB4E657CE19AD7EE725 /* SoriWidgets.swift in Sources */,
+				636DD952025EC847F09B9A02 /* StopRecordingIntent.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		4F8E35628138BDFF44D5BFD0 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A852729F8494B0F0E99402D6 /* RecordingActivity.swift in Sources */,
+				9E4B42CEB64A54A4CB7D5EF8 /* RecordingControl.swift in Sources */,
+				01A215DD333E74C084201680 /* RecordingIntents.swift in Sources */,
+				D26F93CCA99AB4EA9CB93849 /* StopRecordingIntent.swift in Sources */,
 				58D1A4680B4BC0666867E27A /* main.mm in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		D7DEDC70598240B4DFAC4075 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = E77E73403DF8BE13AAA8EA50 /* sori-widgets */;
+			targetProxy = BE95C292CD0251F422D2EEBB /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
+		4A64B32D6569FE3CBF98366D /* release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = (
+					arm64,
+				);
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGNING_REQUIRED = NO;
+				CODE_SIGN_IDENTITY = "";
+				"EXCLUDED_ARCHS[sdk=iphoneos*]" = x86_64;
+				INFOPLIST_FILE = Widgets/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.nobel6018.sori.mobile.widgets;
+				PRODUCT_NAME = "sori-widgets";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) WIDGET_EXTENSION";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = release;
+		};
 		8DDD4022A1F8E7ED353CFF1E /* release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -315,7 +484,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -354,6 +523,8 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.nobel6018.sori.mobile;
 				PRODUCT_NAME = "sori";
 				SDKROOT = iphoneos;
+				SWIFT_OBJC_BRIDGING_HEADER = "Sources/sori-mobile/sori-bridge.h";
+				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VALID_ARCHS = arm64;
 			};
@@ -410,7 +581,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -450,14 +621,50 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.nobel6018.sori.mobile;
 				PRODUCT_NAME = "sori";
 				SDKROOT = iphoneos;
+				SWIFT_OBJC_BRIDGING_HEADER = "Sources/sori-mobile/sori-bridge.h";
+				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VALID_ARCHS = arm64;
+			};
+			name = debug;
+		};
+		DB76FEBD19C1257A23957420 /* debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = (
+					arm64,
+				);
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGNING_REQUIRED = NO;
+				CODE_SIGN_IDENTITY = "";
+				"EXCLUDED_ARCHS[sdk=iphoneos*]" = x86_64;
+				INFOPLIST_FILE = Widgets/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.nobel6018.sori.mobile.widgets;
+				PRODUCT_NAME = "sori-widgets";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) WIDGET_EXTENSION";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = debug;
 		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		0D3A45F3FC6446AA828A24B1 /* Build configuration list for PBXNativeTarget "sori-widgets" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				DB76FEBD19C1257A23957420 /* debug */,
+				4A64B32D6569FE3CBF98366D /* release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = debug;
+		};
 		51E4AE240268A410257C75CE /* Build configuration list for PBXNativeTarget "sori-mobile_iOS" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

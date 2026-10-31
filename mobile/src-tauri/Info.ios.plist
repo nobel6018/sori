@@ -9,6 +9,9 @@
   <array>
     <string>audio</string>
   </array>
+  <!-- 단축어, 동작 버튼으로 녹음할 때 잠금 화면과 Dynamic Island에 경과 시간을 띄운다 -->
+  <key>NSSupportsLiveActivities</key>
+  <true/>
   <key>CFBundleDisplayName</key>
   <string>sori</string>
 </dict>

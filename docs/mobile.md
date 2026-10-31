@@ -13,6 +13,8 @@ App Store에 올리지 않고 AltStore로 본인 iPhone에만 설치합니다. �
 4. AltStore > My Apps > 왼쪽 위 `+` > `sori-ios.ipa`를 고릅니다
 5. sori를 열고 설정 > iCloud Drive를 눌러 `iCloud Drive/sori` 폴더를 고릅니다. Mac의 sori 설정에서 동기화를 iCloud Drive로 켜 두어야 이 폴더가 있습니다
 
+iOS 18 이상이 필요합니다. 녹음 중 화면(Live Activity)을 그리는 위젯 확장이 앱 안에 함께 들어 있어, 무료 Apple ID의 App ID(7일에 10개)를 2개 씁니다.
+
 무료 Apple ID 서명은 7일 뒤 만료됩니다. Mac에서 AltServer가 켜져 있고 iPhone과 같은 Wi-Fi에 있으면 AltStore가 자동으로 다시 서명합니다.
 만료돼도 iCloud에 올라간 녹음은 남지만, 올리기 전에 지운 앱 안의 녹음은 사라집니다. 앱은 녹음을 멈추면 바로 올립니다.
 
@@ -25,6 +27,38 @@ App Store에 올리지 않고 AltStore로 본인 iPhone에만 설치합니다. �
 | 전사, 요약 | Mac이 만든 transcript.json, summaries.json을 읽기만 한다 |
 | 오디오 | 다른 기기에서 온 녹음은 "오디오 받기"를 눌러야 받는다 |
 | 동기화 | 앱을 열 때, 녹음을 멈출 때, 메모를 고칠 때, 앱이 앞에 있는 동안 20초마다. 목록 위 "↻ 동기화"는 기다리지 않고 바로 맞춘다 |
+
+## 동작 버튼, 단축어로 바로 녹음
+
+앱을 열지 않고 녹음을 시작하고 멈춥니다. 단축어를 따로 만들 필요는 없습니다.
+
+1. 설정 > 동작 버튼 > 단축어 > sori > "녹음 시작/멈춤"을 고릅니다
+2. 동작 버튼을 누르면 녹음이 시작되고 잠금 화면과 Dynamic Island에 경과 시간이 뜹니다
+3. 동작 버튼을 다시 누르거나 Live Activity의 빨간 멈춤 버튼을 누르면 멈추고 iCloud Drive로 올립니다
+
+| 동작 | 쓰는 곳 |
+|---|---|
+| 녹음 시작/멈춤 (`ToggleRecordingIntent`) | 동작 버튼, Siri("sori 녹음") |
+| 녹음 시작 (`StartRecordingIntent`) | 단축어 자동화, Siri("sori 녹음 시작") |
+| 녹음 멈추기 (`StopRecordingIntent`) | Live Activity 멈춤 버튼, Siri("sori 녹음 멈춰") |
+
+설정 > 앱 > sori에서 실시간 현황(Live Activity)이 꺼져 있으면 시작하지 않고 그렇다고 알립니다. 앱 밖에서 녹음하는 `AudioRecordingIntent`는 녹음하는 동안 Live Activity를 띄워야 하고, 못 띄우면 시스템이 녹음을 끊기 때문입니다.
+앱 안의 녹음 버튼으로 시작해도 같은 Live Activity가 뜹니다.
+
+### 구조
+
+```
+동작 버튼 ─> ToggleRecordingIntent ─> RecordingControl ─(C 함수)─> intents.rs ─> begin_recording / end_recording (lib.rs)
+                                                                                    ├─> SoriNativePlugin (AVAudioRecorder)
+                                                                                    ├─> Live Activity 훅 (RecordingControl.swift)
+                                                                                    └─> recorder-changed 이벤트 ─> 화면(App.tsx)
+```
+
+- 인텐트는 Tauri 플러그인이 아니라 Xcode 앱 타깃(`gen/apple/Sources/sori-mobile/`)에 둡니다. 플러그인 Swift는 swift-rs가 `libapp.a`로 컴파일해서, Xcode가 단축어 앱이 읽는 메타데이터(`Metadata.appintents`)를 뽑지 못합니다
+- 녹음 상태는 화면 버튼과 똑같이 Rust의 `AppState.recording` 하나로 다룹니다. Swift는 `sori_intent_*` C 함수를 메인 스레드 밖에서 부릅니다. Rust가 메인 스레드의 Swift 녹음기를 기다리기 때문입니다
+- Rust가 Swift의 Live Activity 함수를 부를 때는 링크가 아니라 함수 포인터를 씁니다(`sori_set_activity_hooks`, `main.mm`에서 등록). 크레이트가 cdylib도 만들어서 Swift 심볼을 직접 링크하면 미해결 심볼로 빌드가 깨집니다
+- 앱이 꺼져 있으면 iOS가 앱을 백그라운드로 띄웁니다. Rust는 Tauri setup이 끝날 때까지 최대 10초 기다린 뒤 녹음을 시작합니다
+- `StopRecordingIntent`는 앱과 위젯 확장이 함께 컴파일합니다(`gen/apple/Shared/`). 버튼은 위젯이 그리지만 실행은 앱 프로세스에서 하므로, 위젯 쪽에서는 `WIDGET_EXTENSION` 조건으로 Rust 호출을 뺍니다
 
 ## iCloud Drive 접근
 
@@ -40,9 +74,14 @@ App Store에 올리지 않고 AltStore로 본인 iPhone에만 설치합니다. �
 | `mobile/src-tauri/src/store.rs` `Store` | 기기 저장소(데스크톱과 같은 폴더 구조, meta.json은 JSON 값 그대로) |
 | `mobile/src-tauri/src/sync.rs` `MobileLocal`, `remote` | 동기화 엔진(crates/sori-sync) 연결, 폴더 권한 열기 |
 | `mobile/plugin/ios/Sources/SoriNativePlugin.swift` | 녹음, 폴더 고르기와 권한 저장, iCloud 파일 받기 |
-| `mobile/src-tauri/Info.ios.plist` | 마이크 권한 설명, 백그라운드 오디오 |
+| `mobile/src-tauri/src/intents.rs` | 단축어 인텐트가 부르는 C 함수, Live Activity 훅 보관 |
+| `mobile/src-tauri/gen/apple/Sources/sori-mobile/RecordingIntents.swift` | 녹음 시작, 시작/멈춤 인텐트와 단축어 목록(`SoriShortcuts`) |
+| `mobile/src-tauri/gen/apple/Sources/sori-mobile/RecordingControl.swift` | Rust 호출, Live Activity 띄우고 내리기 |
+| `mobile/src-tauri/gen/apple/Shared/` | 앱과 위젯이 함께 쓰는 Live Activity 데이터, 멈춤 인텐트 |
+| `mobile/src-tauri/gen/apple/Widgets/SoriWidgets.swift` | Live Activity 화면(잠금 화면, Dynamic Island) |
+| `mobile/src-tauri/Info.ios.plist` | 마이크 권한 설명, 백그라운드 오디오, Live Activity 사용 |
 | `design/logo-ios.svg`, `design/logo-ios-1024.png` | 앱 아이콘. iOS가 모서리를 깎으므로 데스크톱 로고의 여백, 둥근 모서리, 그림자를 뺐다. `pnpm tauri icon ../design/logo-ios-1024.png`로 만들고 알파 채널을 없앤다(투명한 곳은 검게 보인다) |
-| `mobile/src-tauri/gen/apple/project.yml` | Xcode 프로젝트. 서명 없이 빌드하도록 `CODE_SIGNING_ALLOWED: NO` |
+| `mobile/src-tauri/gen/apple/project.yml` | Xcode 프로젝트. 서명 없이 빌드하도록 `CODE_SIGNING_ALLOWED: NO`. 위젯 확장 타깃 `sori-widgets`와 버전 맞추기 스크립트 |
 | `.github/workflows/release.yml` `ios` | 태그를 올리면 `sori-ios.ipa`를 만들어 Release에 붙인다 |
 
 ## 빌드
@@ -55,4 +94,5 @@ pnpm tauri ios build --target aarch64 --ci   # 빌드는 되고 내보내기(서
 
 - Xcode가 기본 개발 도구로 잡혀 있지 않으면(`xcode-select -p`가 CommandLineTools) `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`를 줍니다
 - 디버그 빌드는 화면을 개발 서버(localhost:1421)에서 읽어, 서버 없이 띄우면 검은 화면이 된다. 화면 확인은 릴리스 빌드로 한다
+- `project.yml`을 고친 뒤 `xcodegen generate`를 돌리면 `sori-mobile_iOS/Info.plist`가 project.yml 값으로 덮여 마이크 권한, 버전이 빠집니다. 빌드 때 Tauri가 `Info.ios.plist`를 다시 합치지만, 저장소의 파일은 `git checkout`으로 되돌려 둡니다
 - `mobile/plugin/ios/Package.swift`의 swift-tools-version은 5.9 이상이어야 `.iOS(.v17)`을 쓸 수 있다
