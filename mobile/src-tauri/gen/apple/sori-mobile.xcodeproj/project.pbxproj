@@ -235,18 +235,18 @@
 			path = bindings;
 			sourceTree = "<group>";
 		};
-		"TEMP_3D85BE2E-169B-4289-A39E-CD21CF3076EC" /* arm64 */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			path = arm64;
-			sourceTree = "<group>";
-		};
-		"TEMP_7E0E5F43-5B4C-4CD5-AF85-9FF0B5314667" /* x86_64 */ = {
+		"TEMP_9BCE9E5A-4A9A-4BF4-AAA1-0EB0FD45E7F8" /* x86_64 */ = {
 			isa = PBXGroup;
 			children = (
 			);
 			path = x86_64;
+			sourceTree = "<group>";
+		};
+		"TEMP_B055200D-FA96-4257-94FC-ED78FDABBAF4" /* arm64 */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = arm64;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -368,6 +368,7 @@
 			inputFileListPaths = (
 			);
 			inputPaths = (
+				"$(TARGET_BUILD_DIR)/$(INFOPLIST_PATH)",
 			);
 			name = "Sync version with app";
 			outputFileListPaths = (

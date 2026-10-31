@@ -139,4 +139,7 @@ targets:
           plist="${TARGET_BUILD_DIR}/${INFOPLIST_PATH}"
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${version}" -c "Set :CFBundleVersion ${version}" "$plist"
         name: Sync version with app
+        # 입력으로 지정해야 Xcode가 Info.plist를 만든 뒤에 돌린다. 없으면 먼저 돌아 버전이 0.0.0으로 남는다
+        inputFiles:
+          - $(TARGET_BUILD_DIR)/$(INFOPLIST_PATH)
         basedOnDependencyAnalysis: false
