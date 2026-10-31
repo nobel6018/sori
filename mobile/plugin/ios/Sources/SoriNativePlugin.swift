@@ -12,6 +12,12 @@ class PathArgs: Decodable {
   let path: String
 }
 
+class StartArgs: Decodable {
+  let path: String
+  /// 단축어, 동작 버튼으로 앱 밖에서 시작했다
+  let background: Bool?
+}
+
 /// UI와 AVAudioRecorder는 메인 스레드에서 다룬다. 호출한 쪽이 이미 메인 스레드면 바로 실행한다.
 /// 메인 스레드에서 Rust가 응답을 기다리는 중에 main.async로 넘기면 서로 기다리며 앱이 멈춘다
 private func onMain(_ work: @escaping () -> Void) {
@@ -47,7 +53,7 @@ class SoriNativePlugin: Plugin, UIDocumentPickerDelegate {
   // MARK: 녹음
 
   @objc public func startRecording(_ invoke: Invoke) throws {
-    let args = try invoke.parseArgs(PathArgs.self)
+    let args = try invoke.parseArgs(StartArgs.self)
     AVAudioApplication.requestRecordPermission { granted in
       onMain {
         guard granted else {
@@ -65,8 +71,9 @@ class SoriNativePlugin: Plugin, UIDocumentPickerDelegate {
             options.insert(.allowBluetooth)
           }
           // 동작 버튼, 단축어로 백그라운드에서 시작하면 다른 앱의 소리를 멈출 수 없어 세션 켜기가 실패한다
-          // (audiomxd: "can't stop others because it is in the background", -12985). 이때는 섞어서 켠다
-          if UIApplication.shared.applicationState != .active {
+          // (audiomxd: "can't stop others because it is in the background", -12985). 이때는 섞어서 켠다.
+          // applicationState만 보면 정지에서 막 깨어난 앱이 active로 나와 섞지 않는 세션으로 실패했다(0.7.4)
+          if args.background == true || UIApplication.shared.applicationState != .active {
             options.insert(.mixWithOthers)
           }
           try session.setCategory(.playAndRecord, mode: .default, options: options)
@@ -80,16 +87,30 @@ class SoriNativePlugin: Plugin, UIDocumentPickerDelegate {
           ]
           let recorder = try AVAudioRecorder(url: URL(fileURLWithPath: args.path), settings: settings)
           recorder.isMeteringEnabled = true
-          guard recorder.record() else {
-            invoke.reject("녹음을 시작하지 못했습니다")
-            return
-          }
-          self.recorder = recorder
-          invoke.resolve()
+          self.record(recorder, invoke: invoke, attempt: 1)
         } catch {
           invoke.reject("녹음을 시작하지 못했습니다: \(error.localizedDescription)")
         }
       }
+    }
+  }
+
+  /// 백그라운드에서 시작하면 audiomxd가 가끔 재생 권한 검사("does not have assertions to start mixable playback")로
+  /// record()를 거절한다. 원인을 아직 모른다. 0.5초 간격으로 3번까지 시도하고 몇 번째에 됐는지 남긴다
+  private func record(_ recorder: AVAudioRecorder, invoke: Invoke, attempt: Int) {
+    if recorder.record() {
+      if attempt > 1 { NSLog("sori: \(attempt)번째 시도에서 녹음을 시작했습니다") }
+      self.recorder = recorder
+      invoke.resolve()
+      return
+    }
+    NSLog("sori: 녹음 시작 \(attempt)번째 시도 실패")
+    guard attempt < 3 else {
+      invoke.reject("녹음을 시작하지 못했습니다(3번 시도)")
+      return
+    }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+      self.record(recorder, invoke: invoke, attempt: attempt + 1)
     }
   }
 

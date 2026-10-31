@@ -74,8 +74,9 @@ mod native {
             self.0.run_mobile_plugin(method, payload).map_err(|e| Error::Native(e.to_string()))
         }
 
-        pub fn start_recording(&self, path: &str) -> crate::Result<()> {
-            self.call::<Empty>("startRecording", serde_json::json!({ "path": path })).map(|_| ())
+        /// background: 단축어, 동작 버튼으로 앱 밖에서 시작한다. 다른 앱 소리와 섞어서 세션을 켠다
+        pub fn start_recording(&self, path: &str, background: bool) -> crate::Result<()> {
+            self.call::<Empty>("startRecording", serde_json::json!({ "path": path, "background": background })).map(|_| ())
         }
 
         /// 녹음한 길이(초)
@@ -118,7 +119,7 @@ mod native {
     pub struct SoriNative<R: Runtime>(pub(crate) std::marker::PhantomData<fn() -> R>);
 
     impl<R: Runtime> SoriNative<R> {
-        pub fn start_recording(&self, _: &str) -> crate::Result<()> {
+        pub fn start_recording(&self, _: &str, _: bool) -> crate::Result<()> {
             Err(Error::Unsupported)
         }
         pub fn stop_recording(&self) -> crate::Result<f64> {

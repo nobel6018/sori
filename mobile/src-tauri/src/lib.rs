@@ -147,8 +147,9 @@ fn delete_note(app: AppHandle, state: State<AppState>, id: String, note_id: Stri
 }
 
 /// 녹음을 시작한다. 화면의 녹음 버튼과 단축어, 동작 버튼(intents.rs)이 함께 쓴다.
+/// from_intent: 단축어, 동작 버튼에서 왔다. 앱이 백그라운드에 있으니 오디오 세션을 섞어서 켠다
 /// 메인 스레드에서 부르면 안 된다(add_note 설명 참고)
-pub(crate) fn begin_recording(app: &AppHandle) -> CmdResult<Value> {
+pub(crate) fn begin_recording(app: &AppHandle, from_intent: bool) -> CmdResult<Value> {
     let state = app.state::<AppState>();
     // 화면 버튼과 동작 버튼이 겹쳐 눌려도 하나만 시작하도록, 확인과 자리 잡기를 한 번에 한다
     let (meta, id) = {
@@ -170,7 +171,7 @@ pub(crate) fn begin_recording(app: &AppHandle) -> CmdResult<Value> {
         .store
         .audio_path(&meta)
         .map_err(err)
-        .and_then(|path| app.sori_native().start_recording(&path.to_string_lossy()).map_err(err));
+        .and_then(|path| app.sori_native().start_recording(&path.to_string_lossy(), from_intent).map_err(err));
     if let Err(e) = started {
         intents::activity_stopped();
         *state.recording.lock().unwrap() = None;
@@ -210,7 +211,7 @@ pub(crate) fn is_recording(app: &AppHandle) -> bool {
 
 #[tauri::command]
 async fn start_recording(app: AppHandle) -> CmdResult<Value> {
-    tauri::async_runtime::spawn_blocking(move || begin_recording(&app)).await.map_err(err)?
+    tauri::async_runtime::spawn_blocking(move || begin_recording(&app, false)).await.map_err(err)?
 }
 
 #[tauri::command]

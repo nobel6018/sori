@@ -61,6 +61,8 @@ iOS 18 이상이 필요합니다. 녹음 중 화면(Live Activity)을 그리는 
 - 단축어, 동작 버튼은 인텐트의 `perform()` 안에서 Live Activity를 직접 띄웁니다(`RecordingControl.start`). 0.7.1은 Rust를 거쳐 다른 스레드에서 띄우다 실패했습니다. 화면 버튼으로 시작할 때만 Rust 훅(`begin_recording`)이 띄웁니다
 - 시작 인텐트는 `AudioRecordingIntent`와 `LiveActivityIntent`를 함께 선언합니다. `LiveActivityIntent`가 있어야 단축어 실행기가 Live Activity 시작 허가(activity request assertion)를 붙여 줍니다. 없던 0.7.2는 `visibility` 오류로 실패했습니다(기기 로그: `Requester is not targeted by an activity request assertion`)
 - 백그라운드에서 시작하면 오디오 세션을 `.mixWithOthers`로 켭니다(`SoriNativePlugin.startRecording`). 백그라운드 앱은 다른 앱의 소리를 멈출 수 없어, 섞지 않는 세션은 "Session activation failed"(-12985)로 실패했습니다. 그래서 음악이 나오는 중에 동작 버튼으로 녹음하면 음악이 멈추지 않고 함께 녹음됩니다
+- 섞을지는 앱 상태(`applicationState`)가 아니라 단축어에서 왔는지(`begin_recording`의 `from_intent`)로 정합니다. 정지에서 막 깨어난 앱은 `applicationState`가 active로 나와 섞지 않는 세션으로 실패했습니다(0.7.4, `!int` 560557684)
+- 백그라운드에서 시작하면 audiomxd가 가끔 재생 권한 검사(`IsAllowedToStartPlaying`: "does not have assertions to start mixable playback")로 `record()`를 거절합니다. 같은 조건에서 성공할 때는 녹음 검사(`IsAllowedToStartRecording`)를 통과합니다. 원인은 아직 모르고, 0.5초 간격으로 3번까지 시도하며 몇 번째에 됐는지 기기 로그(`sori: ...번째 시도`)에 남깁니다
 - 띄우지 못하면 iOS가 준 오류 이름(`visibility`, `unsupportedTarget` 등)을 알림 문구에 그대로 넣습니다
 - 앱이 꺼져 있으면 iOS가 앱을 백그라운드로 띄웁니다. Rust는 Tauri setup이 끝날 때까지 최대 10초 기다린 뒤 녹음을 시작합니다
 - `StopRecordingIntent`는 앱과 위젯 확장이 함께 컴파일합니다(`gen/apple/Shared/`). 버튼은 위젯이 그리지만 실행은 앱 프로세스에서 하므로, 위젯 쪽에서는 `WIDGET_EXTENSION` 조건으로 Rust 호출을 뺍니다

@@ -2840,7 +2840,7 @@ dependencies = [
 
 [[package]]
 name = "sori-mobile"
-version = "0.7.4"
+version = "0.7.5"
 dependencies = [
  "chrono",
  "eyre",

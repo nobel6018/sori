@@ -71,7 +71,7 @@ pub extern "C" fn sori_set_activity_hooks(started: extern "C" fn() -> *const c_c
 /// 메인 스레드에서 부르면 안 된다. 메인 스레드에서 도는 Swift 녹음기를 기다리므로 앱이 멈춘다
 #[unsafe(no_mangle)]
 pub extern "C" fn sori_intent_start_recording() -> *mut c_char {
-    into_c(app().and_then(|app| crate::begin_recording(app).map(|_| ())))
+    into_c(app().and_then(|app| crate::begin_recording(app, true).map(|_| ())))
 }
 
 /// 메인 스레드에서 부르면 안 된다(sori_intent_start_recording과 같은 이유)
