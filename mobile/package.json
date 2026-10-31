@@ -1,7 +1,7 @@
 {
   "name": "sori-mobile",
   "private": true,
-  "version": "0.7.2",
+  "version": "0.7.3",
   "description": "sori iPhone 앱. 의존성은 저장소 루트의 node_modules를 쓴다 (docs/mobile.md)",
   "scripts": {
     "tauri": "../node_modules/.bin/tauri"

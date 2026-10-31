@@ -1,10 +1,12 @@
 // 단축어 앱, 동작 버튼, Siri에 보이는 sori 녹음 동작.
 // AudioRecordingIntent(iOS 18)라 앱을 열지 않고 백그라운드에서 녹음을 시작한다. 녹음하는 동안 Live Activity가 떠 있어야 한다.
+// LiveActivityIntent도 함께 선언해야 백그라운드에서 Live Activity를 띄울 수 있다. 이게 없던 0.7.2는 단축어 실행기가
+// Live Activity 시작 허가(activity request assertion)를 붙이지 않아 visibility 오류로 실패했다
 // @see docs/mobile.md
 
 import AppIntents
 
-struct StartRecordingIntent: AudioRecordingIntent {
+struct StartRecordingIntent: AudioRecordingIntent, LiveActivityIntent {
   static let title: LocalizedStringResource = "녹음 시작"
   static let description = IntentDescription("앱을 열지 않고 바로 녹음을 시작합니다. 녹음하는 동안 잠금 화면과 Dynamic Island에 경과 시간이 보입니다")
 
@@ -15,7 +17,7 @@ struct StartRecordingIntent: AudioRecordingIntent {
 }
 
 /// 동작 버튼용. 한 번 누르면 시작, 다시 누르면 멈춘다
-struct ToggleRecordingIntent: AudioRecordingIntent {
+struct ToggleRecordingIntent: AudioRecordingIntent, LiveActivityIntent {
   static let title: LocalizedStringResource = "녹음 시작/멈춤"
   static let description = IntentDescription("녹음 중이 아니면 바로 녹음을 시작하고, 녹음 중이면 멈춥니다")
 
