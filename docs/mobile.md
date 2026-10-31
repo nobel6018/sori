@@ -64,7 +64,8 @@ iOS 18 이상이 필요합니다. 녹음 중 화면(Live Activity)을 그리는 
 - 섞을지는 앱 상태(`applicationState`)가 아니라 단축어에서 왔는지(`begin_recording`의 `from_intent`)로 정합니다. 정지에서 막 깨어난 앱은 `applicationState`가 active로 나와 섞지 않는 세션으로 실패했습니다(0.7.4, `!int` 560557684)
 - 백그라운드에서 시작하면 audiomxd가 가끔 녹음 대신 재생 권한 검사(`IsAllowedToStartPlaying`: "does not have assertions to start mixable playback")로 `record()`를 거절합니다. 성공할 때는 녹음 검사(`IsAllowedToStartRecording`)를 임시 허가로 통과합니다. 임시 허가는 매번 들어오고 앱 상태, 시각으로도 갈리지 않아 원인을 모릅니다(0.7.6 테스트에서 9번 중 6번). Apple 포럼에도 백그라운드 녹음 시작이 막힌다는 보고가 있습니다. 같은 세션으로, 세션을 껐다 켜서 다시 해도 소용없었습니다
 - 그래서 시작 인텐트는 백그라운드에서 먼저 시도하고, 실패하면 `continueInForeground`(iOS 26)로 앱을 앞으로 띄워 다시 시작합니다(`RecordingControl.start`, `supportedModes`). 앱이 앞에 있으면 늘 됩니다. 화면이 잠겨 있으면 잠금 해제를 요구합니다. 0.7.7 테스트에서는 10번 중 5번이 이 길로 갔습니다
-- `continueInForeground`가 돌아온 뒤 0.3초쯤 지나야 앱이 실제로 활성이 됩니다. 그 전에 시작하면 Live Activity가 `visibility`로 거절돼, 녹음은 되는데 Dynamic Island에 보이지 않았습니다(0.7.7). 활성이 될 때까지 기다린 뒤 시작합니다(`waitUntilActive`)
+- 이 길로 시작해도 Live Activity가 뜹니다. 백그라운드 시도 때 띄운 것은 실패하면서 내리고, 앞에서 다시 띄웁니다. 앞에서 다시 시작하기 전에 앱이 활성이 될 때까지 기다립니다(`waitUntilActive`, 최대 3초)
+- 백그라운드 시작 실패율은 테스트마다 1/6, 6/9, 5/10, 7/10으로 흔들렸습니다. 앱 코드로는 줄이지 못했습니다
 - 시작이 실패하면 오디오 세션을 끕니다. 켜진 채 남으면 다음 시작에서 카테고리를 바꾸는 것을 iOS가 다른 앱 소리를 끊으려는 시도로 보고 `!int`로 거절해, 실패 한 번이 뒤의 시도를 줄줄이 실패시켰습니다(0.7.5)
 - 동작 버튼으로 녹음을 멈추면 Dynamic Island에 완료 표시(동그라미 체크)가 몇 초 뜹니다. 그동안 다시 누르면 iOS가 새로 실행하지 않고 끝난 실행기를 다시 써서 아무 일도 일어나지 않습니다(SpringBoard: `found running executor`). 앱에서 바꿀 수 없습니다
 - 띄우지 못하면 iOS가 준 오류 이름(`visibility`, `unsupportedTarget` 등)을 알림 문구에 그대로 넣습니다

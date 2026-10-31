@@ -24,8 +24,8 @@ enum RecordingControl {
       NSLog("sori: 백그라운드 녹음 시작 실패, 앱을 앞으로 띄워 다시 시작합니다: \(error)")
       // 화면이 잠겨 있으면 잠금 해제를 요구한다. 거절하면 오류가 그대로 단축어에 간다
       try await intent.continueInForeground(nil, alwaysConfirm: false)
-      // continueInForeground가 돌아온 뒤 0.3초쯤 지나야 앱이 실제로 앞에 나온다. 그 전에 시작하면 Live Activity가
-      // visibility로 거절돼 녹음은 되는데 Dynamic Island에 안 보였다(0.7.7). 활성이 될 때까지(최대 3초) 기다린다
+      // continueInForeground가 돌아온 뒤 0.3초쯤 지나야 앱이 실제로 앞에 나온다. 그 전이라도 liveactivitiesd는
+      // 앱을 앞으로 보고 Live Activity를 허락했지만(0.7.7 로그), 화면이 앞에 나온 뒤 시작하도록 활성을 기다린다(최대 3초)
       await waitUntilActive()
       try await callRust { sori_intent_start_recording() }
     }
