@@ -223,3 +223,33 @@ fn 바뀐_것이_없으면_아무것도_옮기지_않는다() {
 
     assert_eq!((report.uploaded, report.downloaded), (0, 0));
 }
+
+#[test]
+fn 태그와_위치가_다른_기기로_가고_나중에_고친_태그가_이긴다() {
+    let (_c, remote) = cloud();
+    let (a, b) = (Device::new("A"), Device::new("B"));
+    let id = a.record(1, "회의", "2026-10-29T01:00:00Z");
+    let place = json!({ "lat": 37.5665, "lon": 126.978, "accuracy": 35.0, "place": "서울 중구", "capturedAt": "2026-10-29T01:00:01Z" });
+    a.update_meta(&id, &mut |m| {
+        m["tags"] = json!(["업무/영업"]);
+        m["location"] = place.clone();
+        m["updatedAt"] = json!("2026-10-29T01:00:02Z");
+    })
+    .unwrap();
+    a.sync(&remote);
+    b.sync(&remote);
+    assert_eq!(b.meta(&id)["tags"], json!(["업무/영업"]));
+    assert_eq!(b.meta(&id)["location"], place);
+
+    tick();
+    b.update_meta(&id, &mut |m| {
+        m["tags"] = json!(["업무/영업", "고객미팅"]);
+        m["tagsEditedAt"] = json!("2026-10-29T02:00:00Z");
+        m["updatedAt"] = json!("2026-10-29T02:00:00Z");
+    })
+    .unwrap();
+    b.sync(&remote);
+    a.sync(&remote);
+    assert_eq!(a.meta(&id)["tags"], json!(["업무/영업", "고객미팅"]));
+    assert_eq!(a.meta(&id)["tagsEditedAt"], "2026-10-29T02:00:00Z");
+}

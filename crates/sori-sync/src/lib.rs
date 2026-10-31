@@ -8,6 +8,7 @@ mod local;
 mod meta;
 mod remote;
 mod state;
+pub mod tags;
 
 pub use engine::{download_audio, remote_audio_name, sync, SyncReport};
 pub use folder::{FolderRemote, Materialize};

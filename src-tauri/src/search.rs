@@ -74,7 +74,13 @@ pub fn search(store: &Store, index: &Index, query: &str) -> Result<Vec<Recording
         let mut hits = find_hits(transcript.as_deref(), summary.as_ref().map(|s| s.markdown.as_str()), &needle);
         // "#12"나 "12"로 찾으면 그 번호의 녹음도 보여 준다
         let number_match = needle.trim_start_matches('#').parse::<u32>().is_ok_and(|n| n == recording.number);
-        let title_match = number_match || normalize(&recording.title).contains(&needle);
+        // 제목, 태그, 장소는 초성으로도 찾는다(ㅎㅂ, 박ㅅ). 전사는 결과가 너무 많아져 넣지 않는다
+        let place = recording.location.as_ref().and_then(|l| l.place.as_deref()).unwrap_or_default();
+        let title_match = number_match
+            || std::iter::once(recording.title.as_str())
+                .chain(recording.tags.iter().map(String::as_str))
+                .chain(std::iter::once(place))
+                .any(|field| matches_with_initials(&normalize(field), &needle));
         if !title_match && hits.is_empty() {
             continue;
         }
@@ -88,6 +94,34 @@ pub fn search(store: &Store, index: &Index, query: &str) -> Result<Vec<Recording
 /// 대소문자와 띄어쓰기를 무시한다. 한국어는 띄어쓰기를 다르게 쳐도 찾아야 한다
 pub fn normalize(s: &str) -> String {
     s.chars().filter(|c| !c.is_whitespace()).flat_map(char::to_lowercase).collect()
+}
+
+/// 한글 초성(ㄱ~ㅎ). 음절의 초성 순서와 같다
+const INITIALS: [char; 19] =
+    ['ㄱ', 'ㄲ', 'ㄴ', 'ㄷ', 'ㄸ', 'ㄹ', 'ㅁ', 'ㅂ', 'ㅃ', 'ㅅ', 'ㅆ', 'ㅇ', 'ㅈ', 'ㅉ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ'];
+
+fn initial_of(c: char) -> Option<char> {
+    let code = c as u32;
+    (0xAC00..=0xD7A3).contains(&code).then(|| INITIALS[((code - 0xAC00) / 588) as usize])
+}
+
+/// 검색어의 글자가 같거나, 검색어 글자가 초성이고 대상 글자의 초성이 그것이면 맞는다. "박ㅅ"은 "박서준"에 맞는다
+fn char_matches(hay: char, needle: char) -> bool {
+    hay == needle || (INITIALS.contains(&needle) && initial_of(hay) == Some(needle))
+}
+
+/// 초성을 섞은 검색어로 부분 문자열을 찾는다. 둘 다 normalize를 거친 값이다
+pub fn matches_with_initials(hay: &str, needle: &str) -> bool {
+    if hay.contains(needle) {
+        return true;
+    }
+    if !needle.chars().any(|c| INITIALS.contains(&c)) {
+        return false;
+    }
+    let hay: Vec<char> = hay.chars().collect();
+    let needle: Vec<char> = needle.chars().collect();
+    needle.len() <= hay.len()
+        && hay.windows(needle.len()).any(|w| w.iter().zip(&needle).all(|(h, n)| char_matches(*h, *n)))
 }
 
 fn find_hits(transcript: Option<&Transcript>, summary: Option<&str>, needle: &str) -> Vec<Hit> {
@@ -130,6 +164,15 @@ fn strip_markdown(line: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn 초성과_글자를_섞어_찾는다() {
+        assert!(matches_with_initials("한빛로보틱스미팅", "ㅎㅂ"));
+        assert!(matches_with_initials("박서준과회의", "박ㅅ"));
+        assert!(matches_with_initials("업무/영업", "ㅇㅇ"));
+        assert!(!matches_with_initials("한빛로보틱스", "ㅂㅎ"));
+        assert!(!matches_with_initials("회의", "ㅎㅇㄹ"));
+    }
     use crate::engine::transcribe::Utterance;
 
     fn transcript(texts: &[&str]) -> Transcript {

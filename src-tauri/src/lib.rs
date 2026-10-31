@@ -248,6 +248,20 @@ fn get_recording(state: State<AppState>, id: String) -> CmdResult<RecordingDetai
     })
 }
 
+/// 사람이 태그를 고친다. 고친 시각을 남겨 AI 자동 분류가 덮어쓰지 않게 한다(docs/organize.md)
+#[tauri::command]
+fn set_tags(app: AppHandle, state: State<AppState>, id: String, tags: Vec<String>) -> CmdResult<Recording> {
+    let recording = state
+        .store
+        .update(&id, |r| {
+            r.tags = sori_sync::tags::normalize_tags(&tags);
+            r.tags_edited_at = Some(chrono::Utc::now());
+        })
+        .map_err(err)?;
+    sync::request(&app);
+    Ok(recording)
+}
+
 #[tauri::command]
 fn update_recording(app: AppHandle, state: State<AppState>, recording: Recording) -> CmdResult<()> {
     // 상태와 오류는 처리 파이프라인이, 화자 이름과 메모는 각자의 명령이 바꾼다.
@@ -1078,6 +1092,7 @@ pub fn run() {
             import_recordings,
             get_recording,
             update_recording,
+            set_tags,
             delete_recording,
             cancel_processing,
             process_recording,

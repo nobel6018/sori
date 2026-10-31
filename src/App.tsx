@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open } from "@tauri-apps/plugin-dialog";
 import { api, AppAction, AUDIO_EXTENSIONS, ModelCatalog, modelsReady, ProgressEvent, Recording } from "./api";
@@ -6,6 +6,7 @@ import { AskPanel } from "./components/AskPanel";
 import { QuickOpen } from "./components/QuickOpen";
 import { ShortcutHelp } from "./components/ShortcutHelp";
 import { AppCommand, Command, IS_MAC, matchShortcut, sendCommand } from "./shortcuts";
+import { tagCounts } from "./tags";
 import { ModelSetup } from "./components/ModelSetup";
 import { Recorder } from "./components/Recorder";
 import { Sidebar } from "./components/Sidebar";
@@ -260,6 +261,7 @@ export default function App() {
   }, [refresh, importPaths, autoProcess]);
 
   const selected = recordings.find((r) => r.id === selectedId) ?? null;
+  const allTags = useMemo(() => tagCounts(recordings), [recordings]);
 
   return (
     <div className="app">
@@ -303,6 +305,7 @@ export default function App() {
             // 처리 중에 다른 녹음을 봤다 돌아와도 끝난 결과가 보인다
             key={`${selected.id}-${selected.status}`}
             recording={selected}
+            allTags={allTags}
             progress={progress[selected.id]}
             seekTo={seekTo?.id === selected.id ? seekTo : null}
             onSeekDone={clearSeek}

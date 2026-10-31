@@ -590,3 +590,130 @@ button.note-time {
   border: 1px solid var(--danger);
   box-shadow: 0 4px 20px rgb(0 0 0 / 0.15);
 }
+
+/* 태그 모아 보기와 녹음한 곳 (docs/organize.md). 탭 대상은 44px 이상 */
+.tag-bar {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 8px 16px 4px;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.tag-bar::-webkit-scrollbar {
+  display: none;
+}
+.tag-pill {
+  flex: none;
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  font-size: 15px;
+  white-space: nowrap;
+}
+.tag-pill.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+.tag-pill.muted:not(.on) {
+  color: var(--muted);
+}
+.row-tags {
+  display: block;
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--accent);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tag-editor {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0 4px;
+}
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  padding-left: 12px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 15px;
+  line-height: 32px;
+}
+.tag-chip button {
+  /* 보이는 칩은 32px, 누르는 영역은 44px */
+  min-width: 36px;
+  min-height: 44px;
+  margin: -6px 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-size: 18px;
+}
+.tag-input-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 160px;
+}
+.tag-input {
+  width: 100%;
+  min-height: 44px;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  padding: 0 10px;
+  background: transparent;
+}
+.tag-suggestions {
+  position: absolute;
+  z-index: 20;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin: 4px 0 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+}
+.tag-suggestions button {
+  width: 100%;
+  min-height: 44px;
+  text-align: left;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  padding: 0 10px;
+  font-size: 15px;
+}
+.tag-suggestions button.active {
+  background: var(--accent-soft);
+}
+.tag-ai {
+  font-size: 12px;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0 4px;
+}
+.place-link {
+  display: block;
+  min-height: 44px;
+  margin: 0 0 4px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 14px;
+  text-align: left;
+}

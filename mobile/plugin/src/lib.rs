@@ -108,6 +108,11 @@ mod native {
         pub fn materialize(&self, path: &str) -> crate::Result<()> {
             self.call::<Empty>("materialize", serde_json::json!({ "path": path })).map(|_| ())
         }
+
+        /// 지도 앱이나 Safari로 링크를 연다
+        pub fn open_url(&self, url: &str) -> crate::Result<()> {
+            self.call::<Empty>("openUrl", serde_json::json!({ "url": url })).map(|_| ())
+        }
     }
 }
 
@@ -139,6 +144,9 @@ mod native {
         }
         pub fn materialize(&self, _: &str) -> crate::Result<()> {
             Ok(())
+        }
+        pub fn open_url(&self, _: &str) -> crate::Result<()> {
+            Err(Error::Unsupported)
         }
     }
 }

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { AskPanel } from "./AskPanel";
+import { TagEditor } from "./TagEditor";
 import { NotesPanel } from "./NotesPanel";
 import { SummaryPanel } from "./SummaryPanel";
 import { TranscriptList } from "./TranscriptList";
@@ -8,6 +10,7 @@ import { api, formatBytes, LANGUAGES, ProgressEvent, Recording, RecordingDetail,
 import { EXPORT_LABEL, ExportFormat, exportBytes, exportFileName } from "../export";
 import { recordingMarkdown, toBlocks, transcriptMarkdown } from "../markdown";
 import { IS_MAC, useCommands } from "../shortcuts";
+import { mapUrl } from "../tags";
 
 const STAGE_LABEL: Record<Stage, string> = {
   waiting: "앞 녹음의 처리가 끝나길 기다리는 중. 한 번에 하나씩 처리합니다",
@@ -18,6 +21,8 @@ const STAGE_LABEL: Record<Stage, string> = {
 
 interface Props {
   recording: Recording;
+  /** 쓰인 태그와 녹음 수. 태그 자동완성 후보 */
+  allTags: [string, number][];
   progress?: ProgressEvent;
   /** 검색 결과나 링크로 열었을 때 옮겨 갈 재생 위치 */
   seekTo: { time: number; nonce: number } | null;
@@ -27,7 +32,7 @@ interface Props {
   onDeleted: () => Promise<void>;
 }
 
-export function RecordingView({ recording, progress, seekTo, onSeekDone, onChanged, onDeleted }: Props) {
+export function RecordingView({ recording, allTags, progress, seekTo, onSeekDone, onChanged, onDeleted }: Props) {
   const [detail, setDetail] = useState<RecordingDetail | null>(null);
   const [numSpeakers, setNumSpeakers] = useState<string>(recording.numSpeakers?.toString() ?? "");
   const [languages, setLanguages] = useState<string[]>(recording.languages);
@@ -122,6 +127,16 @@ export function RecordingView({ recording, progress, seekTo, onSeekDone, onChang
     } catch (e) {
       setError(String(e));
     }
+  };
+
+  const saveTags = async (tags: string[]) => {
+    try {
+      await api.setTags(rec.id, tags);
+    } catch (e) {
+      setError(String(e));
+    }
+    await load();
+    await onChanged();
   };
 
   const saveRecording = async (next: Recording) => {
@@ -300,6 +315,19 @@ export function RecordingView({ recording, progress, seekTo, onSeekDone, onChang
           </button>
         </div>
       </header>
+
+      <div className="recording-sub">
+        <TagEditor tags={rec.tags ?? []} allTags={allTags} onChange={saveTags} aiTagged={!!rec.autoTaggedAt && !rec.tagsEditedAt} />
+        {rec.location && (
+          <button
+            className="place-link"
+            title={`${rec.location.lat.toFixed(5)}, ${rec.location.lon.toFixed(5)}${rec.location.accuracy ? ` (오차 ${Math.round(rec.location.accuracy)}m)` : ""}. 눌러서 지도에서 엽니다`}
+            onClick={() => openUrl(mapUrl(rec.location!)).catch((e) => setError(String(e)))}
+          >
+            녹음한 곳: {rec.location.place || `${rec.location.lat.toFixed(4)}, ${rec.location.lon.toFixed(4)}`}
+          </button>
+        )}
+      </div>
 
       {rec.status === "recording" && (
         <>

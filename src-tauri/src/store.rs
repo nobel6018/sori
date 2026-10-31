@@ -58,6 +58,34 @@ pub struct Recording {
     /// @see docs/sync.md
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub updated_at: Option<DateTime<Utc>>,
+    /// `/`로 계층을 만든 태그(업무/영업). sori_sync::tags로 정리한다
+    /// @see docs/organize.md
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tags: Vec<String>,
+    /// 사람이 태그를 고친 시각. 있으면 AI 자동 분류가 덮어쓰지 않는다
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tags_edited_at: Option<DateTime<Utc>>,
+    /// AI가 태그를 붙인 시각. 한 번 붙였으면 다시 하지 않는다
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auto_tagged_at: Option<DateTime<Utc>>,
+    /// 녹음을 시작한 곳. 설정에서 끄면 남기지 않는다
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub location: Option<Location>,
+}
+
+/// 녹음을 시작한 곳. iPhone은 GPS, Mac은 Wi-Fi로 받는다
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Location {
+    pub lat: f64,
+    pub lon: f64,
+    /// 오차 반경(m)
+    #[serde(default)]
+    pub accuracy: Option<f64>,
+    /// 주소나 장소 이름. 주소로 바꾸지 못했으면 없다
+    #[serde(default)]
+    pub place: Option<String>,
+    pub captured_at: DateTime<Utc>,
 }
 
 impl Recording {
@@ -72,6 +100,10 @@ impl Recording {
             && self.num_speakers == other.num_speakers
             && self.languages == other.languages
             && self.diarize == other.diarize
+            && self.tags == other.tags
+            && self.tags_edited_at == other.tags_edited_at
+            && self.auto_tagged_at == other.auto_tagged_at
+            && self.location == other.location
     }
 }
 
@@ -383,6 +415,10 @@ impl Store {
             voice_ids: BTreeMap::new(),
             diarize: true,
             updated_at: None,
+            tags: Vec::new(),
+            tags_edited_at: None,
+            auto_tagged_at: None,
+            location: None,
         };
         self.save(&recording)?;
         Ok(recording)

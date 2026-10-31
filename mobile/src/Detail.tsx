@@ -4,6 +4,8 @@ import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { formatBytes, formatTime } from "../../src/api";
 import { toBlocks } from "../../src/markdown";
+import { TagEditor } from "../../src/components/TagEditor";
+import { mapUrl } from "../../src/tags";
 import { api, Recording, RecordingDetail } from "./api";
 
 type Tab = "transcript" | "summary" | "notes";
@@ -12,7 +14,7 @@ function speakerName(meta: Recording, speaker: number): string {
   return meta.speakerNames?.[String(speaker)] ?? `화자 ${speaker + 1}`;
 }
 
-export function Detail({ id, onBack }: { id: string; onBack: () => void }) {
+export function Detail({ id, allTags, onBack }: { id: string; allTags: [string, number][]; onBack: () => void }) {
   const [detail, setDetail] = useState<RecordingDetail | null>(null);
   const [tab, setTab] = useState<Tab>("transcript");
   const [error, setError] = useState<string | null>(null);
@@ -80,6 +82,22 @@ export function Detail({ id, onBack }: { id: string; onBack: () => void }) {
           <span>{new Date(meta.createdAt).toLocaleString("ko-KR", { dateStyle: "medium", timeStyle: "short" })}</span>
           {meta.duration != null && <span>{formatTime(meta.duration)}</span>}
         </p>
+        <TagEditor
+          tags={meta.tags ?? []}
+          allTags={allTags}
+          aiTagged={!!meta.autoTaggedAt && !meta.tagsEditedAt}
+          onChange={(tags) =>
+            api
+              .setTags(id, tags)
+              .then(load)
+              .catch((e) => setError(String(e)))
+          }
+        />
+        {meta.location && (
+          <button className="place-link" onClick={() => api.openUrl(mapUrl(meta.location!)).catch((e) => setError(String(e)))}>
+            녹음한 곳: {meta.location.place || `${meta.location.lat.toFixed(4)}, ${meta.location.lon.toFixed(4)}`} ›
+          </button>
+        )}
         {error && <p className="error">{error}</p>}
 
         {detail.audioAvailable ? (

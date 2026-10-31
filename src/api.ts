@@ -25,6 +25,24 @@ export interface Recording {
   notes: Note[];
   /** 화자 번호 → 목소리로 알아본 기억 id */
   voiceIds: Record<string, string>;
+  /** `/`로 계층을 만든 태그(업무/영업). docs/organize.md */
+  tags?: string[];
+  /** 사람이 태그를 고친 시각. 있으면 AI가 덮어쓰지 않는다 */
+  tagsEditedAt?: string;
+  /** AI가 태그를 붙인 시각 */
+  autoTaggedAt?: string;
+  /** 녹음을 시작한 곳 */
+  location?: RecordingLocation | null;
+}
+
+export interface RecordingLocation {
+  lat: number;
+  lon: number;
+  /** 오차 반경(m) */
+  accuracy?: number | null;
+  /** 주소나 장소 이름 */
+  place?: string | null;
+  capturedAt: string;
 }
 
 export interface Note {
@@ -248,6 +266,7 @@ export const api = {
   importRecordings: (paths: string[]) => invoke<Recording[]>("import_recordings", { paths }),
   getRecording: (id: string) => invoke<RecordingDetail>("get_recording", { id }),
   updateRecording: (recording: Recording) => invoke<void>("update_recording", { recording }),
+  setTags: (id: string, tags: string[]) => invoke<Recording>("set_tags", { id, tags }),
   deleteRecording: (id: string) => invoke<void>("delete_recording", { id }),
   cancelProcessing: (id: string) => invoke<void>("cancel_processing", { id }),
   /** diarize가 null이면 설정의 기본 방식 */

@@ -12,6 +12,10 @@ class PathArgs: Decodable {
   let path: String
 }
 
+class UrlArgs: Decodable {
+  let url: String
+}
+
 class StartArgs: Decodable {
   let path: String
   /// 단축어, 동작 버튼으로 앱 밖에서 시작했다
@@ -221,6 +225,22 @@ class SoriNativePlugin: Plugin, UIDocumentPickerDelegate {
         invoke.reject(error.localizedDescription)
       } else {
         invoke.resolve()
+      }
+    }
+  }
+}
+
+extension SoriNativePlugin {
+  /// 지도 앱이나 Safari로 연다. 화면(WebView) 안에서 열면 앱 화면이 그 페이지로 바뀐다
+  @objc public func openUrl(_ invoke: Invoke) throws {
+    let args = try invoke.parseArgs(UrlArgs.self)
+    guard let url = URL(string: args.url) else {
+      invoke.reject("링크가 잘못됐습니다")
+      return
+    }
+    onMain {
+      UIApplication.shared.open(url) { ok in
+        if ok { invoke.resolve() } else { invoke.reject("링크를 열지 못했습니다") }
       }
     }
   }

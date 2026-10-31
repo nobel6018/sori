@@ -1286,3 +1286,154 @@ kbd {
   border-radius: 10px;
   font-size: 13px;
 }
+
+/* 태그 모아 보기와 녹음한 곳 (docs/organize.md) */
+.tag-tree {
+  padding: 0 8px 6px;
+  max-height: 38vh;
+  overflow-y: auto;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 6px;
+}
+.tag-tree ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.tag-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border-radius: 6px;
+}
+.tag-row.selected {
+  background: var(--accent-soft);
+}
+.tag-row.selected .tag-name {
+  color: var(--accent);
+  font-weight: 600;
+}
+.tag-toggle {
+  width: 18px;
+  flex: none;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  font-size: 11px;
+}
+.tag-name {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  background: transparent;
+  border: none;
+  padding: 3px 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tag-count {
+  font-size: 12px;
+  color: var(--muted);
+  padding-right: 6px;
+}
+.recording-tags {
+  font-size: 12px;
+  color: var(--accent);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recording-sub {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  margin: 8px 0 4px;
+}
+.tag-editor {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 240px;
+}
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 4px 1px 10px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 13px;
+}
+.tag-chip button {
+  background: transparent;
+  border: none;
+  padding: 0 6px;
+  color: inherit;
+  line-height: 1.4;
+}
+.tag-input-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 160px;
+}
+.tag-input {
+  width: 100%;
+  border-color: transparent;
+  background: transparent;
+  padding: 3px 6px;
+}
+.tag-input:focus {
+  border-color: var(--border);
+  background: var(--panel);
+}
+.tag-suggestions {
+  position: absolute;
+  z-index: 20;
+  top: 100%;
+  left: 0;
+  min-width: 220px;
+  max-width: 360px;
+  margin: 4px 0 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+}
+.tag-suggestions button {
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  padding: 5px 8px;
+}
+.tag-suggestions button.active,
+.tag-suggestions button:hover {
+  background: var(--accent-soft);
+}
+.tag-ai {
+  font-size: 11px;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0 4px;
+}
+.place-link {
+  background: transparent;
+  border: none;
+  padding: 2px 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+.place-link:hover:not(:disabled) {
+  color: var(--accent);
+  text-decoration: underline;
+}

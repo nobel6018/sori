@@ -1,7 +1,11 @@
-import { ReactNode, useEffect, useState } from "react";
+import { ReactNode, useEffect, useMemo, useState } from "react";
 import { api, formatTime, ProgressEvent, Recording, Status, SyncStatus } from "../api";
 import { describe } from "./SyncSettings";
 import { IS_MAC } from "../shortcuts";
+import { buildTagTree, matchesTag } from "../tags";
+import { TagTree } from "./TagTree";
+
+const FILTER_KEY = "sori.tagFilter";
 
 const STATUS_LABEL: Record<Status, string> = {
   recording: "녹음 중",
@@ -23,6 +27,28 @@ interface Props {
 }
 
 export function Sidebar({ recordings, selectedId, progress, onSelect, onImport, onSearch, onOpenSettings, recorder }: Props) {
+  const [filter, setFilter] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem(FILTER_KEY);
+    } catch {
+      return null;
+    }
+  });
+  const tree = useMemo(() => buildTagTree(recordings), [recordings]);
+  const untagged = recordings.filter((r) => !r.tags?.length).length;
+  // 고른 태그가 모든 녹음에서 사라졌으면 전체로 돌아간다
+  const active = filter && recordings.some((r) => matchesTag(r.tags, filter)) ? filter : null;
+  const shown = recordings.filter((r) => matchesTag(r.tags, active));
+  const choose = (path: string | null) => {
+    setFilter(path);
+    try {
+      if (path) localStorage.setItem(FILTER_KEY, path);
+      else localStorage.removeItem(FILTER_KEY);
+    } catch {
+      // 저장하지 못해도 이번 실행에서는 걸러 보인다
+    }
+  };
+
   return (
     <aside className="sidebar">
       <header className="sidebar-header">
@@ -40,8 +66,9 @@ export function Sidebar({ recordings, selectedId, progress, onSelect, onImport, 
         </div>
       </header>
       {recorder}
+      {tree.length > 0 && <TagTree tree={tree} total={recordings.length} untagged={untagged} selected={active} onSelect={choose} />}
       <ul className="recording-list">
-        {recordings.map((r) => {
+        {shown.map((r) => {
           const p = progress[r.id];
           return (
             <li key={r.id}>
@@ -61,6 +88,11 @@ export function Sidebar({ recordings, selectedId, progress, onSelect, onImport, 
                   {r.duration != null && <span>{formatTime(r.duration)}</span>}
                   <span>{new Date(r.createdAt).toLocaleDateString("ko-KR")}</span>
                 </span>
+                {!!r.tags?.length && (
+                  <span className="recording-tags" title={r.tags.join(", ")}>
+                    {r.tags.join(", ")}
+                  </span>
+                )}
               </button>
             </li>
           );

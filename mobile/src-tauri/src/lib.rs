@@ -91,6 +91,34 @@ fn rename_recording(app: AppHandle, state: State<AppState>, id: String, title: S
     Ok(meta)
 }
 
+/// 사람이 태그를 고친다. 고친 시각을 남겨 Mac의 AI 자동 분류가 덮어쓰지 않게 한다(docs/organize.md)
+#[tauri::command]
+fn set_tags(app: AppHandle, state: State<AppState>, id: String, tags: Vec<String>) -> CmdResult<Value> {
+    let tags = sori_sync::tags::normalize_tags(&tags);
+    let now = Utc::now().to_rfc3339();
+    let meta = state
+        .store
+        .update(&id, &mut |m| {
+            m["tags"] = json!(tags);
+            m["tagsEditedAt"] = json!(now);
+            m["updatedAt"] = json!(now);
+        })
+        .map_err(err)?;
+    changed(&app, &id);
+    Ok(meta)
+}
+
+/// 지도 같은 바깥 링크를 연다. 화면(WebView) 안에서 열면 앱 화면이 그 페이지로 바뀐다
+#[tauri::command]
+async fn open_url(app: AppHandle, url: String) -> CmdResult<()> {
+    if !url.starts_with("https://") {
+        return Err("https 링크만 엽니다".into());
+    }
+    tauri::async_runtime::spawn_blocking(move || app.sori_native().open_url(&url).map_err(err))
+        .await
+        .map_err(err)?
+}
+
 #[tauri::command]
 fn delete_recording(app: AppHandle, state: State<AppState>, id: String) -> CmdResult<()> {
     if state.recording.lock().unwrap().as_deref() == Some(id.as_str()) {
@@ -313,6 +341,8 @@ pub fn run() {
             list_recordings,
             get_recording,
             rename_recording,
+            set_tags,
+            open_url,
             delete_recording,
             add_note,
             delete_note,

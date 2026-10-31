@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { tagCounts } from "../../src/tags";
 import { api, RecorderState, RecordingItem, SyncStatus } from "./api";
 import { Detail } from "./Detail";
 import { List } from "./List";
@@ -14,6 +15,7 @@ export function App() {
   /** 녹음 중이면 녹음 화면을 다른 화면 위에 띄운다 */
   const [recorder, setRecorder] = useState<RecorderState | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const allTags = useMemo(() => tagCounts(recordings), [recordings]);
 
   const refresh = useCallback(() => {
     api.listRecordings().then(setRecordings).catch((e) => setError(String(e)));
@@ -82,6 +84,7 @@ export function App() {
         <Detail
           key={screen.id}
           id={screen.id}
+          allTags={allTags}
           onBack={() => {
             setScreen({ name: "list" });
             refresh();
