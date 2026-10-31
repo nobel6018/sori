@@ -3,7 +3,7 @@
 //! 녹음 상태는 여기서도 lib.rs의 AppState 하나로 다룬다.
 //! @see docs/mobile.md
 
-use std::ffi::{c_char, CString};
+use std::ffi::{c_char, CStr, CString};
 use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
@@ -15,8 +15,8 @@ static HOOKS: OnceLock<ActivityHooks> = OnceLock::new();
 /// Swift가 넘겨준 Live Activity 시작, 끝 함수.
 /// Rust가 Swift 심볼을 링크로 직접 부르면 함께 만드는 cdylib가 미해결 심볼로 깨져, 실행할 때 포인터로 받는다
 struct ActivityHooks {
-    /// 띄웠으면 true
-    started: extern "C" fn() -> bool,
+    /// 띄웠으면 null, 못 띄웠으면 오류 문구(Swift가 가지고 있어 바로 복사한다)
+    started: extern "C" fn() -> *const c_char,
     stopped: extern "C" fn(),
 }
 
@@ -24,9 +24,14 @@ pub(crate) fn set_app(app: AppHandle) {
     let _ = APP.set(app);
 }
 
-/// Live Activity를 띄웠으면 true. 훅이 없으면(iOS 밖) false
-pub(crate) fn activity_started() -> bool {
-    HOOKS.get().is_some_and(|hooks| (hooks.started)())
+/// Live Activity를 띄우거나, 단축어가 이미 띄웠으면 Ok. 못 띄우면 iOS가 준 오류
+pub(crate) fn activity_started() -> Result<(), String> {
+    let Some(hooks) = HOOKS.get() else { return Err("iPhone이 아닙니다".into()) };
+    let error = (hooks.started)();
+    if error.is_null() {
+        return Ok(());
+    }
+    Err(unsafe { CStr::from_ptr(error) }.to_string_lossy().into_owned())
 }
 
 pub(crate) fn activity_stopped() {
@@ -59,7 +64,7 @@ fn into_c(result: Result<(), String>) -> *mut c_char {
 
 /// main.mm이 앱을 띄우기 전에 부른다
 #[unsafe(no_mangle)]
-pub extern "C" fn sori_set_activity_hooks(started: extern "C" fn() -> bool, stopped: extern "C" fn()) {
+pub extern "C" fn sori_set_activity_hooks(started: extern "C" fn() -> *const c_char, stopped: extern "C" fn()) {
     let _ = HOOKS.set(ActivityHooks { started, stopped });
 }
 

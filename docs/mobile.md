@@ -57,7 +57,9 @@ iOS 18 이상이 필요합니다. 녹음 중 화면(Live Activity)을 그리는 
 - 인텐트는 Tauri 플러그인이 아니라 Xcode 앱 타깃(`gen/apple/Sources/sori-mobile/`)에 둡니다. 플러그인 Swift는 swift-rs가 `libapp.a`로 컴파일해서, Xcode가 단축어 앱이 읽는 메타데이터(`Metadata.appintents`)를 뽑지 못합니다
 - 녹음 상태는 화면 버튼과 똑같이 Rust의 `AppState.recording` 하나로 다룹니다. Swift는 `sori_intent_*` C 함수를 메인 스레드 밖에서 부릅니다. Rust가 메인 스레드의 Swift 녹음기를 기다리기 때문입니다
 - Rust가 Swift의 Live Activity 함수를 부를 때는 링크가 아니라 함수 포인터를 씁니다(`sori_set_activity_hooks`, `main.mm`에서 등록). 크레이트가 cdylib도 만들어서 Swift 심볼을 직접 링크하면 미해결 심볼로 빌드가 깨집니다
-- Live Activity는 녹음(오디오 세션)보다 먼저 띄웁니다(`begin_recording`). 앱 밖에서 시작하면 iOS가 Live Activity가 떠 있을 때만 백그라운드에서 오디오 세션을 켜 줍니다. 순서가 반대였던 0.7.0은 "Session activation failed"로 실패했습니다
+- Live Activity는 녹음(오디오 세션)보다 먼저 띄웁니다. 앱 밖에서 시작하면 iOS가 Live Activity가 떠 있을 때만 백그라운드에서 오디오 세션을 켜 줍니다. 순서가 반대였던 0.7.0은 "Session activation failed"로 실패했습니다
+- 단축어, 동작 버튼은 인텐트의 `perform()` 안에서 Live Activity를 직접 띄웁니다(`RecordingControl.start`). 0.7.1은 Rust를 거쳐 다른 스레드에서 띄우다 실패했습니다. 화면 버튼으로 시작할 때만 Rust 훅(`begin_recording`)이 띄웁니다
+- 띄우지 못하면 iOS가 준 오류 이름(`visibility`, `unsupportedTarget` 등)을 알림 문구에 그대로 넣습니다
 - 앱이 꺼져 있으면 iOS가 앱을 백그라운드로 띄웁니다. Rust는 Tauri setup이 끝날 때까지 최대 10초 기다린 뒤 녹음을 시작합니다
 - `StopRecordingIntent`는 앱과 위젯 확장이 함께 컴파일합니다(`gen/apple/Shared/`). 버튼은 위젯이 그리지만 실행은 앱 프로세스에서 하므로, 위젯 쪽에서는 `WIDGET_EXTENSION` 조건으로 Rust 호출을 뺍니다
 
