@@ -15,7 +15,8 @@ static HOOKS: OnceLock<ActivityHooks> = OnceLock::new();
 /// Swift가 넘겨준 Live Activity 시작, 끝 함수.
 /// Rust가 Swift 심볼을 링크로 직접 부르면 함께 만드는 cdylib가 미해결 심볼로 깨져, 실행할 때 포인터로 받는다
 struct ActivityHooks {
-    started: extern "C" fn(),
+    /// 띄웠으면 true
+    started: extern "C" fn() -> bool,
     stopped: extern "C" fn(),
 }
 
@@ -23,10 +24,9 @@ pub(crate) fn set_app(app: AppHandle) {
     let _ = APP.set(app);
 }
 
-pub(crate) fn activity_started() {
-    if let Some(hooks) = HOOKS.get() {
-        (hooks.started)();
-    }
+/// Live Activity를 띄웠으면 true. 훅이 없으면(iOS 밖) false
+pub(crate) fn activity_started() -> bool {
+    HOOKS.get().is_some_and(|hooks| (hooks.started)())
 }
 
 pub(crate) fn activity_stopped() {
@@ -59,7 +59,7 @@ fn into_c(result: Result<(), String>) -> *mut c_char {
 
 /// main.mm이 앱을 띄우기 전에 부른다
 #[unsafe(no_mangle)]
-pub extern "C" fn sori_set_activity_hooks(started: extern "C" fn(), stopped: extern "C" fn()) {
+pub extern "C" fn sori_set_activity_hooks(started: extern "C" fn() -> bool, stopped: extern "C" fn()) {
     let _ = HOOKS.set(ActivityHooks { started, stopped });
 }
 

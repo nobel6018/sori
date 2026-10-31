@@ -44,10 +44,17 @@ enum RecordingControl {
   }
 }
 
-private func startLiveActivity() {
-  guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
+/// 띄웠으면 true. Rust가 녹음(오디오 세션)을 켜기 전에 부른다
+private func startLiveActivity() -> Bool {
+  guard ActivityAuthorizationInfo().areActivitiesEnabled else { return false }
   let state = RecordingActivityAttributes.ContentState(startedAt: Date())
-  _ = try? Activity.request(attributes: RecordingActivityAttributes(), content: .init(state: state, staleDate: nil))
+  do {
+    _ = try Activity.request(attributes: RecordingActivityAttributes(), content: .init(state: state, staleDate: nil))
+    return true
+  } catch {
+    NSLog("sori: Live Activity를 띄우지 못했습니다: \(error)")
+    return false
+  }
 }
 
 /// 녹음을 멈춘 인텐트가 끝나기 전에 내려가도록 끝날 때까지(최대 2초) 기다린다. Rust의 작업 스레드에서 불린다

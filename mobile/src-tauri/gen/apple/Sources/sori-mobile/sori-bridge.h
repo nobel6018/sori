@@ -2,7 +2,7 @@
 #pragma once
 #include <stdbool.h>
 
-void sori_set_activity_hooks(void (*started)(void), void (*stopped)(void));
+void sori_set_activity_hooks(bool (*started)(void), void (*stopped)(void));
 char *sori_intent_start_recording(void);
 char *sori_intent_stop_recording(void);
 bool sori_intent_is_recording(void);

@@ -162,17 +162,20 @@ pub(crate) fn begin_recording(app: &AppHandle) -> CmdResult<Value> {
         *current = Some(id.clone());
         (meta, id)
     };
+    // Live Activity를 녹음보다 먼저 띄운다. 앱 밖(동작 버튼)에서 시작할 때 iOS는 Live Activity가 떠 있어야
+    // 백그라운드에서 오디오 세션을 켜 준다. 반대 순서였던 0.7.0은 "Session activation failed"로 실패했다
+    let activity_shown = intents::activity_started();
     let started = state
         .store
         .audio_path(&meta)
         .map_err(err)
         .and_then(|path| app.sori_native().start_recording(&path.to_string_lossy()).map_err(err));
     if let Err(e) = started {
+        intents::activity_stopped();
         *state.recording.lock().unwrap() = None;
         let _ = state.store.delete(&id);
-        return Err(e);
+        return Err(if activity_shown { e } else { format!("{e} (Live Activity를 띄우지 못했습니다)") });
     }
-    intents::activity_started();
     let _ = app.emit("recorder-changed", json!({ "id": id }));
     Ok(meta)
 }
