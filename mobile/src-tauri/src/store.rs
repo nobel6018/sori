@@ -114,6 +114,19 @@ impl Store {
         read_json(&path).map(Some)
     }
 
+    /// iPhone에서 바로 만든 미리 전사(preview-transcript.json). 이 기기에만 두고 동기화하지 않는다(docs/organize.md)
+    pub fn preview_transcript(&self, id: &str) -> Result<Option<Value>> {
+        let path = self.dir(id)?.join("preview-transcript.json");
+        if !path.is_file() {
+            return Ok(None);
+        }
+        read_json(&path).map(Some)
+    }
+
+    pub fn save_preview_transcript(&self, id: &str, transcript: &Value) -> Result<()> {
+        write_json(&self.dir(id)?.join("preview-transcript.json"), transcript)
+    }
+
     /// 오래된 것부터. summaries.json이 없으면(데스크톱 0.3.0 이하) summary.json 하나를 목록으로 본다
     pub fn summaries(&self, id: &str) -> Result<Vec<Value>> {
         let dir = self.dir(id)?;

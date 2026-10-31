@@ -7,6 +7,7 @@ const FILTER_KEY = "sori.tagFilter";
 
 export function List({
   recordings,
+  previewing,
   sync,
   onOpen,
   onSettings,
@@ -14,6 +15,8 @@ export function List({
   onRefresh,
 }: {
   recordings: RecordingItem[];
+  /** iPhone에서 미리 전사하고 있는 녹음 */
+  previewing: string | null;
   sync: SyncStatus | null;
   onOpen: (id: string) => void;
   onSettings: () => void;
@@ -65,7 +68,7 @@ export function List({
                     <span className="number">#{r.number}</span> {r.title}
                   </span>
                   <span className="row-meta">
-                    <StatusChip item={r} />
+                    <StatusChip item={r} previewing={previewing === r.id} />
                     {r.duration != null && <span>{formatTime(r.duration)}</span>}
                     <span>{new Date(r.createdAt).toLocaleDateString("ko-KR", { month: "short", day: "numeric" })}</span>
                     {!r.audioAvailable && r.status !== "recording" && <span className="muted">클라우드</span>}
@@ -144,8 +147,10 @@ function TagBar({
   );
 }
 
-function StatusChip({ item }: { item: RecordingItem }) {
+function StatusChip({ item, previewing }: { item: RecordingItem; previewing: boolean }) {
   if (item.status === "recording") return <span className="chip rec">녹음 중</span>;
   if (item.hasTranscript) return <span className="chip done">전사</span>;
+  if (previewing) return <span className="chip">iPhone 전사 중</span>;
+  if (item.hasPreview) return <span className="chip">미리 전사</span>;
   return <span className="chip">전사 전</span>;
 }

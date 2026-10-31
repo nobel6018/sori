@@ -121,7 +121,7 @@ export function Detail({ id, allTags, onBack }: { id: string; allTags: [string, 
           ))}
         </nav>
 
-        {tab === "transcript" && <TranscriptView detail={detail} onSeek={seek} />}
+        {tab === "transcript" && <TranscriptView detail={detail} onSeek={seek} onReload={load} />}
         {tab === "summary" && <SummaryView detail={detail} />}
         {tab === "notes" && (
           <NotesView detail={detail} onSeek={seek} currentTime={() => audio.current?.currentTime ?? 0} onError={setError} />
@@ -198,14 +198,41 @@ function AudioDownload({ id, onDone }: { id: string; onDone: () => void }) {
   );
 }
 
-function TranscriptView({ detail, onSeek }: { detail: RecordingDetail; onSeek: (t: number) => void }) {
+function TranscriptView({ detail, onSeek, onReload }: { detail: RecordingDetail; onSeek: (t: number) => void; onReload: () => void }) {
   const blocks = useMemo(() => toBlocks(detail.transcript?.utterances ?? []), [detail.transcript]);
+  const [running, setRunning] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   if (!detail.transcript) {
-    return <p className="empty-text">아직 전사가 없습니다. Mac의 sori가 이 녹음을 받아 적으면 여기에 나타납니다.</p>;
+    const preview = async () => {
+      setRunning(true);
+      setError(null);
+      try {
+        await api.previewTranscribe(detail.meta.id);
+        onReload();
+      } catch (e) {
+        setError(String(e));
+      } finally {
+        setRunning(false);
+      }
+    };
+    return (
+      <div className="empty-text">
+        <p>아직 전사가 없습니다. Mac의 sori가 이 녹음을 받아 적으면 여기에 나타납니다.</p>
+        {detail.audioAvailable && (
+          <button className="secondary-button" onClick={preview} disabled={running}>
+            {running ? "iPhone에서 전사 중. 1시간 녹음이면 몇 분 걸립니다" : "iPhone에서 바로 전사(화자 없이)"}
+          </button>
+        )}
+        {error && <p className="error">{error}</p>}
+      </div>
+    );
   }
   if (blocks.length === 0) return <p className="empty-text">받아 적을 말소리가 없었습니다.</p>;
   return (
     <div className="transcript">
+      {detail.transcriptPreview && (
+        <p className="preview-note muted small">iPhone에서 만든 미리 전사입니다. 화자는 나누지 않았습니다. Mac의 sori가 받아 적으면 화자를 나눈 전사로 바뀝니다.</p>
+      )}
       {blocks.map((b) => (
         <section key={`${b.start}-${b.speaker}`} className="block">
           <button className="block-head" onClick={() => onSeek(b.start)}>

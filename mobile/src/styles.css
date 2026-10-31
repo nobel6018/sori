@@ -736,3 +736,16 @@ button.note-time {
   flex: none;
   accent-color: var(--accent);
 }
+.secondary-button {
+  min-height: 44px;
+  margin-top: 8px;
+  padding: 0 16px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--accent);
+  font-size: 15px;
+}
+.preview-note {
+  margin: 0 0 8px;
+}

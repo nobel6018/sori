@@ -10,6 +10,8 @@
     <string>audio</string>
   </array>
   <!-- 단축어, 동작 버튼으로 녹음할 때 잠금 화면과 Dynamic Island에 경과 시간을 띄운다 -->
+  <key>NSSpeechRecognitionUsageDescription</key>
+  <string>녹음을 이 iPhone 안에서 바로 받아 적어 미리 보여 줍니다. 녹음은 기기 밖으로 보내지 않습니다</string>
   <key>NSLocationWhenInUseUsageDescription</key>
   <string>녹음을 시작한 곳을 녹음과 함께 남겨 나중에 장소로 찾을 수 있게 합니다. 설정에서 끌 수 있습니다</string>
   <key>NSSupportsLiveActivities</key>

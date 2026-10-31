@@ -89,6 +89,22 @@ export function Settings({ sync, onBack }: { sync: SyncStatus | null; onBack: ()
               />
             </label>
           )}
+          {prefs && (
+            <label className="toggle-row">
+              <span>
+                <strong>iPhone에서 바로 미리 전사</strong>
+                <span className="muted small">
+                  녹음이 끝나면 앱이 화면에 있는 동안 이 iPhone에서 받아 적습니다(iOS 26 이상, 화자 없음). Mac의 sori가 받아 적으면 그 전사로 바뀝니다
+                </span>
+              </span>
+              <input
+                type="checkbox"
+                role="switch"
+                checked={prefs.previewTranscribe}
+                onChange={(e) => savePrefs({ ...prefs, previewTranscribe: e.target.checked })}
+              />
+            </label>
+          )}
         </section>
       </main>
     </div>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { tagCounts } from "../../src/tags";
 import { api, RecorderState, RecordingItem, SyncStatus } from "./api";
 import { Detail } from "./Detail";
@@ -16,6 +16,10 @@ export function App() {
   const [recorder, setRecorder] = useState<RecorderState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const allTags = useMemo(() => tagCounts(recordings), [recordings]);
+  /** iPhone에서 미리 전사하고 있는 녹음 */
+  const [previewing, setPreviewing] = useState<string | null>(null);
+  /** 미리 전사가 실패한 녹음. 이번 실행에서는 다시 하지 않는다 */
+  const previewFailed = useRef<Set<string>>(new Set());
 
   const refresh = useCallback(() => {
     api.listRecordings().then(setRecordings).catch((e) => setError(String(e)));
@@ -49,6 +53,33 @@ export function App() {
     };
   }, [refresh]);
 
+  // 앱이 화면에 있는 동안 전사가 없는 녹음을 하나씩 iPhone에서 미리 전사한다. 긴 전사는 백그라운드에서 끊길 수 있다
+  useEffect(() => {
+    if (previewing || recorder?.id || document.visibilityState !== "visible") return;
+    const next = recordings.find(
+      (r) => r.audioAvailable && !r.hasTranscript && !r.hasPreview && r.status !== "recording" && !previewFailed.current.has(r.id),
+    );
+    if (!next) return;
+    let cancelled = false;
+    api.getPreferences().then((prefs) => {
+      if (cancelled || !prefs.previewTranscribe) return;
+      setPreviewing(next.id);
+      api
+        .previewTranscribe(next.id)
+        .catch((e) => {
+          previewFailed.current.add(next.id);
+          console.warn(`미리 전사 실패 ${next.title}: ${e}`);
+        })
+        .finally(() => {
+          setPreviewing(null);
+          refresh();
+        });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [recordings, previewing, recorder, refresh]);
+
   const startRecording = async () => {
     setError(null);
     try {
@@ -70,6 +101,7 @@ export function App() {
       {screen.name === "list" && (
         <List
           recordings={recordings}
+          previewing={previewing}
           sync={sync}
           onOpen={(id) => setScreen({ name: "detail", id })}
           onSettings={() => setScreen({ name: "settings" })}

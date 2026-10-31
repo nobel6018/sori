@@ -1,6 +1,6 @@
-# 태그로 모아 보기, AI 자동 분류, 녹음한 곳
+# 태그로 모아 보기, AI 정리, 녹음한 곳
 
-녹음을 태그로 모아 보고, Mac이 받아 적은 녹음에 AI로 태그를 붙이고, 녹음을 시작한 곳을 남깁니다(0.8.0).
+녹음을 태그로 모아 보고, Mac이 받아 적은 녹음을 AI로 정리(제목, 태그, 할 일)하고, 녹음을 시작한 곳을 남깁니다(0.8.0). 캘린더 일정 연결, 할 일을 미리 알림으로, 태그 범위 질문, iPhone 미리 전사는 0.9.0에 더했습니다.
 
 ## 태그
 
@@ -24,16 +24,37 @@
 
 태그 입력은 Enter나 쉼표로 붙이고, 칩의 ×나 빈 칸에서 Backspace로 뺍니다. 자동완성은 화살표로 고른 경우에만 그 제안을 붙이고, 아니면 친 글자 그대로 새 태그가 됩니다.
 
-## AI 자동 분류 (Mac)
+## AI 정리 (Mac)
 
-받아 적기가 끝나면(자동 요약이 켜져 있으면 요약 뒤에) 요약과 같은 CLI(claude 또는 codex)로 태그를 1~3개 붙입니다. 설정 > "받아 적기가 끝나면 AI로 태그 붙이기"(기본 켜짐).
+받아 적기가 끝나면(자동 요약이 켜져 있으면 요약 뒤에) 요약과 같은 CLI(claude 또는 codex) 한 번으로 제목, 태그 1~3개, 할 일 후보를 받습니다(`tagger.rs`, `lib.rs` `organize_recording`). 설정 > "받아 적기가 끝나면 AI로 정리하기"(기본 켜짐). 녹음 화면의 "AI로 다시 정리"로 다시 할 수 있습니다.
+
+- 제목: 앱이 붙인 기본 제목("녹음 2026-10-31 12:00")이고 사람이 고친 적 없을 때(`titleEditedAt`)만 바꿉니다. 겹치는 일정이 있으면 그 제목을 바탕으로 합니다
+- 할 일: 대화에서 분명히 정한 일만, 최대 10개. 기한은 녹음 날짜 기준으로 YYYY-MM-DD로 바꿉니다. 후보로만 두고(`todos.json`, 이 Mac에만), 녹음 화면의 할 일 후보에서 고르고 고친 것만 "미리 알림에 넣기"를 눌러야 미리 알림의 기본 목록에 들어갑니다(`calendar.rs` `add_reminders`). 넣은 것은 "넣음"으로 남고 다시 정리해도 지우지 않습니다
 
 - 다른 녹음에 쓰인 태그와 녹음 수를 함께 넘겨 쓰던 태그를 먼저 고르게 합니다. 태그가 마구 늘지 않게 하려는 것입니다
 - 넘기는 내용: 제목, 날짜, 장소, 메모, 요약(있으면), 전사 일부(요약이 있으면 앞 3천 자, 없으면 앞 8천 자와 뒤 4천 자)
 - 사람이 태그를 고친 녹음(`tagsEditedAt`)은 건드리지 않습니다. AI가 도는 사이 고쳐도 저장 직전에 다시 확인해 지킵니다
-- 한 번 분류한 녹음(`autoTaggedAt`)은 다시 하지 않습니다. 녹음 화면에 "AI" 표시가 붙고, 태그를 고치면 사라집니다
+- 한 번 정리한 녹음(`autoTaggedAt`, 이름은 0.8.0 그대로)은 자동으로 다시 하지 않습니다. 녹음 화면에 "AI" 표시가 붙고, 태그를 고치면 사라집니다
 - iPhone에서 동기화로 새로 온 녹음도, 자동 처리가 켜져 있으면 받아 적고 분류합니다(`App.tsx` `onRecordingsSynced`). 업데이트 전부터 대기 중이던 녹음은 건드리지 않습니다
-- 설정의 "태그 없는 녹음 AI로 분류"는 받아 적기가 끝났고 태그가 없는 녹음을 하나씩 차례로 분류합니다. 한꺼번에 돌리면 구독 사용량 한도에 금방 걸립니다
+- 설정의 "아직 정리하지 않은 녹음 AI로 정리"는 받아 적기가 끝났고 아직 정리하지 않은 녹음을 하나씩 차례로 정리합니다. 한꺼번에 돌리면 구독 사용량 한도에 금방 걸립니다
+
+### 캘린더 일정
+
+정리할 때 녹음 구간(앞뒤 10분 여유)과 가장 많이 겹치는 일정을 찾아 `event`에 남깁니다. 종일 일정은 뺍니다(`calendar.rs` `event_for`). 일정 제목과 참석자를 AI에 넘기고, 참석자(나 빼고)는 화자 이름 입력의 자동완성 후보로 띄웁니다. iPhone 캘린더도 iCloud로 Mac에 보이므로 iPhone 녹음도 Mac에서 짝지어집니다. 설정 > "정리할 때 캘린더 일정 쓰기"(기본 켜짐). 처음에 macOS가 캘린더 허락을 묻고, 미리 알림은 처음 넣을 때 따로 묻습니다
+
+## 태그로 좁혀 묻기
+
+⌘J 질문 창의 범위에서 태그를 고르면 그 태그(하위 포함)가 붙은 녹음에만 묻습니다. 모든 녹음에 물을 때 15만 자 상한에 오래된 녹음이 잘리는 것을 막습니다(docs/ask.md)
+
+## iPhone 미리 전사
+
+iOS 26 이상에서 녹음을 기기 안에서 바로 받아 적습니다(`SpeechAnalyzer`, `plugin/ios/Sources/Transcribe.swift`). 화자는 나누지 않습니다.
+
+- 앱이 화면에 있는 동안 전사가 없는 녹음을 하나씩 처리합니다(`mobile/src/App.tsx`). 긴 전사는 백그라운드에서 끊길 수 있어서입니다. 상세 화면의 "iPhone에서 바로 전사"로 직접 할 수도 있습니다
+- 결과는 `preview-transcript.json`에 Mac 전사와 같은 모양으로 두고, 이 iPhone에만 둡니다(동기화 대상이 아님)
+- Mac 전사(`transcript.json`)가 오면 그것을 보여 줍니다. Mac은 미리 전사와 상관없이 지금처럼 전사하고 화자를 나눕니다
+- 기기 언어로 전사하고, 지원하지 않으면 한국어로 합니다. 언어 모델이 없으면 처음 한 번 받습니다
+- 설정 > "iPhone에서 바로 미리 전사"(기본 켜짐). iOS 26 미만에서는 하지 않습니다
 - 분류가 실패해도 알림을 띄우지 않고 개발자 콘솔에만 남깁니다. 분류는 덤이라 받아 적기와 요약을 방해하지 않습니다
 
 ## 녹음한 곳
@@ -59,10 +80,12 @@
 |---|---|---|
 | `tags` | 태그 목록 | 사람(두 기기), AI(Mac) |
 | `tagsEditedAt` | 사람이 태그를 고친 시각. 있으면 AI가 덮어쓰지 않음 | 두 기기 |
-| `autoTaggedAt` | AI가 분류한 시각 | Mac |
+| `autoTaggedAt` | AI가 정리한 시각 | Mac |
+| `titleEditedAt` | 사람이 제목을 고친 시각. 있으면 AI가 제목을 바꾸지 않음 | 두 기기 |
+| `event` | `{ title, start, end, attendees, calendar }` 겹치는 캘린더 일정 | Mac |
 | `location` | `{ lat, lon, accuracy, place, capturedAt }` | 녹음한 기기 |
 
-네 필드 모두 기기끼리 나눕니다(`crates/sori-sync/src/meta.rs` `SHARED`). 이 목록에 없는 필드는 클라우드에 올리지 않으므로, 0.7.x 앱이 녹음을 고치면 이 필드들이 빠집니다. Mac과 iPhone을 0.8.0 이상으로 함께 올립니다.
+모두 기기끼리 나눕니다(`crates/sori-sync/src/meta.rs` `SHARED`). 이 목록에 없는 필드는 클라우드에 올리지 않으므로, 예전 앱이 녹음을 고치면 새 필드가 빠집니다. Mac과 iPhone을 같은 버전으로 함께 올립니다.
 
 ## 코드 위치
 
@@ -73,7 +96,9 @@
 | `src/tags.ts` | 태그 트리, 걸러 보기, 자동완성, 초성 찾기, 지도 링크(두 앱 화면이 함께 씀) |
 | `src/components/TagEditor.tsx` | 태그 편집(두 앱이 함께 씀) |
 | `src/components/TagTree.tsx`, `Sidebar.tsx` | Mac 사이드바 태그 트리 |
-| `src-tauri/src/tagger.rs`, `lib.rs` `auto_tag_recording` | AI 자동 분류 |
+| `src-tauri/src/tagger.rs`, `lib.rs` `organize_recording` | AI 정리(제목, 태그, 할 일) |
+| `src-tauri/src/calendar.rs`, `src/components/TodoPanel.tsx` | 캘린더 일정, 할 일 후보와 미리 알림 |
+| `mobile/plugin/ios/Sources/Transcribe.swift`, `mobile/src-tauri/src/lib.rs` `preview_transcribe` | iPhone 미리 전사 |
 | `src-tauri/src/location.rs`, `lib.rs` `record_location` | Mac 위치 |
 | `src-tauri/src/search.rs` `matches_with_initials` | 초성 찾기 |
 | `mobile/src/List.tsx` `TagBar`, `mobile/src/Detail.tsx` | iPhone 목록 칩 줄, 상세 |

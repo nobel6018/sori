@@ -50,6 +50,27 @@ pub struct Fix {
     pub place: Option<String>,
 }
 
+/// iPhone 미리 전사 결과. available이 false면 이 기기에서 못 한다(iOS 26 미만 등)
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Preview {
+    pub available: bool,
+    #[serde(default)]
+    pub reason: Option<String>,
+    #[serde(default)]
+    pub duration: f64,
+    #[serde(default)]
+    pub utterances: Vec<PreviewUtterance>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreviewUtterance {
+    pub start: f64,
+    pub end: f64,
+    pub text: String,
+}
+
 #[cfg(mobile)]
 mod native {
     use super::*;
@@ -129,6 +150,11 @@ mod native {
             self.call("currentLocation", ())
         }
 
+        /// 기기 안에서 미리 전사한다(iOS 26 SpeechAnalyzer). 몇 분 걸릴 수 있다
+        pub fn transcribe_preview(&self, path: &str) -> crate::Result<Preview> {
+            self.call("transcribePreview", serde_json::json!({ "path": path }))
+        }
+
         /// 지도 앱이나 Safari로 링크를 연다
         pub fn open_url(&self, url: &str) -> crate::Result<()> {
             self.call::<Empty>("openUrl", serde_json::json!({ "url": url })).map(|_| ())
@@ -170,6 +196,9 @@ mod native {
         }
         pub fn current_location(&self) -> crate::Result<Fix> {
             Ok(Fix::default())
+        }
+        pub fn transcribe_preview(&self, _: &str) -> crate::Result<Preview> {
+            Ok(Preview::default())
         }
     }
 }

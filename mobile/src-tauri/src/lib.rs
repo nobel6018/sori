@@ -37,6 +37,9 @@ pub(crate) struct Preferences {
     /// 녹음을 시작할 때 위치를 남긴다(docs/organize.md)
     #[serde(default = "yes")]
     record_location: bool,
+    /// 녹음이 끝나면 iPhone에서 바로 미리 전사한다(iOS 26 이상)
+    #[serde(default = "yes")]
+    preview_transcribe: bool,
 }
 
 fn yes() -> bool {
@@ -45,7 +48,7 @@ fn yes() -> bool {
 
 impl Default for Preferences {
     fn default() -> Self {
-        Self { record_location: true }
+        Self { record_location: true, preview_transcribe: true }
     }
 }
 
@@ -95,14 +98,18 @@ struct RecordingDetail {
     summaries: Vec<Value>,
     audio_path: PathBuf,
     audio_available: bool,
+    /// Mac 전사가 아직 없어 iPhone 미리 전사를 보여 준다
+    transcript_preview: bool,
 }
 
 /// 목록 한 줄. meta에 전사와 오디오가 이 기기에 있는지를 더한다
 fn summary_of(store: &Store, mut meta: Value) -> Value {
     let id = meta["id"].as_str().unwrap_or_default().to_string();
     let has_transcript = store.dir(&id).map(|d| d.join("transcript.json").is_file()).unwrap_or(false);
+    let has_preview = store.dir(&id).map(|d| d.join("preview-transcript.json").is_file()).unwrap_or(false);
     let audio = store.audio_path(&meta).map(|p| p.is_file()).unwrap_or(false);
     meta["hasTranscript"] = json!(has_transcript);
+    meta["hasPreview"] = json!(has_preview);
     meta["audioAvailable"] = json!(audio);
     meta
 }
@@ -121,8 +128,18 @@ fn list_recordings(state: State<AppState>) -> CmdResult<Vec<Value>> {
 fn get_recording(state: State<AppState>, id: String) -> CmdResult<RecordingDetail> {
     let meta = state.store.read(&id).map_err(err)?;
     let audio_path = state.store.audio_path(&meta).map_err(err)?;
+    // Mac 전사가 오면 그것, 없으면 iPhone 미리 전사
+    let (transcript, transcript_preview) = match state.store.transcript(&id).map_err(err)? {
+        Some(t) => (Some(t), false),
+        None => {
+            let preview = state.store.preview_transcript(&id).map_err(err)?;
+            let has = preview.is_some();
+            (preview, has)
+        }
+    };
     Ok(RecordingDetail {
-        transcript: state.store.transcript(&id).map_err(err)?,
+        transcript,
+        transcript_preview,
         summaries: state.store.summaries(&id).map_err(err)?,
         audio_available: audio_path.is_file(),
         audio_path,
@@ -165,6 +182,39 @@ fn set_tags(app: AppHandle, state: State<AppState>, id: String, tags: Vec<String
         .map_err(err)?;
     changed(&app, &id);
     Ok(meta)
+}
+
+/// iPhone에서 바로 미리 전사한다(iOS 26 SpeechAnalyzer, 화자 없음). Mac 전사가 이미 있으면 하지 않는다.
+/// 만들었으면 true. 이 기기에서 못 하면(iOS 26 미만 등) 오류
+#[tauri::command]
+async fn preview_transcribe(app: AppHandle, id: String) -> CmdResult<bool> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let meta = state.store.read(&id).map_err(err)?;
+        if state.store.transcript(&id).map_err(err)?.is_some() {
+            return Ok(false);
+        }
+        let audio = state.store.audio_path(&meta).map_err(err)?;
+        if !audio.is_file() {
+            return Err("오디오가 이 iPhone에 없습니다".to_string());
+        }
+        let preview = app.sori_native().transcribe_preview(&audio.to_string_lossy()).map_err(err)?;
+        if !preview.available {
+            return Err(preview.reason.unwrap_or_else(|| "이 iPhone에서는 미리 전사를 할 수 없습니다".into()));
+        }
+        // Mac 전사와 같은 모양(transcript.json)으로 두어 화면이 같은 코드로 그린다. 화자는 하나
+        let utterances: Vec<Value> = preview
+            .utterances
+            .iter()
+            .map(|u| json!({ "start": u.start, "end": u.end, "speaker": 0, "text": u.text, "lang": "" }))
+            .collect();
+        let transcript = json!({ "duration": preview.duration, "turns": [], "utterances": utterances, "origins": {}, "preview": true });
+        state.store.save_preview_transcript(&id, &transcript).map_err(err)?;
+        let _ = app.emit("recording-changed", json!({ "id": id }));
+        Ok(true)
+    })
+    .await
+    .map_err(err)?
 }
 
 /// 지도 같은 바깥 링크를 연다. 화면(WebView) 안에서 열면 앱 화면이 그 페이지로 바뀐다
@@ -407,6 +457,7 @@ pub fn run() {
             open_url,
             get_preferences,
             set_preferences,
+            preview_transcribe,
             delete_recording,
             add_note,
             delete_note,

@@ -57,6 +57,29 @@ class SoriNativePlugin: Plugin, UIDocumentPickerDelegate {
     }
   }
 
+  // MARK: 미리 전사
+
+  /// iPhone에서 바로 미리 전사한다(iOS 26 이상). 못 하면 available: false. 1시간 녹음이면 몇 분 걸린다
+  @objc public func transcribePreview(_ invoke: Invoke) throws {
+    let args = try invoke.parseArgs(PathArgs.self)
+    guard #available(iOS 26.0, *) else {
+      invoke.resolve(["available": false, "reason": "iOS 26 이상에서 됩니다"])
+      return
+    }
+    Task {
+      do {
+        let (utterances, duration) = try await runPreviewTranscription(path: args.path)
+        invoke.resolve([
+          "available": true,
+          "duration": duration,
+          "utterances": utterances.map { ["start": $0.start, "end": $0.end, "text": $0.text] },
+        ])
+      } catch {
+        invoke.reject("iPhone 미리 전사를 하지 못했습니다: \(error.localizedDescription)")
+      }
+    }
+  }
+
   // MARK: 위치
 
   /// 지금 위치와 주소. 못 받으면 found: false. 최대 약 18초
