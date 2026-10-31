@@ -9,6 +9,7 @@ mod recorder;
 pub mod store;
 pub mod search;
 pub mod summarize;
+mod tagger;
 mod sync;
 
 use std::collections::HashMap;
@@ -446,6 +447,50 @@ fn emit_summary_state(app: &AppHandle, id: &str, running: bool) {
 #[tauri::command]
 fn summary_running(state: State<AppState>, id: String) -> bool {
     state.summaries.lock().unwrap().contains_key(&id)
+}
+
+/// AI로 태그를 붙인다. 사람이 태그를 고친 녹음은 건너뛰고, 이미 AI가 붙였으면 force일 때만 다시 한다.
+/// 건너뛰면 None. 받아 적기가 끝난 녹음만 된다
+/// @see docs/organize.md
+#[tauri::command]
+async fn auto_tag_recording(app: AppHandle, id: String, force: Option<bool>) -> CmdResult<Option<Recording>> {
+    let state = app.state::<AppState>();
+    let recording = state.store.get(&id).map_err(err)?;
+    if recording.tags_edited_at.is_some() || (recording.auto_tagged_at.is_some() && force != Some(true)) {
+        return Ok(None);
+    }
+    let Some(_guard) = tagger::begin(&id) else { return Ok(None) };
+    let transcript = state.store.get_transcript(&id).map_err(err)?.ok_or("먼저 전사를 끝내 주세요")?;
+    let summary = state.store.get_summary(&id).ok().flatten().map(|s| s.markdown);
+    let vocab = tagger::vocabulary(&state.store.list().map_err(err)?, &id);
+    let settings = state.store.get_settings(&state.home);
+    let provider = match settings.summary_provider {
+        Some(p) => p,
+        None => tauri::async_runtime::spawn_blocking(summarize::statuses)
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .find(|s| s.path.is_some())
+            .map(|s| s.provider)
+            .ok_or("claude 또는 codex CLI가 없어 자동 분류할 수 없습니다")?,
+    };
+    let prompt = tagger::build_prompt(&recording, &transcript, summary.as_deref(), &vocab);
+    // 취소 버튼은 없다. 보내는 쪽을 끝까지 들고 있어야 run이 취소로 읽지 않는다
+    let (_cancel_tx, cancel_rx) = tokio::sync::oneshot::channel();
+    let answer = summarize::run(provider, prompt, cancel_rx).await.map_err(|e| format!("{e:#}"))?;
+    let tags = tagger::parse_answer(&answer).map_err(|e| format!("{e:#}"))?;
+    // AI가 도는 1분 사이 사람이 태그를 고쳤으면 그대로 둔다
+    let saved = state
+        .store
+        .update(&id, |r| {
+            if r.tags_edited_at.is_none() {
+                r.tags = tags;
+                r.auto_tagged_at = Some(chrono::Utc::now());
+            }
+        })
+        .map_err(err)?;
+    sync::request(&app);
+    Ok(Some(saved))
 }
 
 /// template이 없으면 설정의 기본 템플릿으로 요약한다
@@ -1093,6 +1138,7 @@ pub fn run() {
             get_recording,
             update_recording,
             set_tags,
+            auto_tag_recording,
             delete_recording,
             cancel_processing,
             process_recording,

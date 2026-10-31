@@ -40,6 +40,11 @@ export default function App() {
   const refresh = useCallback(async () => {
     setRecordings(await api.listRecordings());
   }, []);
+  /** 동기화로 새로 온 녹음을 가려내려고 지금까지 본 녹음 id를 들고 있는다 */
+  const knownIds = useRef<string[]>([]);
+  useEffect(() => {
+    knownIds.current = recordings.map((r) => r.id);
+  }, [recordings]);
 
   const importPaths = useCallback(
     async (paths: string[]): Promise<Recording[]> => {
@@ -72,6 +77,8 @@ export default function App() {
         api
           .processRecording(r.id, null, settings.defaultLanguages)
           .then(() => (settings.autoSummarize ? api.summarize(r.id, null, null) : undefined))
+          // 요약이 있으면 요약을 보고 분류한다. 분류는 덤이라 실패해도 알리지 않고 기록만 남긴다
+          .then(() => (settings.autoTag ? api.autoTag(r.id).catch((e) => console.warn(`자동 분류 실패 ${r.title}: ${e}`)) : undefined))
           .catch((e) => setError(`${r.title}: ${e}`))
           .finally(refresh);
       }
@@ -246,8 +253,16 @@ export default function App() {
       // 첫 이벤트는 백엔드가 상태를 "처리 중"으로 저장한 뒤에 오므로 이때 목록을 다시 읽는다
       if ((e.stage === "decoding" || e.stage === "waiting") && e.progress === 0) refresh();
     });
-    // 다른 기기에서 녹음이 오거나 지워지면 목록을 다시 읽는다
-    const unlistenSynced = api.onRecordingsSynced(() => refresh());
+    // 다른 기기에서 녹음이 오거나 지워지면 목록을 다시 읽는다. 이번에 새로 온 녹음(iPhone 녹음 등)은
+    // 자동 처리가 켜져 있으면 받아 적고 요약, 분류까지 한다. 예전부터 대기 중이던 녹음은 건드리지 않는다
+    const unlistenSynced = api.onRecordingsSynced(async () => {
+      const before = new Set(knownIds.current);
+      const list = await api.listRecordings();
+      setRecordings(list);
+      if (before.size === 0) return;
+      const arrived = list.filter((r) => !before.has(r.id) && r.status === "new" && r.duration);
+      if (arrived.length) await autoProcess(arrived);
+    });
     const unlistenDrop = getCurrentWebview().onDragDropEvent((e) => {
       if (e.payload.type === "enter" || e.payload.type === "over") setDragging(true);
       else setDragging(false);

@@ -257,6 +257,25 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
             <span className="muted"> Zoom, Teams, Meet(브라우저), Slack 허들, Discord, FaceTime, 카카오톡 통화. 그 질문으로 시작한 녹음은 통화가 끝나면 멈출지도 묻습니다</span>
           </span>
         </label>
+        <label className="setting-toggle">
+          <input type="checkbox" checked={settings.autoTag} onChange={(e) => setSettings({ ...settings, autoTag: e.target.checked })} />
+          <span>
+            받아 적기가 끝나면 AI로 태그 붙이기
+            <span className="muted"> 요약과 같은 CLI를 씁니다. 쓰던 태그를 먼저 고르고, 손으로 고친 태그는 덮어쓰지 않습니다. iPhone에서 온 녹음도 받아 적은 뒤 분류합니다</span>
+          </span>
+        </label>
+        <BulkTag />
+        <label className="setting-toggle">
+          <input
+            type="checkbox"
+            checked={settings.recordLocation}
+            onChange={(e) => setSettings({ ...settings, recordLocation: e.target.checked })}
+          />
+          <span>
+            녹음할 때 위치 남기기
+            <span className="muted"> 녹음을 시작할 때 Wi-Fi로 위치를 한 번 받아 주소와 함께 남깁니다. 처음에 macOS가 허락을 묻습니다. iPhone은 iPhone 앱 설정에서 따로 정합니다</span>
+          </span>
+        </label>
         <TemplateEditor settings={settings} onChange={setSettings} />
         <VoiceList
           enabled={settings.rememberVoices}
@@ -427,6 +446,47 @@ function VoiceList({ enabled, onToggle }: { enabled: boolean; onToggle: (on: boo
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+/** 아직 태그가 없는 예전 녹음을 AI로 하나씩 분류한다. 한꺼번에 돌리면 구독 사용량 한도에 금방 걸린다
+ * @see docs/organize.md */
+function BulkTag() {
+  const [state, setState] = useState<{ done: number; total: number; failed: number } | null>(null);
+  const [running, setRunning] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  const run = async () => {
+    const targets = (await api.listRecordings()).filter((r) => r.status === "done" && !r.tags?.length && !r.tagsEditedAt && !r.autoTaggedAt);
+    if (targets.length === 0) {
+      setMessage("분류할 녹음이 없습니다. 받아 적기가 끝났고 태그가 없는 녹음만 분류합니다");
+      return;
+    }
+    if (!confirm(`태그 없는 녹음 ${targets.length}개를 AI로 분류할까요? 하나씩 차례로 하고, 구독 사용량을 씁니다.`)) return;
+    setRunning(true);
+    setMessage(null);
+    let failed = 0;
+    for (let i = 0; i < targets.length; i++) {
+      setState({ done: i, total: targets.length, failed });
+      try {
+        await api.autoTag(targets[i].id);
+      } catch (e) {
+        failed += 1;
+        console.warn(`분류 실패 ${targets[i].title}: ${e}`);
+      }
+    }
+    setState({ done: targets.length, total: targets.length, failed });
+    setRunning(false);
+    setMessage(failed ? `${targets.length - failed}개를 분류했고 ${failed}개는 실패했습니다` : `${targets.length}개를 분류했습니다`);
+  };
+
+  return (
+    <div className="setting-row bulk-tag">
+      <button onClick={run} disabled={running}>
+        {running && state ? `분류 중 ${state.done}/${state.total}` : "태그 없는 녹음 AI로 분류"}
+      </button>
+      {message && <span className="muted">{message}</span>}
     </div>
   );
 }

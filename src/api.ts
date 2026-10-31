@@ -137,6 +137,10 @@ export interface Settings {
   /** 자동 처리와 새 녹음의 기본 방식. false면 전사만 */
   defaultDiarize: boolean;
   autoSummarize: boolean;
+  /** 받아 적기가 끝나면 AI로 태그를 붙인다(docs/organize.md) */
+  autoTag: boolean;
+  /** 녹음을 시작할 때 위치를 남긴다 */
+  recordLocation: boolean;
   rememberVoices: boolean;
   meetingDetection: boolean;
   summaryTemplates: SummaryTemplate[];
@@ -267,6 +271,8 @@ export const api = {
   getRecording: (id: string) => invoke<RecordingDetail>("get_recording", { id }),
   updateRecording: (recording: Recording) => invoke<void>("update_recording", { recording }),
   setTags: (id: string, tags: string[]) => invoke<Recording>("set_tags", { id, tags }),
+  /** 건너뛰면(사람이 고친 태그, 이미 분류함) null */
+  autoTag: (id: string, force = false) => invoke<Recording | null>("auto_tag_recording", { id, force }),
   deleteRecording: (id: string) => invoke<void>("delete_recording", { id }),
   cancelProcessing: (id: string) => invoke<void>("cancel_processing", { id }),
   /** diarize가 null이면 설정의 기본 방식 */

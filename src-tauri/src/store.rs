@@ -150,6 +150,12 @@ pub struct Settings {
     /// 받아 적기가 끝나면 기본 템플릿으로 요약한다. 구독 사용량을 쓰므로 기본은 끈다
     #[serde(default)]
     pub auto_summarize: bool,
+    /// 받아 적기가 끝나면 AI(요약과 같은 CLI)로 태그를 붙인다. 사람이 고친 태그는 덮어쓰지 않는다(docs/organize.md)
+    #[serde(default = "yes")]
+    pub auto_tag: bool,
+    /// 녹음을 시작할 때 위치(Wi-Fi 기반)를 남긴다
+    #[serde(default = "yes")]
+    pub record_location: bool,
     /// 화자 이름을 붙이면 목소리를 기억하고, 다음 녹음에서 같은 사람에게 이름을 붙인다
     #[serde(default = "yes")]
     pub remember_voices: bool,
@@ -186,6 +192,8 @@ impl Settings {
             shortcuts: Shortcuts::default(),
             auto_process: true,
             auto_summarize: false,
+            auto_tag: true,
+            record_location: true,
             remember_voices: true,
             default_diarize: true,
             meeting_detection: true,
