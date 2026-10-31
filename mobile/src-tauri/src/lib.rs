@@ -252,7 +252,12 @@ fn sync_now(app: AppHandle) {
 #[tauri::command]
 async fn choose_icloud_folder(app: AppHandle) -> CmdResult<bool> {
     tauri::async_runtime::spawn_blocking(move || {
-        let Some(_) = app.sori_native().pick_folder().map_err(err)? else { return Ok(false) };
+        let Some(folder) = app.sori_native().pick_folder().map_err(err)? else { return Ok(false) };
+        // sori 폴더가 아니면 저장하지 않는다. 고른 권한은 이미 저장됐으니 지운다
+        if let Err(e) = sync::sori_root(std::path::Path::new(&folder.path)) {
+            let _ = app.sori_native().forget_folder();
+            return Err(e.to_string());
+        }
         let state = app.state::<AppState>();
         sync::save_settings(&state.store, &sync::SyncSettings { provider: sync::Provider::Icloud }).map_err(err)?;
         sync::request(&app);

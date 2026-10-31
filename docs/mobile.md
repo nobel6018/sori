@@ -75,7 +75,18 @@ iOS 18 이상이 필요합니다. 녹음 중 화면(Live Activity)을 그리는 
 ## iCloud Drive 접근
 
 무료 Apple ID로 서명한 앱은 iCloud 권한(CloudKit, 앱 전용 iCloud 폴더)을 쓸 수 없습니다. 그래서 파일 선택 창으로 폴더를 한 번 고르고,
-그 접근 권한(security-scoped bookmark)을 저장해 다음 실행에도 씁니다. 받지 않은 iCloud 파일은 읽기 전에 NSFileCoordinator로 받아 옵니다.
+그 접근 권한(security-scoped bookmark)을 저장해 다음 실행에도 씁니다.
+
+고른 폴더는 sori 루트로 맞춥니다(`sync.rs` `sori_root`). sori 안의 recordings를 고르는 실수가 잦아, 고른 폴더를 그대로 쓰던 0.7.8까지는 `sori/recordings/recordings`가 생겼습니다.
+
+| 고른 폴더 | 쓰는 폴더 |
+|---|---|
+| `sori`, `sori/recordings`, `sori/recordings/<id>` | `sori` (위로 올라가며 sori를 찾음) |
+| iCloud Drive | 안의 `sori` |
+| 이름을 바꾼 루트(안에 `recordings`가 있음) | 고른 폴더 |
+| 그 밖(Documents 등) | 거절하고 저장하지 않음 |
+
+이미 생긴 `sori/recordings/recordings/<id>`, `sori/recordings/deleted/<id>.json`은 동기화할 때 제자리로 옮깁니다(`merge_nested`). 같은 이름이 이미 있으면 덮어쓰지 않고 남겨 둡니다. 받지 않은 iCloud 파일은 읽기 전에 NSFileCoordinator로 받아 옵니다.
 
 ## 코드 위치
 

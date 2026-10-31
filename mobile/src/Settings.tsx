@@ -45,7 +45,7 @@ export function Settings({ sync, onBack }: { sync: SyncStatus | null; onBack: ()
           </div>
           <p className="muted small">
             Mac의 sori 설정에서 동기화를 iCloud Drive로 켜면 iCloud Drive에 <b>sori</b> 폴더가 생깁니다. 여기서 iCloud Drive를 누르고 그
-            폴더를 고르세요.
+            폴더를 고르세요. 안의 recordings 폴더나 iCloud Drive 자체를 골라도 sori 폴더로 맞춰 씁니다.
           </p>
           {provider === "icloud" && sync && (
             <div className="sync-line">

@@ -74,10 +74,48 @@ pub fn save_settings(store: &Store, settings: &SyncSettings) -> Result<()> {
     Ok(())
 }
 
-/// iCloud Drive 루트나 상위 폴더를 골랐으면 그 안의 sori 폴더(Mac 앱이 만든 곳)를 쓴다
-pub fn sori_folder(picked: &Path) -> PathBuf {
+/// Files에서 고른 폴더로 sori 루트(Mac 앱이 만든 iCloud Drive/sori)를 찾는다.
+/// sori 안의 recordings를 고르는 실수가 잦아, 고른 폴더를 그대로 쓰던 때는 sori/recordings/recordings가 생겼다.
+/// - 고른 폴더나 그 위에 sori 폴더가 있으면 그것(sori/recordings, sori/recordings/<id>를 골라도 sori)
+/// - iCloud Drive처럼 위 폴더를 골랐으면 그 안의 sori
+/// - 이름을 바꾼 루트라도 안에 recordings가 있으면 그 폴더
+/// - 어느 것도 아니면 거절한다. 상관없는 폴더에 동기화 파일을 만들지 않는다
+pub fn sori_root(picked: &Path) -> Result<PathBuf> {
+    if let Some(root) = picked.ancestors().find(|p| p.file_name().is_some_and(|n| n == "sori")) {
+        return Ok(root.to_path_buf());
+    }
     let inner = picked.join("sori");
-    if !picked.join("recordings").is_dir() && inner.is_dir() { inner } else { picked.to_path_buf() }
+    if inner.is_dir() {
+        return Ok(inner);
+    }
+    if picked.join("recordings").is_dir() && picked.file_name().is_some_and(|n| n != "recordings") {
+        return Ok(picked.to_path_buf());
+    }
+    let name = picked.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    Err(eyre!(
+        "'{name}'은 sori 폴더가 아닙니다. iCloud Drive 안의 sori 폴더를 골라 주세요. Mac의 sori 설정에서 동기화를 iCloud Drive로 켜면 생깁니다"
+    ))
+}
+
+/// 예전에 sori/recordings를 루트로 골라 생긴 sori/recordings/recordings/<id>, sori/recordings/deleted/<id>.json을
+/// 제자리(sori/recordings/<id>, sori/deleted/<id>.json)로 옮긴다. 같은 이름이 이미 있으면 덮어쓰지 않고 남겨 둔다
+pub fn merge_nested(root: &Path) -> Result<usize> {
+    let mut moved = 0;
+    for (nested, dest) in [(root.join("recordings/recordings"), root.join("recordings")), (root.join("recordings/deleted"), root.join("deleted"))] {
+        let Ok(entries) = std::fs::read_dir(&nested) else { continue };
+        std::fs::create_dir_all(&dest)?;
+        for entry in entries.flatten() {
+            let to = dest.join(entry.file_name());
+            if to.exists() {
+                continue;
+            }
+            std::fs::rename(entry.path(), &to)?;
+            moved += 1;
+        }
+        // 다 옮겨 비었을 때만 지워진다
+        let _ = std::fs::remove_dir(&nested);
+    }
+    Ok(moved)
 }
 
 pub fn request(app: &AppHandle) {
@@ -148,7 +186,12 @@ fn remote(app: &AppHandle) -> Result<Option<(FolderRemote, String)>> {
         .resolve_folder()
         .map_err(|e| eyre!("{e}"))?
         .ok_or_else(|| eyre!("동기화 폴더를 고르지 않았습니다. 설정에서 iCloud Drive의 sori 폴더를 골라 주세요"))?;
-    let root = sori_folder(Path::new(&folder.path));
+    let root = sori_root(Path::new(&folder.path))?;
+    match merge_nested(&root) {
+        Ok(0) => {}
+        Ok(n) => eprintln!("sori: 잘못 고른 폴더에 생긴 녹음 {n}개를 제자리로 옮겼습니다"),
+        Err(e) => eprintln!("sori: 중첩 폴더를 정리하지 못했습니다: {e:#}"),
+    }
     let name = root.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
     set_status(app, |s| s.folder = Some(name));
     let native = app.clone();
@@ -296,5 +339,63 @@ impl Local for MobileLocal<'_> {
             }
         })?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn tmp() -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("sori-sync-test-{}", uuid::Uuid::new_v4().simple()));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn sori_안의_recordings나_녹음_폴더를_골라도_sori를_쓴다() {
+        let drive = tmp();
+        let sori = drive.join("sori");
+        std::fs::create_dir_all(sori.join("recordings/abc")).unwrap();
+
+        assert_eq!(sori_root(&sori).unwrap(), sori);
+        assert_eq!(sori_root(&sori.join("recordings")).unwrap(), sori);
+        assert_eq!(sori_root(&sori.join("recordings/abc")).unwrap(), sori);
+    }
+
+    #[test]
+    fn icloud_drive를_고르면_안의_sori를_쓴다() {
+        let drive = tmp();
+        std::fs::create_dir_all(drive.join("sori")).unwrap();
+
+        assert_eq!(sori_root(&drive).unwrap(), drive.join("sori"));
+    }
+
+    #[test]
+    fn 상관없는_폴더는_거절한다() {
+        let drive = tmp();
+        std::fs::create_dir_all(drive.join("Documents")).unwrap();
+
+        assert!(sori_root(&drive.join("Documents")).is_err());
+    }
+
+    #[test]
+    fn 중첩된_녹음과_지운_표시를_제자리로_옮기고_있는_것은_두다() {
+        let sori = tmp().join("sori");
+        std::fs::create_dir_all(sori.join("recordings/recordings/new/notes")).unwrap();
+        std::fs::write(sori.join("recordings/recordings/new/meta.json"), "{}").unwrap();
+        std::fs::create_dir_all(sori.join("recordings/recordings/both")).unwrap();
+        std::fs::create_dir_all(sori.join("recordings/both")).unwrap();
+        std::fs::create_dir_all(sori.join("recordings/deleted")).unwrap();
+        std::fs::write(sori.join("recordings/deleted/gone.json"), "{}").unwrap();
+
+        let moved = merge_nested(&sori).unwrap();
+
+        assert_eq!(moved, 2);
+        assert!(sori.join("recordings/new/meta.json").is_file());
+        assert!(sori.join("deleted/gone.json").is_file());
+        assert!(!sori.join("recordings/deleted").exists());
+        // 같은 id가 이미 있어 옮기지 않은 것은 중첩 폴더에 남는다
+        assert!(sori.join("recordings/recordings/both").is_dir());
     }
 }
