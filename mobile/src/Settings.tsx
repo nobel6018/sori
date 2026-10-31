@@ -1,9 +1,19 @@
-import { useState } from "react";
-import { api, SyncStatus, syncLabel } from "./api";
+import { useEffect, useState } from "react";
+import { api, Preferences, SyncStatus, syncLabel } from "./api";
 
 export function Settings({ sync, onBack }: { sync: SyncStatus | null; onBack: () => void }) {
   const [error, setError] = useState<string | null>(null);
+  const [prefs, setPrefs] = useState<Preferences | null>(null);
   const provider = sync?.provider ?? "local";
+
+  useEffect(() => {
+    api.getPreferences().then(setPrefs);
+  }, []);
+
+  const savePrefs = (next: Preferences) => {
+    setPrefs(next);
+    api.setPreferences(next).catch((e) => setError(String(e)));
+  };
 
   const chooseIcloud = async () => {
     setError(null);
@@ -63,6 +73,22 @@ export function Settings({ sync, onBack }: { sync: SyncStatus | null; onBack: ()
           <p className="muted small">
             AAC 모노 64kbps로 녹음합니다(1시간 약 28MB). 받아 적기와 요약은 Mac의 sori가 하고, 끝나면 이 앱에 나타납니다.
           </p>
+          {prefs && (
+            <label className="toggle-row">
+              <span>
+                <strong>녹음할 때 위치 남기기</strong>
+                <span className="muted small">
+                  녹음을 시작할 때 위치를 한 번 받아 주소와 함께 남깁니다. 처음 앱에서 녹음할 때 허락을 묻습니다. 동작 버튼으로 시작하면 위치를 못 받을 수 있습니다
+                </span>
+              </span>
+              <input
+                type="checkbox"
+                role="switch"
+                checked={prefs.recordLocation}
+                onChange={(e) => savePrefs({ ...prefs, recordLocation: e.target.checked })}
+              />
+            </label>
+          )}
         </section>
       </main>
     </div>

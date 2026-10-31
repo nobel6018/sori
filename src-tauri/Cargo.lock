@@ -2775,6 +2775,7 @@ version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ca347214e24bc973fc025fd0d36ebb179ff30536ed1f80252706db19ee452009"
 dependencies = [
+ "block2",
  "objc2",
  "objc2-foundation",
 ]
@@ -3949,8 +3950,9 @@ dependencies = [
 
 [[package]]
 name = "sori"
-version = "0.7.9"
+version = "0.8.0"
 dependencies = [
+ "block2",
  "chrono",
  "cpal",
  "eyre",
@@ -3958,6 +3960,7 @@ dependencies = [
  "objc2",
  "objc2-core-audio",
  "objc2-core-foundation",
+ "objc2-core-location",
  "objc2-foundation",
  "rubato",
  "serde",

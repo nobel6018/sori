@@ -7,6 +7,7 @@ pub mod download;
 pub mod models;
 mod recorder;
 pub mod store;
+mod location;
 pub mod search;
 pub mod summarize;
 mod tagger;
@@ -352,6 +353,7 @@ async fn start_recording(app: AppHandle, state: State<'_, AppState>) -> CmdResul
 
     let id = recording.id.clone();
     let level_app = app.clone();
+    let location_app = app.clone();
     let interrupted_id = recording.id.clone();
     let started = recorder::start(
         tracks,
@@ -366,6 +368,9 @@ async fn start_recording(app: AppHandle, state: State<'_, AppState>) -> CmdResul
         Ok(active) => {
             *slot = Some((recording.id.clone(), active));
             *state.recording_started.lock().unwrap() = Some(Instant::now());
+            if settings.record_location {
+                record_location(location_app, recording.id.clone());
+            }
             Ok(recording)
         }
         Err(e) => {
@@ -374,6 +379,18 @@ async fn start_recording(app: AppHandle, state: State<'_, AppState>) -> CmdResul
             Err(format!("{e:#}"))
         }
     }
+}
+
+/// 녹음을 시작한 곳을 따로 받아 남긴다. 최대 약 18초 걸리므로 녹음을 막지 않게 작업 스레드에서 한다
+fn record_location(app: AppHandle, id: String) {
+    std::thread::spawn(move || {
+        let Some(location) = location::capture() else { return };
+        let state = app.state::<AppState>();
+        if state.store.update(&id, |r| r.location = Some(location)).is_ok() {
+            let _ = app.emit("recording-changed", RecordingChanged { id });
+            sync::request(&app);
+        }
+    });
 }
 
 /// 트랙을 섞어 재생과 전사에 쓸 audio.wav를 만든다. 녹음 길이(초)를 돌려준다

@@ -35,6 +35,21 @@ pub struct RecorderState {
     pub level: f32,
 }
 
+/// 녹음을 시작한 곳. 못 받았으면 found가 false다
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Fix {
+    pub found: bool,
+    #[serde(default)]
+    pub lat: f64,
+    #[serde(default)]
+    pub lon: f64,
+    #[serde(default)]
+    pub accuracy: f64,
+    #[serde(default)]
+    pub place: Option<String>,
+}
+
 #[cfg(mobile)]
 mod native {
     use super::*;
@@ -109,6 +124,11 @@ mod native {
             self.call::<Empty>("materialize", serde_json::json!({ "path": path })).map(|_| ())
         }
 
+        /// 지금 위치와 주소. 권한이 없거나 못 받으면 found가 false다(최대 약 18초)
+        pub fn current_location(&self) -> crate::Result<Fix> {
+            self.call("currentLocation", ())
+        }
+
         /// 지도 앱이나 Safari로 링크를 연다
         pub fn open_url(&self, url: &str) -> crate::Result<()> {
             self.call::<Empty>("openUrl", serde_json::json!({ "url": url })).map(|_| ())
@@ -147,6 +167,9 @@ mod native {
         }
         pub fn open_url(&self, _: &str) -> crate::Result<()> {
             Err(Error::Unsupported)
+        }
+        pub fn current_location(&self) -> crate::Result<Fix> {
+            Ok(Fix::default())
         }
     }
 }

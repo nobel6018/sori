@@ -102,6 +102,7 @@ iOS 18 이상이 필요합니다. 녹음 중 화면(Live Activity)을 그리는 
 | `mobile/src-tauri/gen/apple/Sources/sori-mobile/RecordingControl.swift` | Rust 호출, Live Activity 띄우고 내리기 |
 | `mobile/src-tauri/gen/apple/Shared/` | 앱과 위젯이 함께 쓰는 Live Activity 데이터, 멈춤 인텐트 |
 | `mobile/src-tauri/gen/apple/Widgets/SoriWidgets.swift` | Live Activity 화면(잠금 화면, Dynamic Island) |
+| `mobile/src/List.tsx` `TagBar`, `Detail.tsx`, `plugin/ios/Sources/Location.swift` | 태그 칩 줄, 태그 편집, 녹음한 곳(docs/organize.md) |
 | `mobile/src-tauri/Info.ios.plist` | 마이크 권한 설명, 백그라운드 오디오, Live Activity 사용 |
 | `design/logo-ios.svg`, `design/logo-ios-1024.png` | 앱 아이콘. iOS가 모서리를 깎으므로 데스크톱 로고의 여백, 둥근 모서리, 그림자를 뺐다. `pnpm tauri icon ../design/logo-ios-1024.png`로 만들고 알파 채널을 없앤다(투명한 곳은 검게 보인다) |
 | `mobile/src-tauri/gen/apple/project.yml` | Xcode 프로젝트. 서명 없이 빌드하도록 `CODE_SIGNING_ALLOWED: NO`. 위젯 확장 타깃 `sori-widgets`와 버전 맞추기 스크립트 |

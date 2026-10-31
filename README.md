@@ -80,7 +80,9 @@ Windows (PowerShell):
 
 ## iPhone 앱
 
-iPhone에서 녹음과 메모를 하고, Mac이 만든 전사와 요약을 읽습니다. Release의 `sori-ios.ipa`를 AltStore로 설치합니다. 동작 버튼을 누르면 앱을 열지 않고 바로 녹음하고, 잠금 화면과 Dynamic Island에 경과 시간이 보입니다(iOS 18 이상). 설치 방법은 [docs/mobile.md](docs/mobile.md)에 있습니다.
+iPhone에서 녹음과 메모를 하고, Mac이 만든 전사와 요약을 읽습니다. Release의 `sori-ios.ipa`를 AltStore로 설치합니다. 동작 버튼을 누르면 앱을 열지 않고 바로 녹음하고, 잠금 화면과 Dynamic Island에 경과 시간이 보입니다(iOS 18 이상).
+
+녹음은 `/`로 계층을 만든 태그(업무/영업)로 폴더처럼 모아 봅니다. Mac은 받아 적은 녹음에 AI로 태그를 붙이고, 두 기기 모두 녹음을 시작한 곳을 주소와 함께 남깁니다. 자세한 내용은 [docs/organize.md](docs/organize.md)에 있습니다. 설치 방법은 [docs/mobile.md](docs/mobile.md)에 있습니다.
 
 ## 단축키, 링크, Raycast
 

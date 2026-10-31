@@ -717,3 +717,22 @@ button.note-time {
   font-size: 14px;
   text-align: left;
 }
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+  padding: 8px 0;
+}
+.toggle-row > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.toggle-row input[type="checkbox"] {
+  width: 28px;
+  height: 28px;
+  flex: none;
+  accent-color: var(--accent);
+}

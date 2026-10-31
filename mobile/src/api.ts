@@ -24,6 +24,12 @@ export interface RecorderState {
   level: number;
 }
 
+/** 이 기기의 설정 */
+export interface Preferences {
+  /** 녹음을 시작할 때 위치를 남긴다 */
+  recordLocation: boolean;
+}
+
 export type SyncProvider = "local" | "icloud";
 
 export interface SyncStatus {
@@ -41,6 +47,8 @@ export const api = {
   renameRecording: (id: string, title: string) => invoke<Recording>("rename_recording", { id, title }),
   setTags: (id: string, tags: string[]) => invoke<Recording>("set_tags", { id, tags }),
   openUrl: (url: string) => invoke<void>("open_url", { url }),
+  getPreferences: () => invoke<Preferences>("get_preferences"),
+  setPreferences: (preferences: Preferences) => invoke<void>("set_preferences", { preferences }),
   deleteRecording: (id: string) => invoke<void>("delete_recording", { id }),
   addNote: (id: string, time: number | null, text: string) => invoke<Recording>("add_note", { id, time, text }),
   deleteNote: (id: string, noteId: string) => invoke<Recording>("delete_note", { id, noteId }),

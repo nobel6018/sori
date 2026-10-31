@@ -15,9 +15,9 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.7.9</string>
+	<string>0.8.0</string>
 	<key>CFBundleVersion</key>
-	<string>0.7.9</string>
+	<string>0.8.0</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>
@@ -46,6 +46,8 @@
 	<array>
 		<string>audio</string>
 	</array>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>녹음을 시작한 곳을 녹음과 함께 남겨 나중에 장소로 찾을 수 있게 합니다. 설정에서 끌 수 있습니다</string>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
 	<key>CFBundleDisplayName</key>

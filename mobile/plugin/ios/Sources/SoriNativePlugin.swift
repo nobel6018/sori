@@ -2,6 +2,7 @@
 // @see docs/mobile.md
 
 import AVFoundation
+import CoreLocation
 import SwiftRs
 import Tauri
 import UIKit
@@ -34,6 +35,8 @@ private func onMain(_ work: @escaping () -> Void) {
 
 class SoriNativePlugin: Plugin, UIDocumentPickerDelegate {
   private var recorder: AVAudioRecorder?
+  /// 위치를 받는 동안 붙잡아 둔다. 놓으면 CLLocationManager가 사라져 답이 오지 않는다
+  private var locationFetcher: LocationFetcher?
   private var pendingPick: Invoke?
   /// 지금 접근 권한을 연 동기화 폴더. 앱이 켜져 있는 동안 열어 둔다
   private var openFolder: URL?
@@ -51,6 +54,43 @@ class SoriNativePlugin: Plugin, UIDocumentPickerDelegate {
       else { return }
       try? AVAudioSession.sharedInstance().setActive(true)
       recorder.record()
+    }
+  }
+
+  // MARK: 위치
+
+  /// 지금 위치와 주소. 못 받으면 found: false. 최대 약 18초
+  @objc public func currentLocation(_ invoke: Invoke) {
+    onMain {
+      let fetcher = LocationFetcher()
+      self.locationFetcher = fetcher
+      fetcher.fetch(timeout: 10) { location in
+        self.locationFetcher = nil
+        guard let location else {
+          invoke.resolve(["found": false])
+          return
+        }
+        var answered = false
+        let send = { (place: String?) in
+          if answered { return }
+          answered = true
+          invoke.resolve([
+            "found": true,
+            "lat": location.coordinate.latitude,
+            "lon": location.coordinate.longitude,
+            "accuracy": location.horizontalAccuracy,
+            "place": place ?? NSNull(),
+          ])
+        }
+        let geocoder = CLGeocoder()
+        geocoder.reverseGeocodeLocation(location) { marks, _ in
+          onMain { send(describePlace(marks?.first)) }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 8) {
+          geocoder.cancelGeocode()
+          send(nil)
+        }
+      }
     }
   }
 

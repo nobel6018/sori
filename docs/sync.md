@@ -20,7 +20,7 @@ Mac 데스크톱과 iOS 앱이 녹음, 전사, 요약, 메모를 주고받는 �
 ```
 <sori 루트>/
   recordings/<id>/
-    meta.json            제목, 번호, 날짜 등 기기끼리 나누는 필드(`SharedMeta`)
+    meta.json            제목, 번호, 날짜, 태그, 녹음한 곳 등 기기끼리 나누는 필드(`SHARED`, docs/organize.md)
     audio.m4a            압축한 오디오. 필요할 때만 받습니다
     transcript.json      전사. 데스크톱만 씁니다
     summaries.json       요약 목록. 데스크톱만 씁니다

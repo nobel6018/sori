@@ -1,6 +1,6 @@
 [package]
 name = "sori-mobile"
-version = "0.7.9"
+version = "0.8.0"
 description = "sori iPhone 앱: 녹음, 메모, 전사와 요약 읽기, iCloud Drive 동기화 (docs/mobile.md)"
 edition = "2024"
 publish = false

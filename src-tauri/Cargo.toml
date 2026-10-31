@@ -1,6 +1,6 @@
 [package]
 name = "sori"
-version = "0.7.9"
+version = "0.8.0"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2024"
@@ -48,7 +48,10 @@ sori-sync = { path = "../crates/sori-sync" }
 [target.'cfg(target_os = "macos")'.dependencies]
 whisper-rs = { version = "0.16", features = ["metal"] }
 objc2 = "0.6"
-objc2-foundation = { version = "0.3", features = ["NSProcessInfo", "NSString", "NSObject"] }
+objc2-foundation = { version = "0.3", features = ["NSProcessInfo", "NSString", "NSObject", "NSRunLoop", "NSDate", "NSArray", "NSError"] }
+# 녹음한 곳: Wi-Fi 위치와 주소(docs/organize.md)
+objc2-core-location = { version = "0.3", default-features = false, features = ["std", "block2", "CLLocation", "CLLocationManager", "CLGeocoder", "CLPlacemark", "CLError"] }
+block2 = "0.6"
 # 회의 앱 감지: 마이크를 쓰는 프로세스 목록(macOS 14.0 이상)
 objc2-core-audio = { version = "0.3", default-features = false, features = ["std", "AudioHardware"] }
 objc2-core-foundation = { version = "0.3", default-features = false, features = ["std", "CFString"] }

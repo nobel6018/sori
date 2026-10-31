@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 
 use chrono::Utc;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_sori_native::{RecorderState, SoriNativeExt};
@@ -28,6 +28,63 @@ pub(crate) struct AppState {
     /// 지금 녹음 중인 녹음 id
     recording: Mutex<Option<String>>,
     syncer: sync::Syncer,
+}
+
+/// 이 기기의 설정. 동기화 설정(sync.json)과 따로 둔다
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct Preferences {
+    /// 녹음을 시작할 때 위치를 남긴다(docs/organize.md)
+    #[serde(default = "yes")]
+    record_location: bool,
+}
+
+fn yes() -> bool {
+    true
+}
+
+impl Default for Preferences {
+    fn default() -> Self {
+        Self { record_location: true }
+    }
+}
+
+fn load_preferences(store: &Store) -> Preferences {
+    std::fs::read(store.data_file("preferences.json")).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
+}
+
+#[tauri::command]
+fn get_preferences(state: State<AppState>) -> Preferences {
+    load_preferences(&state.store)
+}
+
+#[tauri::command]
+fn set_preferences(state: State<AppState>, preferences: Preferences) -> CmdResult<()> {
+    std::fs::write(state.store.data_file("preferences.json"), serde_json::to_vec_pretty(&preferences).map_err(err)?).map_err(err)
+}
+
+/// 녹음을 시작한 곳을 따로 받아 남긴다. 최대 약 18초 걸리므로 녹음을 막지 않게 작업 스레드에서 한다
+fn record_location(app: &AppHandle, id: &str) {
+    let (app, id) = (app.clone(), id.to_string());
+    std::thread::spawn(move || {
+        let fix = match app.sori_native().current_location() {
+            Ok(fix) if fix.found => fix,
+            _ => return,
+        };
+        let now = Utc::now().to_rfc3339();
+        let location = json!({ "lat": fix.lat, "lon": fix.lon, "accuracy": fix.accuracy, "place": fix.place, "capturedAt": now });
+        let state = app.state::<AppState>();
+        if state
+            .store
+            .update(&id, &mut |m| {
+                m["location"] = location.clone();
+                m["updatedAt"] = json!(now);
+            })
+            .is_ok()
+        {
+            changed(&app, &id);
+        }
+    });
 }
 
 #[derive(Serialize)]
@@ -210,6 +267,9 @@ pub(crate) fn begin_recording(app: &AppHandle, from_intent: bool) -> CmdResult<V
         });
     }
     let _ = app.emit("recorder-changed", json!({ "id": id }));
+    if load_preferences(&state.store).record_location {
+        record_location(app, &id);
+    }
     Ok(meta)
 }
 
@@ -343,6 +403,8 @@ pub fn run() {
             rename_recording,
             set_tags,
             open_url,
+            get_preferences,
+            set_preferences,
             delete_recording,
             add_note,
             delete_note,
