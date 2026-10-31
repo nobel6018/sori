@@ -76,6 +76,17 @@ export function buildTagTree(recordings: { tags?: string[] }[]): TagNode[] {
   return root.children;
 }
 
+/** 쓰인 태그와 그 상위 태그 경로 전부. 이름순. 질문 범위 고르기에 쓴다 */
+export function allTagPaths(recordings: { tags?: string[] }[]): string[] {
+  const paths = new Set<string>();
+  for (const r of recordings)
+    for (const tag of r.tags ?? []) {
+      const parts = tag.split("/");
+      parts.forEach((_, i) => paths.add(parts.slice(0, i + 1).join("/")));
+    }
+  return [...paths].sort((a, b) => a.localeCompare(b, "ko"));
+}
+
 /** 쓰인 태그와 녹음 수. 자동완성 후보로 쓴다. 많이 쓴 순 */
 export function tagCounts(recordings: { tags?: string[] }[]): [string, number][] {
   const counts = new Map<string, number>();

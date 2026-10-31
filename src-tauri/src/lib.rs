@@ -666,6 +666,8 @@ async fn ask_recordings(
     app: AppHandle,
     question: String,
     recording_id: Option<String>,
+    // 전체 녹음에 물을 때 이 태그(하위 태그 포함)가 붙은 녹음만 넘긴다. 15만 자 상한에 오래된 녹음이 잘리지 않게 좁힌다
+    tag: Option<String>,
     provider: summarize::Provider,
 ) -> CmdResult<Answer> {
     let state = app.state::<AppState>();
@@ -683,7 +685,13 @@ async fn ask_recordings(
                 Ok((ask::single_prompt(&q, &recording, &transcript, summary.as_ref()), Vec::new()))
             }
             None => {
-                let recordings = store.list()?;
+                let mut recordings = store.list()?;
+                if let Some(tag) = tag.as_deref() {
+                    recordings.retain(|r| sori_sync::tags::matches(&r.tags, tag));
+                    if recordings.is_empty() {
+                        eyre::bail!("'{tag}' 태그가 붙은 녹음이 없습니다");
+                    }
+                }
                 let loaded: Vec<_> = recordings
                     .iter()
                     .map(|r| (store.get_transcript(&r.id).ok().flatten(), store.get_summary(&r.id).ok().flatten()))

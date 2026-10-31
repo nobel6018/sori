@@ -8,6 +8,8 @@ interface Props {
   recordingId: string | null;
   /** 답의 시각을 눌렀을 때. 전체 질문이면 녹음 id가 함께 온다 */
   onCite: (recordingId: string | null, time: number | null) => void;
+  /** 전체 질문의 범위로 고를 태그 경로(allTagPaths). 처음에는 사이드바에서 보던 태그를 고른다 */
+  tagPaths?: string[];
 }
 
 interface Turn {
@@ -45,7 +47,15 @@ export function linkCitations(markdown: string): string {
 const EXAMPLES_ONE = ["결정된 것만 알려 줘", "내가 맡은 일이 뭐야?", "가장 의견이 갈린 주제는?"];
 const EXAMPLES_ALL = ["지난주 회의에서 배포 날짜를 언제로 정했지?", "민지가 말한 걱정거리를 모아 줘", "아직 안 끝난 할 일이 뭐야?"];
 
-export function AskPanel({ recordingId, onCite }: Props) {
+export function AskPanel({ recordingId, onCite, tagPaths = [] }: Props) {
+  const [scope, setScope] = useState<string | null>(() => {
+    try {
+      const seen = localStorage.getItem("sori.tagFilter");
+      return seen && tagPaths.includes(seen) ? seen : null;
+    } catch {
+      return null;
+    }
+  });
   const [providers, setProviders] = useState<ProviderStatus[] | null>(null);
   const [provider, setProvider] = useState<Provider | null>(null);
   const [question, setQuestion] = useState("");
@@ -85,7 +95,7 @@ export function AskPanel({ recordingId, onCite }: Props) {
     const settle = (patch: Partial<Turn>) =>
       setTurns((prev) => prev.map((t, i) => (i === prev.length - 1 ? { ...t, ...patch } : t)));
     try {
-      settle({ answer: await api.ask(text, recordingId, provider) });
+      settle({ answer: await api.ask(text, recordingId, provider, recordingId ? null : scope) });
     } catch (e) {
       settle({ error: String(e) });
     } finally {
@@ -163,10 +173,26 @@ export function AskPanel({ recordingId, onCite }: Props) {
         <input
           value={question}
           onChange={(e) => setQuestion(e.target.value)}
-          placeholder={recordingId ? "이 녹음에 물어보기" : "모든 녹음에 물어보기"}
+          placeholder={recordingId ? "이 녹음에 물어보기" : scope ? `'${scope}' 녹음에 물어보기` : "모든 녹음에 물어보기"}
           aria-label="질문"
           disabled={!provider}
         />
+        {!recordingId && tagPaths.length > 0 && (
+          <select
+            aria-label="물어볼 녹음 범위"
+            title="태그로 좁히면 오래된 녹음이 글자 수 상한에 잘리지 않습니다"
+            value={scope ?? ""}
+            onChange={(e) => setScope(e.target.value || null)}
+            disabled={running}
+          >
+            <option value="">모든 녹음</option>
+            {tagPaths.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
+        )}
         <select aria-label="답할 서비스" value={provider ?? ""} onChange={(e) => setProvider(e.target.value as Provider)} disabled={running}>
           {installed.map((p) => (
             <option key={p.provider} value={p.provider}>

@@ -319,8 +319,9 @@ export const api = {
   onSummaryState: (handler: (e: { id: string; running: boolean }) => void) =>
     listen<{ id: string; running: boolean }>("summary-state", (e) => handler(e.payload)),
   deleteSummary: (id: string, summaryId: string) => invoke<void>("delete_summary", { id, summaryId }),
-  ask: (question: string, recordingId: string | null, provider: Provider) =>
-    invoke<Answer>("ask_recordings", { question, recordingId, provider }),
+  /** tag가 있으면 그 태그(하위 포함)가 붙은 녹음에만 묻는다 */
+  ask: (question: string, recordingId: string | null, provider: Provider, tag: string | null = null) =>
+    invoke<Answer>("ask_recordings", { question, recordingId, provider, tag }),
   /** 질문 취소. 요약 취소와 같은 통로를 쓴다 */
   cancelAsk: (recordingId: string | null) => invoke<void>("cancel_summary", { id: recordingId ? `ask:${recordingId}` : "ask" }),
   addNote: (id: string | null, time: number | null, text: string) => invoke<Recording>("add_note", { id, time, text }),

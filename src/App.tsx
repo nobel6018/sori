@@ -6,7 +6,7 @@ import { AskPanel } from "./components/AskPanel";
 import { QuickOpen } from "./components/QuickOpen";
 import { ShortcutHelp } from "./components/ShortcutHelp";
 import { AppCommand, Command, IS_MAC, matchShortcut, sendCommand } from "./shortcuts";
-import { tagCounts } from "./tags";
+import { allTagPaths, tagCounts } from "./tags";
 import { ModelSetup } from "./components/ModelSetup";
 import { Recorder } from "./components/Recorder";
 import { Sidebar } from "./components/Sidebar";
@@ -370,6 +370,7 @@ export default function App() {
             </div>
             <AskPanel
               recordingId={null}
+              tagPaths={allTagPaths(recordings)}
               onCite={(id, time) => {
                 if (!id) return;
                 setAskOpen(false);

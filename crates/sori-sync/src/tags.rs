@@ -41,9 +41,22 @@ where
     out
 }
 
+/// 태그 필터에 드는지. 하위 태그(업무/영업/한빛)가 붙은 녹음도 상위(업무/영업)에 든다. src/tags.ts matchesTag와 같다
+pub fn matches(tags: &[String], filter: &str) -> bool {
+    tags.iter().any(|t| t == filter || t.starts_with(&format!("{filter}/")))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn 하위_태그도_상위_필터에_든다() {
+        let tags = vec!["업무/영업/한빛".to_string()];
+        assert!(matches(&tags, "업무"));
+        assert!(matches(&tags, "업무/영업"));
+        assert!(!matches(&tags, "업무/영"));
+    }
 
     #[test]
     fn 공백과_빈_단계와_샵을_정리한다() {
