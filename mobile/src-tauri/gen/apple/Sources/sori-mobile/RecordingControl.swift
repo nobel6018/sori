@@ -6,6 +6,7 @@
 import ActivityKit
 import AppIntents
 import Foundation
+import UIKit
 
 struct RecordingError: Error, CustomLocalizedStringResourceConvertible {
   let message: String
@@ -23,6 +24,9 @@ enum RecordingControl {
       NSLog("sori: 백그라운드 녹음 시작 실패, 앱을 앞으로 띄워 다시 시작합니다: \(error)")
       // 화면이 잠겨 있으면 잠금 해제를 요구한다. 거절하면 오류가 그대로 단축어에 간다
       try await intent.continueInForeground(nil, alwaysConfirm: false)
+      // continueInForeground가 돌아온 뒤 0.3초쯤 지나야 앱이 실제로 앞에 나온다. 그 전에 시작하면 Live Activity가
+      // visibility로 거절돼 녹음은 되는데 Dynamic Island에 안 보였다(0.7.7). 활성이 될 때까지(최대 3초) 기다린다
+      await waitUntilActive()
       try await callRust { sori_intent_start_recording() }
     }
   }
@@ -38,6 +42,14 @@ enum RecordingControl {
     }
     // 실패하면 Rust(begin_recording)가 Live Activity를 내린다
     try await callRust { sori_intent_start_recording() }
+  }
+
+  private static func waitUntilActive() async {
+    for _ in 0..<60 {
+      if await MainActor.run(body: { UIApplication.shared.applicationState == .active }) { return }
+      try? await Task.sleep(nanoseconds: 50_000_000)
+    }
+    NSLog("sori: 3초를 기다려도 앱이 활성이 되지 않았습니다")
   }
 
   static func stop() async throws {
