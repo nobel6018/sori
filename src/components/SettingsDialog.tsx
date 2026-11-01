@@ -501,7 +501,7 @@ function BulkTag() {
 
   const run = async () => {
     if (!targets || targets.length === 0) return;
-    if (!confirm(`녹음 ${targets.length}개를 AI로 정리할까요? 하나씩 차례로 하고, 구독 사용량을 씁니다. 손으로 고친 제목과 태그는 그대로 둡니다.`)) return;
+    if (!confirm(`녹음 ${targets.length}개에 AI로 제목, 태그, 할 일 후보를 붙일까요? 요약은 만들지 않습니다. 하나씩 차례로 하고, 구독 사용량을 씁니다. 손으로 고친 제목과 태그는 그대로 둡니다.`)) return;
     setRunning(true);
     setMessage(null);
     let failed = 0;
@@ -516,7 +516,7 @@ function BulkTag() {
     }
     setState(null);
     setRunning(false);
-    setMessage(failed ? `${targets.length - failed}개를 정리했고 ${failed}개는 실패했습니다` : `${targets.length}개를 정리했습니다`);
+    setMessage(failed ? `${targets.length - failed}개에 붙였고 ${failed}개는 실패했습니다` : `${targets.length}개에 제목, 태그, 할 일을 붙였습니다`);
     load();
   };
 
@@ -524,14 +524,14 @@ function BulkTag() {
   return (
     <div className="setting-row">
       <div className="setting-label">
-        <span>예전 녹음 AI로 정리</span>
+        <span>예전 녹음에 AI 제목, 태그, 할 일 붙이기</span>
         <button onClick={run} disabled={running || count === 0}>
-          {running && state ? `정리 중 ${state.done}/${state.total}` : count === 0 ? "정리할 녹음 없음" : `${count}개 정리하기`}
+          {running && state ? `붙이는 중 ${state.done}/${state.total}` : count === 0 ? "대상 녹음 없음" : `${count}개에 붙이기`}
         </button>
       </div>
       <p className="muted small">
-        위 자동 정리는 새로 받아 적는 녹음에만 돕니다. 자동 정리를 켜기 전에 받아 적었거나 정리하다 실패해서 아직 AI 제목, 태그, 할 일이 없는 녹음을
-        한 번에 정리합니다.
+        위의 "AI로 정리하기"와 같은 일(제목 짓기, 태그 붙이기, 할 일 후보 찾기)을 예전 녹음에 합니다. 그 설정은 새로 받아 적는 녹음에만 돌아서,
+        켜기 전에 받아 적었거나 중간에 실패한 녹음은 비어 있습니다. 요약은 만들지 않습니다(요약은 녹음 화면의 요약 탭에서).
       </p>
       {message && <p className="muted small">{message}</p>}
     </div>
