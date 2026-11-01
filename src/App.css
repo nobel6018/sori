@@ -1521,3 +1521,8 @@ kbd {
   justify-content: space-between;
   gap: 12px;
 }
+
+.bulk-actions {
+  display: flex;
+  gap: 8px;
+}

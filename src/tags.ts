@@ -73,7 +73,20 @@ export function buildTagTree(recordings: { tags?: string[] }[]): TagNode[] {
     nodes.forEach((n) => sort(n.children));
   };
   sort(root.children);
-  return root.children;
+  return liftUniversal(root.children, recordings.length);
+}
+
+/** 모든 녹음에 붙은 상위 태그(예전 AI가 붙인 "업무" 등)는 걸러 내는 힘이 없어 건너뛰고 하위 태그를 바로 보인다.
+ * 경로(path)는 그대로라 누르면 원래 태그로 거른다. @see docs/organize.md */
+function liftUniversal(nodes: TagNode[], total: number): TagNode[] {
+  if (total < 2) return nodes;
+  const out: TagNode[] = [];
+  for (const n of nodes) {
+    if (n.count === total && n.children.length > 0) out.push(...liftUniversal(n.children, total));
+    else out.push(n);
+  }
+  out.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "ko"));
+  return out;
 }
 
 /** 쓰인 태그와 그 상위 태그 경로 전부. 이름순. 질문 범위 고르기에 쓴다 */

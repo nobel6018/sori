@@ -481,11 +481,11 @@ function VoiceList({ enabled, onToggle }: { enabled: boolean; onToggle: (on: boo
   );
 }
 
-/** 아직 AI로 정리하지 않은 예전 녹음을 하나씩 정리한다. 한꺼번에 돌리면 구독 사용량 한도에 금방 걸린다.
- * 자동 정리를 켜기 전에 받아 적은 녹음이나, 정리하다 실패한 녹음이 대상이다
+/** 예전 녹음에 AI 제목, 태그, 할 일을 하나씩 붙인다. 한꺼번에 돌리면 구독 사용량 한도에 금방 걸린다.
+ * "붙이기"는 아직 정리하지 않은 녹음만, "다시 붙이기"는 받아 적기가 끝난 모든 녹음을 새 규칙으로 다시 정리한다
  * @see docs/organize.md */
 function BulkTag() {
-  const [targets, setTargets] = useState<Recording[] | null>(null);
+  const [done, setDone] = useState<Recording[] | null>(null);
   const [state, setState] = useState<{ done: number; total: number } | null>(null);
   const [running, setRunning] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -493,22 +493,28 @@ function BulkTag() {
   const load = () =>
     api
       .listRecordings()
-      .then((all) => setTargets(all.filter((r) => r.status === "done" && !r.autoTaggedAt)))
-      .catch(() => setTargets([]));
+      .then((all) => setDone(all.filter((r) => r.status === "done")))
+      .catch(() => setDone([]));
   useEffect(() => {
     load();
   }, []);
 
-  const run = async () => {
-    if (!targets || targets.length === 0) return;
-    if (!confirm(`녹음 ${targets.length}개에 AI로 제목, 태그, 할 일 후보를 붙일까요? 요약은 만들지 않습니다. 하나씩 차례로 하고, 구독 사용량을 씁니다. 손으로 고친 제목과 태그는 그대로 둡니다.`)) return;
+  const untagged = (done ?? []).filter((r) => !r.autoTaggedAt);
+  const all = done ?? [];
+
+  const run = async (targets: Recording[], force: boolean) => {
+    if (targets.length === 0) return;
+    const question = force
+      ? `녹음 ${targets.length}개 모두에 AI 제목, 태그, 할 일을 다시 붙일까요? AI가 붙였던 태그와 캘린더 일정은 새 결과로 바뀝니다. 손으로 고친 제목과 태그, 미리 알림에 넣은 할 일은 그대로 둡니다. 요약은 만들지 않습니다. 하나씩 차례로 하고, 구독 사용량을 씁니다.`
+      : `녹음 ${targets.length}개에 AI로 제목, 태그, 할 일 후보를 붙일까요? 요약은 만들지 않습니다. 하나씩 차례로 하고, 구독 사용량을 씁니다. 손으로 고친 제목과 태그는 그대로 둡니다.`;
+    if (!confirm(question)) return;
     setRunning(true);
     setMessage(null);
     let failed = 0;
     for (let i = 0; i < targets.length; i++) {
       setState({ done: i, total: targets.length });
       try {
-        await api.organize(targets[i].id);
+        await api.organize(targets[i].id, force);
       } catch (e) {
         failed += 1;
         console.warn(`정리 실패 ${targets[i].title}: ${e}`);
@@ -520,19 +526,25 @@ function BulkTag() {
     load();
   };
 
-  const count = targets?.length ?? 0;
   return (
     <div className="setting-row">
       <div className="setting-label">
         <span>예전 녹음에 AI 제목, 태그, 할 일 붙이기</span>
-        <button onClick={run} disabled={running || count === 0}>
-          {running && state ? `붙이는 중 ${state.done}/${state.total}` : count === 0 ? "대상 녹음 없음" : `${count}개에 붙이기`}
-        </button>
+        <span className="bulk-actions">
+          <button onClick={() => run(untagged, false)} disabled={running || untagged.length === 0}>
+            {untagged.length === 0 ? "새로 붙일 녹음 없음" : `${untagged.length}개에 붙이기`}
+          </button>
+          <button onClick={() => run(all, true)} disabled={running || all.length === 0}>
+            {`모두 다시 붙이기 (${all.length}개)`}
+          </button>
+        </span>
       </div>
       <p className="muted small">
-        위의 "AI로 정리하기"와 같은 일(제목 짓기, 태그 붙이기, 할 일 후보 찾기)을 예전 녹음에 합니다. 그 설정은 새로 받아 적는 녹음에만 돌아서,
-        켜기 전에 받아 적었거나 중간에 실패한 녹음은 비어 있습니다. 요약은 만들지 않습니다(요약은 녹음 화면의 요약 탭에서).
+        위의 "AI로 정리하기"와 같은 일(제목 짓기, 태그 붙이기, 할 일 후보 찾기)을 예전 녹음에 합니다. "붙이기"는 그 설정을 켜기 전에 받아 적었거나 중간에 실패해
+        아직 비어 있는 녹음만, "모두 다시 붙이기"는 받아 적기가 끝난 모든 녹음을 지금 규칙으로 다시 정리합니다(태그 규칙이나 캘린더 확인 방식이 바뀌었을 때).
+        요약은 만들지 않습니다(요약은 녹음 화면의 요약 탭에서).
       </p>
+      {running && state && <p className="muted small">{`붙이는 중 ${state.done}/${state.total}`}</p>}
       {message && <p className="muted small">{message}</p>}
     </div>
   );

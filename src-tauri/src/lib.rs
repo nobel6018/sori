@@ -482,7 +482,8 @@ fn add_update_menu(app: &tauri::App) -> tauri::Result<()> {
     use tauri::menu::{Menu, MenuItem};
     let menu = Menu::default(app.handle())?;
     if let Some(tauri::menu::MenuItemKind::Submenu(app_menu)) = menu.items()?.into_iter().next() {
-        let item = MenuItem::with_id(app, "check-update", "업데이트 확인하기…", true, None::<&str>)?;
+        let label = if system_prefers_korean() { "업데이트 확인하기…" } else { "Check for Updates…" };
+        let item = MenuItem::with_id(app, "check-update", label, true, None::<&str>)?;
         app_menu.insert(&item, 1)?;
     }
     app.set_menu(menu)?;
@@ -492,6 +493,12 @@ fn add_update_menu(app: &tauri::App) -> tauri::Result<()> {
         }
     });
     Ok(())
+}
+
+/// 시스템의 첫 번째 선호 언어가 한국어인지(시스템 설정 > 일반 > 언어 및 지역). 앱 메뉴 이름에 쓴다
+#[cfg(target_os = "macos")]
+fn system_prefers_korean() -> bool {
+    objc2_foundation::NSLocale::preferredLanguages().firstObject().is_some_and(|l| l.to_string().starts_with("ko"))
 }
 
 /// 앱을 다시 켜면 끊기는 작업 목록. 비어 있어야 업데이트를 설치하고 다시 켠다(화면이 누를 때와 설치 직전에 두 번 묻는다)

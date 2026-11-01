@@ -52,8 +52,9 @@ pub fn begin(id: &str) -> Option<RunningGuard> {
 pub fn vocabulary(recordings: &[Recording], except: &str) -> Vec<(String, usize)> {
     let mut counts: BTreeMap<String, usize> = BTreeMap::new();
     for r in recordings.iter().filter(|r| r.id != except) {
-        for t in &r.tags {
-            *counts.entry(t.clone()).or_default() += 1;
+        // 예전 AI가 붙인 "업무/…" 같은 포괄 분류는 걷어 내고 보여 줘야 AI가 그대로 따라 쓰지 않는다
+        for t in r.tags.iter().filter_map(|t| strip_generic(t)) {
+            *counts.entry(t).or_default() += 1;
         }
     }
     let mut out: Vec<(String, usize)> = counts.into_iter().collect();
@@ -141,8 +142,9 @@ pub fn build_prompt(
 - 대화에 그 일정의 회사, 행사, 사람, 주제가 분명히 나올 때만 고른다. 대화 내용이 다른 회사나 다른 일이면 고르지 않는다\n\
 - 확실하지 않으면 고르지 않는다(null). 고르지 않은 일정의 이름은 제목과 태그에 쓰지 않는다\n\
 태그 규칙:\n\
-- 1~{MAX_AI_TAGS}개. 녹음을 모아 볼 분류(어떤 일, 누구와, 무슨 주제)를 고른다\n\
-- 계층은 /로 나눈다. 예: 업무/영업/한빛로보틱스. 3단계까지\n\
+- 1~{MAX_AI_TAGS}개. 녹음을 서로 나눠 모아 볼 수 있는 이름을 고른다: 거래처나 기관, 프로젝트, 주제. 예: HD현대, 데이터센터, 냉각설비\n\
+- \"업무\", \"주제\", \"기타\", \"일반\"처럼 거의 모든 녹음에 붙을 포괄 분류는 쓰지 않는다. 앞에 붙이지도 않는다(\"업무/HD현대\"가 아니라 \"HD현대\")\n\
+- 계층(/)은 정말 하위 관계일 때만 쓴다. 예: HD현대/슈컴센터. 2단계까지\n\
 - 아래 \"쓰던 태그\"에 맞는 것이 있으면 글자 그대로 쓴다. 새로 만들 때는 쓰던 태그의 계층과 이름 짓는 방식을 따른다\n\
 - \"회의\", \"녹음\"처럼 모든 녹음에 붙을 말은 쓰지 않는다\n\
 할 일 규칙:\n\
@@ -194,12 +196,24 @@ pub struct Organized {
     pub todos: Vec<(String, Option<String>)>,
 }
 
+/// 거의 모든 녹음에 붙어 모아 보기에 쓸모없는 맨 앞 분류. 0.9.3까지 AI가 "업무/HD현대", "주제/데이터센터"처럼 붙였다
+const GENERIC_ROOTS: &[&str] = &["업무", "주제", "기타", "일반", "회의", "미팅", "녹음"];
+
+/// 맨 앞의 포괄 분류를 걷어 낸다. 남는 것이 없으면 None("업무" 하나뿐인 태그). AI가 붙인 태그에만 쓴다(사람이 붙인 태그는 그대로)
+/// @see docs/organize.md
+pub fn strip_generic(tag: &str) -> Option<String> {
+    let parts: Vec<&str> = tag.split('/').collect();
+    let start = parts.iter().position(|p| !GENERIC_ROOTS.contains(p))?;
+    Some(parts[start..].join("/"))
+}
+
 /// AI 답에서 JSON을 찾아 정리한다. 코드 블록이나 앞뒤 설명이 붙어도 읽는다
 pub fn parse_answer(answer: &str) -> Result<Organized> {
     let start = answer.find('{').ok_or_else(|| eyre!("AI 답에 JSON이 없습니다: {}", head(answer.trim(), 200)))?;
     let end = answer.rfind('}').filter(|e| *e > start).ok_or_else(|| eyre!("AI 답의 JSON이 닫히지 않았습니다"))?;
     let parsed: Answer = serde_json::from_str(&answer[start..=end]).map_err(|e| eyre!("AI 답을 읽지 못했습니다: {e}"))?;
-    let mut tags = sori_sync::tags::normalize_tags(&parsed.tags);
+    let stripped: Vec<String> = sori_sync::tags::normalize_tags(&parsed.tags).iter().filter_map(|t| strip_generic(t)).collect();
+    let mut tags = sori_sync::tags::normalize_tags(&stripped);
     tags.truncate(MAX_AI_TAGS);
     let title = parsed
         .title
@@ -228,7 +242,7 @@ mod tests {
     fn 코드_블록과_설명이_붙은_답에서도_태그를_읽는다() {
         let answer = "다음과 같습니다.\n```json\n{\"tags\": [\" 업무 / 영업 \", \"고객미팅\", \"업무/영업\", \"a\", \"b\"]}\n```";
         let o = parse_answer(answer).unwrap();
-        assert_eq!(o.tags, vec!["업무/영업", "고객미팅", "a"]);
+        assert_eq!(o.tags, vec!["영업", "고객미팅", "a"]);
         assert_eq!(o.title, None);
         assert!(o.todos.is_empty());
     }
@@ -258,6 +272,16 @@ mod tests {
         assert!(is_default_title("녹음 2026-10-31 12:00"));
         assert!(!is_default_title("한빛로보틱스 미팅"));
         assert!(!is_default_title("녹음 메모"));
+    }
+
+    #[test]
+    fn 포괄_분류는_걷어_낸다() {
+        assert_eq!(strip_generic("업무/HD현대").as_deref(), Some("HD현대"));
+        assert_eq!(strip_generic("업무/주제/데이터센터").as_deref(), Some("데이터센터"));
+        assert_eq!(strip_generic("HD현대/슈컴센터").as_deref(), Some("HD현대/슈컴센터"));
+        assert_eq!(strip_generic("업무"), None);
+        let o = parse_answer(r#"{"tags": ["업무/HD현대", "주제/데이터센터", "업무"]}"#).unwrap();
+        assert_eq!(o.tags, vec!["HD현대", "데이터센터"]);
     }
 
     #[test]

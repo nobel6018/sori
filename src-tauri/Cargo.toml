@@ -1,6 +1,6 @@
 [package]
 name = "sori"
-version = "0.9.3"
+version = "0.9.4"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2024"
@@ -50,7 +50,7 @@ sori-sync = { path = "../crates/sori-sync" }
 [target.'cfg(target_os = "macos")'.dependencies]
 whisper-rs = { version = "0.16", features = ["metal"] }
 objc2 = "0.6"
-objc2-foundation = { version = "0.3", features = ["NSProcessInfo", "NSString", "NSObject", "NSRunLoop", "NSDate", "NSArray", "NSError"] }
+objc2-foundation = { version = "0.3", features = ["NSProcessInfo", "NSString", "NSObject", "NSRunLoop", "NSDate", "NSArray", "NSError", "NSLocale"] }
 # 녹음한 곳: Wi-Fi 위치와 주소(docs/organize.md)
 objc2-core-location = { version = "0.3", default-features = false, features = ["std", "block2", "CLLocation", "CLLocationManager", "CLGeocoder", "CLPlacemark", "CLError"] }
 block2 = "0.6"
