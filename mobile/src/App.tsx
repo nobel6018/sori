@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { tagCounts } from "../../src/tags";
+import { checkForUpdate, UpdateInfo } from "../../src/updateCheck";
 import { api, RecorderState, RecordingItem, SyncStatus } from "./api";
 import { Detail } from "./Detail";
 import { List } from "./List";
@@ -15,11 +16,17 @@ export function App() {
   /** 녹음 중이면 녹음 화면을 다른 화면 위에 띄운다 */
   const [recorder, setRecorder] = useState<RecorderState | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [update, setUpdate] = useState<UpdateInfo | null>(null);
   const allTags = useMemo(() => tagCounts(recordings), [recordings]);
   /** iPhone에서 미리 전사하고 있는 녹음 */
   const [previewing, setPreviewing] = useState<string | null>(null);
   /** 미리 전사가 실패한 녹음. 이번 실행에서는 다시 하지 않는다 */
   const previewFailed = useRef<Set<string>>(new Set());
+
+  // 켤 때 한 번 새 버전을 확인한다. 업데이트는 AltStore가 하므로 알리기만 한다(docs/mobile.md)
+  useEffect(() => {
+    checkForUpdate(/^sori-ios\.ipa$/).then(setUpdate);
+  }, []);
 
   const refresh = useCallback(() => {
     api.listRecordings().then(setRecordings).catch((e) => setError(String(e)));
@@ -96,6 +103,16 @@ export function App() {
       {error && (
         <div className="toast error" role="alert" onClick={() => setError(null)}>
           {error}
+        </div>
+      )}
+      {update && screen.name === "list" && (
+        <div className="update-banner" role="status">
+          <span>
+            새 버전 {update.latest}이 있습니다(지금 {update.current}). AltStore의 My Apps에서 업데이트하세요.
+          </span>
+          <button className="text-button" onClick={() => setUpdate(null)}>
+            닫기
+          </button>
         </div>
       )}
       {screen.name === "list" && (

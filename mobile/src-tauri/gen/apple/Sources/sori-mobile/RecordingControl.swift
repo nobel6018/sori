@@ -13,10 +13,19 @@ struct RecordingError: Error, CustomLocalizedStringResourceConvertible {
   var localizedStringResource: LocalizedStringResource { "\(message)" }
 }
 
+extension RecordingError {
+  static let activitiesDisabled = RecordingError(
+    message: "실시간 현황이 꺼져 있어 녹음할 수 없습니다. 설정 > 앱 > sori에서 실시간 현황을 켜 주세요"
+  )
+}
+
 enum RecordingControl {
   /// 백그라운드에서 먼저 시도하고, iOS가 거절하면 앱을 앞으로 띄워 다시 시작한다.
   /// 백그라운드 녹음 시작은 iOS가 임시 허가를 주고도 가끔 거절한다(원인 미확정, docs/mobile.md). 앞에서는 늘 된다
   static func start(continuing intent: some AppIntent) async throws {
+    // 실시간 현황이 꺼져 있으면 앱을 앞으로 띄워도 Live Activity를 못 띄운다. iOS 27.2부터 AudioRecordingIntent가
+    // Live Activity 없이 오디오 세션을 켜고 끝나면 AppIntents가 앱을 강제 종료한다(0.9.0 크래시). 녹음하지 않고 이유를 알린다
+    guard ActivityAuthorizationInfo().areActivitiesEnabled else { throw RecordingError.activitiesDisabled }
     do {
       try await startInBackground()
     } catch {
@@ -27,15 +36,17 @@ enum RecordingControl {
       // continueInForeground가 돌아온 뒤 0.3초쯤 지나야 앱이 실제로 앞에 나온다. 그 전이라도 liveactivitiesd는
       // 앱을 앞으로 보고 Live Activity를 허락했지만(0.7.7 로그), 화면이 앞에 나온 뒤 시작하도록 활성을 기다린다(최대 3초)
       await waitUntilActive()
+      // 화면 버튼 경로(Rust)는 Live Activity를 못 띄워도 녹음을 이어 가므로, 인텐트에서는 여기서 먼저 띄우고 못 띄우면 멈춘다
+      if let error = startLiveActivity() {
+        throw RecordingError(message: "Live Activity를 띄우지 못해 녹음하지 않았습니다: \(error)")
+      }
       try await callRust { sori_intent_start_recording() }
     }
   }
 
   private static func startInBackground() async throws {
     // AudioRecordingIntent는 녹음하는 동안 Live Activity를 띄워야 한다. 못 띄우면 시스템이 녹음을 끊는다
-    guard ActivityAuthorizationInfo().areActivitiesEnabled else {
-      throw RecordingError(message: "실시간 현황이 꺼져 있어 녹음할 수 없습니다. 설정 > 앱 > sori에서 실시간 현황을 켜 주세요")
-    }
+    guard ActivityAuthorizationInfo().areActivitiesEnabled else { throw RecordingError.activitiesDisabled }
     // 오디오 세션보다 먼저 띄운다. 앱 밖에서 시작하면 iOS는 Live Activity가 떠 있을 때만 백그라운드 녹음을 허락한다
     if let error = startLiveActivity() {
       throw RecordingError(message: "Live Activity를 띄우지 못해 녹음하지 않았습니다: \(error)")

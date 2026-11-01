@@ -108,6 +108,22 @@ export function Settings({ sync, onBack }: { sync: SyncStatus | null; onBack: ()
               />
             </label>
           )}
+          {prefs && (
+            <label className="toggle-row">
+              <span>
+                <strong>앱에서 녹음할 때 잠금 화면에 표시</strong>
+                <span className="muted small">
+                  이 화면의 녹음 버튼으로 시작한 녹음을 잠금 화면과 Dynamic Island에 띄웁니다. 끄면 멈추려면 앱을 열어야 합니다. 동작 버튼과 단축어로 시작한 녹음은 iOS가 요구해서 늘 띄웁니다
+                </span>
+              </span>
+              <input
+                type="checkbox"
+                role="switch"
+                checked={prefs.inAppLiveActivity}
+                onChange={(e) => savePrefs({ ...prefs, inAppLiveActivity: e.target.checked })}
+              />
+            </label>
+          )}
         </section>
 
         {version && <p className="muted small app-version">sori {version}</p>}

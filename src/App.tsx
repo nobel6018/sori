@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open } from "@tauri-apps/plugin-dialog";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { api, AppAction, AUDIO_EXTENSIONS, ModelCatalog, modelsReady, ProgressEvent, Recording } from "./api";
 import { AskPanel } from "./components/AskPanel";
 import { QuickOpen } from "./components/QuickOpen";
@@ -12,6 +13,7 @@ import { Recorder } from "./components/Recorder";
 import { Sidebar } from "./components/Sidebar";
 import { RecordingView } from "./components/RecordingView";
 import { SettingsDialog } from "./components/SettingsDialog";
+import { checkForUpdate, UpdateInfo } from "./updateCheck";
 import "./App.css";
 
 export default function App() {
@@ -23,6 +25,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [catalog, setCatalog] = useState<ModelCatalog | null>(null);
   const [setupLater, setSetupLater] = useState(false);
+  const [update, setUpdate] = useState<UpdateInfo | null>(null);
   /** null이면 빠른 찾기 창을 닫은 상태. 문자열은 처음 넣을 검색어 */
   const [quickOpen, setQuickOpenState] = useState<{ query: string; nonce: number } | null>(null);
   // 이미 열려 있어도 새 검색어로 다시 열리도록 매번 새 값을 만든다
@@ -36,6 +39,11 @@ export default function App() {
   const [askOpen, setAskOpen] = useState(false);
   /** 링크나 검색 결과로 녹음을 열 때 옮겨 갈 재생 위치. nonce로 같은 시각을 다시 골라도 반영한다 */
   const [seekTo, setSeekTo] = useState<{ id: string; time: number; nonce: number } | null>(null);
+
+  // 켤 때 한 번 새 버전을 확인한다. 이 OS의 설치 파일이 붙은 Release만 알린다
+  useEffect(() => {
+    checkForUpdate(IS_MAC ? /\.dmg$/ : /(\.msi|-setup\.exe)$/).then(setUpdate);
+  }, []);
 
   const refresh = useCallback(async () => {
     setRecordings(await api.listRecordings());
@@ -178,6 +186,10 @@ export default function App() {
         return setQuickOpen("");
       case "help":
         return setHelpOpen(true);
+      case "reload":
+        // 녹음은 Rust가 이어 가지만 화면을 새로 읽으면 녹음기가 진행 중인 녹음을 다시 잡지 못한다. 녹음 중에는 목록만 다시 읽는다
+        if (recordings.some((r) => r.status === "recording")) return refresh();
+        return window.location.reload();
       case "ask-all":
         return setAskOpen(true);
       case "prev":
@@ -304,6 +316,21 @@ export default function App() {
         }
       />
       <main className="main">
+        {update && (
+          <div className="setup-banner" role="status">
+            <span>
+              새 버전 {update.latest}이 나왔습니다. 지금은 {update.current}입니다.
+            </span>
+            <span className="banner-actions">
+              <button className="primary" onClick={() => openUrl(update.url).catch((e) => setError(String(e)))}>
+                내려받기
+              </button>
+              <button className="ghost" onClick={() => setUpdate(null)}>
+                닫기
+              </button>
+            </span>
+          </div>
+        )}
         {catalog && !modelsReady(catalog) && setupLater && (
           <div className="setup-banner" role="status">
             모델이 없어 받아 적기를 할 수 없습니다.

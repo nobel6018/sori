@@ -44,7 +44,7 @@ export function useCommands(handler: (command: Command) => void) {
 }
 
 /** App이 직접 처리하는 일 */
-export type AppCommand = "import" | "settings" | "search" | "help" | "prev" | "next" | "ask-all";
+export type AppCommand = "import" | "settings" | "search" | "help" | "prev" | "next" | "ask-all" | "reload";
 
 export interface Shortcut {
   /** 키 이름(KeyboardEvent.key 기준, 글자는 소문자) */
@@ -83,6 +83,8 @@ export const SHORTCUTS: Shortcut[] = [
   { key: "l", mod: true, run: "toggle-follow", label: "자동 스크롤 켜고 끄기", group: "보기" },
   { key: "c", mod: true, shift: true, run: "copy-markdown", label: "요약과 전사를 마크다운으로 복사", group: "보기" },
   { key: "/", mod: true, run: "help", label: "단축키 목록", group: "보기", inInput: true },
+  // 입력칸에서는 쓰던 글이 날아가지 않게 막는다. 녹음 중에는 목록만 다시 읽는다(App.runCommand)
+  { key: "r", mod: true, run: "reload", label: "새로고침", group: "보기" },
 ];
 
 export function isEditable(target: EventTarget | null): boolean {

@@ -35,6 +35,8 @@ sori가 앞에 없어도 동작합니다. 설정에서 바꾸고, Backspace로 �
 
 ## 앱 안 단축키
 
+⌘R(Windows는 Ctrl+R)은 화면을 새로 읽습니다. 녹음 중에는 화면을 새로 읽으면 녹음기가 진행 중인 녹음을 다시 잡지 못하므로 목록만 다시 읽고, 입력칸에서는 쓰던 글이 날아가지 않게 동작하지 않습니다(`App.runCommand`의 `reload`). 데스크톱 앱도 켤 때 새 버전을 확인해 이 OS 설치 파일이 붙은 Release가 있으면 위에 알립니다(`src/updateCheck.ts`).
+
 ⌘/(Windows는 Ctrl+/)로 앱 안에서 전체 목록을 봅니다. 목록의 원본은 `src/shortcuts.ts`의 `SHORTCUTS`입니다. ⌘(Windows는 Ctrl) 하나만 0.6초 누르고 있으면 같은 목록이 미리보기로 뜨고, 키를 떼거나 다른 키를 누르면 닫힙니다(`src/App.tsx`의 `peekOpen`, `ShortcutHelp`의 `peek`). ⌘C처럼 곧바로 다른 키를 누르는 평소 사용에는 뜨지 않고, ⌘Tab으로 앱을 옮기면 창 blur에서 닫습니다.
 
 - 글자 입력칸에 커서가 있으면 Space, 화살표, ⌘⌫ 같은 키는 입력칸의 원래 동작을 따릅니다. ⌘K, ⌘O, ⌘↩처럼 입력칸에서 쓰지 않는 조합만 동작합니다

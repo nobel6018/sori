@@ -32,6 +32,8 @@ export interface Preferences {
   recordLocation: boolean;
   /** 녹음이 끝나면 iPhone에서 바로 미리 전사한다(iOS 26 이상) */
   previewTranscribe: boolean;
+  /** 화면의 녹음 버튼으로 시작할 때도 잠금 화면에 Live Activity를 띄운다. 동작 버튼, 단축어는 늘 띄운다 */
+  inAppLiveActivity: boolean;
 }
 
 export type SyncProvider = "local" | "icloud";

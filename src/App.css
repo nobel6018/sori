@@ -1503,3 +1503,8 @@ kbd {
   margin-top: 8px;
   font-size: 12px;
 }
+
+.setup-banner .banner-actions {
+  display: flex;
+  gap: 8px;
+}

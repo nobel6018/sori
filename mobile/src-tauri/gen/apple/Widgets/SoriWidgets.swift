@@ -15,21 +15,20 @@ struct SoriWidgets: WidgetBundle {
 
 struct RecordingLiveActivity: Widget {
   var body: some WidgetConfiguration {
+    // 잠금 화면은 한 줄로 작게 그린다. 녹음 중에는 iOS가 늘 띄우게 하므로 화면을 덜 가리게 한다
     ActivityConfiguration(for: RecordingActivityAttributes.self) { context in
-      HStack(spacing: 12) {
+      HStack(spacing: 10) {
         Image(systemName: "waveform")
-          .font(.title2)
+          .font(.body)
           .foregroundStyle(.red)
-        VStack(alignment: .leading, spacing: 2) {
-          Text("sori 녹음 중").font(.headline)
-          Text("화면을 꺼도 이어집니다").font(.caption).foregroundStyle(.secondary)
-        }
+        Text("sori 녹음 중").font(.subheadline)
         Spacer()
         Elapsed(since: context.state.startedAt)
-          .font(.title2.monospacedDigit())
-        StopButton()
+          .font(.body.monospacedDigit())
+        StopButton(size: 30)
       }
-      .padding()
+      .padding(.horizontal, 16)
+      .padding(.vertical, 6)
     } dynamicIsland: { context in
       DynamicIsland {
         DynamicIslandExpandedRegion(.leading) {
@@ -68,14 +67,19 @@ private struct Elapsed: View {
   }
 }
 
+/// 보이는 원은 size, 누르는 영역은 44pt를 지킨다
 private struct StopButton: View {
+  var size: CGFloat = 44
+
   var body: some View {
     Button(intent: StopRecordingIntent()) {
       Image(systemName: "stop.fill")
-        .font(.title3)
+        .font(size < 44 ? .footnote : .title3)
         .foregroundStyle(.white)
-        .frame(width: 44, height: 44)
+        .frame(width: size, height: size)
         .background(Circle().fill(.red))
+        .frame(width: 44, height: 44)
+        .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
     .accessibilityLabel("녹음 멈추기")

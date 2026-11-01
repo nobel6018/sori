@@ -22,6 +22,8 @@ iOS 18 이상이 필요합니다. 녹음 중 화면(Live Activity)을 그리는 
 
 ### 업데이트
 
+앱을 켜면 GitHub API(`releases/latest`)로 최신 버전을 확인하고, `sori-ios.ipa`가 붙은 더 새 버전이 있으면 목록 위에 알립니다(`src/updateCheck.ts`, `mobile/src/App.tsx`). Release 다운로드 주소는 CORS 헤더가 없어 웹뷰에서 읽지 못하므로 CORS를 허용하는 API를 씁니다. 설정 화면 맨 아래에 설치된 버전이 보입니다.
+
 새 버전 태그를 올리면 release.yml이 `sori-ios.ipa`와 함께 AltStore 소스 `apps.json`을 Release에 붙입니다(`.github/scripts/altstore-source.sh`). 위 소스 주소는 늘 최신 Release로 이어지므로, AltStore를 열면 My Apps에 sori의 Update 버튼이 뜹니다. 버튼을 누르면 Mac의 AltServer가 Wi-Fi로 서명해 설치합니다. iOS가 사이드로딩 앱의 무인 설치를 막으므로 이 버튼 한 번은 남습니다.
 
 AltStore는 소스에 적힌 권한이 받은 ipa와 다르면 설치를 거부합니다. 그래서 소스의 버전과 권한(`…UsageDescription` 키)은 손으로 적지 않고, 스크립트가 빌드된 앱과 앱 확장의 Info.plist에서 읽습니다. 서명 없이 빌드해 바이너리에 entitlements가 없으므로 entitlements는 빈 배열입니다. 앱에 entitlements를 넣게 되면 스크립트도 함께 고쳐야 합니다.
@@ -56,7 +58,11 @@ AltStore는 소스에 적힌 권한이 받은 ipa와 다르면 설치를 거부�
 | 녹음 멈추기 (`StopRecordingIntent`) | Live Activity 멈춤 버튼, Siri("sori 녹음 멈춰") |
 
 설정 > 앱 > sori에서 실시간 현황(Live Activity)이 꺼져 있으면 시작하지 않고 그렇다고 알립니다. 앱 밖에서 녹음하는 `AudioRecordingIntent`는 녹음하는 동안 Live Activity를 띄워야 하고, 못 띄우면 시스템이 녹음을 끊기 때문입니다.
-앱 안의 녹음 버튼으로 시작해도 같은 Live Activity가 뜹니다.
+앱 안의 녹음 버튼으로 시작해도 같은 Live Activity가 뜹니다. 설정의 "앱에서 녹음할 때 잠금 화면에 표시"를 끄면 화면 버튼 녹음에는 띄우지 않습니다(`Preferences.in_app_live_activity`, `begin_recording`). 이때 녹음은 백그라운드 오디오로 이어지고, 멈추려면 앱을 엽니다.
+
+iOS 27.2부터는 `AudioRecordingIntent`가 Live Activity 없이 오디오 세션을 켠 채 끝나면 AppIntents가 앱을 강제 종료합니다(`AudioRecordingIntent was performed with an active audio session but without a Live Activity`). 0.9.0은 실시간 현황이 꺼진 상태에서 백그라운드 시작이 실패하자 앱을 앞으로 띄워 Live Activity 없이 녹음했고, 동작 버튼을 누를 때마다 종료됐습니다. 0.9.1부터는 실시간 현황이 꺼져 있으면 시작 전에 알리고, 앞으로 띄우는 길에서도 Live Activity를 먼저 띄우지 못하면 녹음하지 않습니다(`RecordingControl.start`).
+
+잠금 화면의 Live Activity는 한 줄로 작게 그립니다(`SoriWidgets.swift`). 멈춤 버튼은 보이는 원을 30pt로 줄이고 누르는 영역은 44pt를 지킵니다.
 
 ### 구조
 

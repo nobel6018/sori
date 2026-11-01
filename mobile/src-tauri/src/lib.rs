@@ -40,6 +40,9 @@ pub(crate) struct Preferences {
     /// 녹음이 끝나면 iPhone에서 바로 미리 전사한다(iOS 26 이상)
     #[serde(default = "yes")]
     preview_transcribe: bool,
+    /// 화면의 녹음 버튼으로 시작할 때도 잠금 화면에 Live Activity를 띄운다. 단축어, 동작 버튼은 iOS가 요구하므로 늘 띄운다
+    #[serde(default = "yes")]
+    in_app_live_activity: bool,
 }
 
 fn yes() -> bool {
@@ -48,7 +51,7 @@ fn yes() -> bool {
 
 impl Default for Preferences {
     fn default() -> Self {
-        Self { record_location: true, preview_transcribe: true }
+        Self { record_location: true, preview_transcribe: true, in_app_live_activity: true }
     }
 }
 
@@ -303,7 +306,13 @@ pub(crate) fn begin_recording(app: &AppHandle, from_intent: bool) -> CmdResult<V
     // Live Activity를 녹음보다 먼저 띄운다. 앱 밖(동작 버튼)에서 시작할 때 iOS는 Live Activity가 떠 있어야
     // 백그라운드에서 오디오 세션을 켜 준다. 단축어는 인텐트 안에서 이미 띄웠고, 여기서는 화면 버튼일 때 띄운다.
     // 화면 버튼이면 Live Activity 없이도 녹음되므로 못 띄워도 이어 간다
-    let activity = intents::activity_started();
+    // 화면 버튼이면 설정에서 끌 수 있다(앱 안에서 시작한 녹음은 Live Activity 없이도 백그라운드에서 이어진다)
+    let prefs = load_preferences(&state.store);
+    let activity = if from_intent || prefs.in_app_live_activity {
+        intents::activity_started()
+    } else {
+        Ok(())
+    };
     let started = state
         .store
         .audio_path(&meta)
@@ -319,7 +328,7 @@ pub(crate) fn begin_recording(app: &AppHandle, from_intent: bool) -> CmdResult<V
         });
     }
     let _ = app.emit("recorder-changed", json!({ "id": id }));
-    if load_preferences(&state.store).record_location {
+    if prefs.record_location {
         record_location(app, &id);
     }
     Ok(meta)
