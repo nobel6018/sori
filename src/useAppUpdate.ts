@@ -5,7 +5,7 @@ import { relaunch } from "@tauri-apps/plugin-process";
 import { check, Update } from "@tauri-apps/plugin-updater";
 import { api } from "./api";
 import { IS_MAC } from "./shortcuts";
-import { checkForUpdate } from "./updateCheck";
+import { checkForUpdateDetailed } from "./updateCheck";
 
 // 데스크톱 앱 업데이트. 켤 때 확인만 하고, 설치와 재시작은 사람이 버튼을 눌러야 한다.
 // 녹음, 전사 같은 작업이 하나라도 진행 중이면 설치하지 않고 무엇이 진행 중인지 알린다.
@@ -49,12 +49,15 @@ export function useAppUpdate() {
         setState({ kind: "latest", current: await getVersion() });
       }
     } catch (e) {
-      console.warn(`업데이트 확인 실패, Release 안내로 대신합니다: ${e}`);
-      const info = await checkForUpdate(IS_MAC ? /\.dmg$/ : /(\.msi|-setup\.exe)$/);
-      if (info) setState({ kind: "link", version: info.latest, current: info.current, url: info.url });
-      else if (manual) {
+      // latest.json을 못 읽었다(새 버전을 올리는 중이거나 0.9.2 이하 Release, 네트워크). GitHub API로 다시 묻는다
+      console.warn(`업데이트 확인 실패, GitHub API로 다시 확인합니다: ${e}`);
+      const info = await checkForUpdateDetailed(IS_MAC ? /\.dmg$/ : /(\.msi|-setup\.exe)$/);
+      if (typeof info === "object") setState({ kind: "link", version: info.latest, current: info.current, url: info.url });
+      else if (!manual) return;
+      else if (info === "none") setState({ kind: "latest", current: await getVersion() });
+      else {
         setState({ kind: "none" });
-        setError(`업데이트를 확인하지 못했습니다: ${e}`);
+        setError("업데이트를 확인하지 못했습니다. 인터넷 연결을 확인하거나 잠시 뒤 다시 확인해 주세요");
       }
     }
   }, []);

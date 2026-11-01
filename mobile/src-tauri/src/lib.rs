@@ -220,6 +220,12 @@ async fn preview_transcribe(app: AppHandle, id: String) -> CmdResult<bool> {
     .map_err(err)?
 }
 
+/// 당겨서 새로고침의 진동. 실패해도 화면은 그대로 둔다
+#[tauri::command]
+fn haptic(app: AppHandle) {
+    let _ = app.sori_native().haptic();
+}
+
 /// 지도 같은 바깥 링크를 연다. 화면(WebView) 안에서 열면 앱 화면이 그 페이지로 바뀐다
 #[tauri::command]
 async fn open_url(app: AppHandle, url: String) -> CmdResult<()> {
@@ -464,6 +470,7 @@ pub fn run() {
             rename_recording,
             set_tags,
             open_url,
+            haptic,
             get_preferences,
             set_preferences,
             preview_transcribe,

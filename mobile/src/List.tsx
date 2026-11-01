@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { formatTime } from "../../src/api";
 import { buildTagTree, matchesTag, TagNode, UNTAGGED } from "../../src/tags";
 import { RecordingItem, SyncStatus, syncLabel } from "./api";
+import { PullToRefresh } from "./PullToRefresh";
 
 const FILTER_KEY = "sori.tagFilter";
 
@@ -51,35 +52,37 @@ export function List({
         </div>
       </header>
 
-      {tree.length > 0 && <TagBar tree={tree} recordings={recordings} active={active} onChoose={choose} />}
+      <PullToRefresh onRefresh={onRefresh} busy={!!sync?.running}>
+        {tree.length > 0 && <TagBar tree={tree} recordings={recordings} active={active} onChoose={choose} />}
 
-      <main className="content list">
-        {recordings.length === 0 ? (
-          <div className="empty">
-            <p>녹음이 없습니다.</p>
-            <p className="muted">아래 버튼으로 녹음하거나, 설정에서 iCloud Drive를 연결해 Mac의 녹음을 가져오세요.</p>
-          </div>
-        ) : (
-          <ul className="recordings">
-            {shown.map((r) => (
-              <li key={r.id}>
-                <button className="recording-row" onClick={() => onOpen(r.id)}>
-                  <span className="row-title">
-                    <span className="number">#{r.number}</span> {r.title}
-                  </span>
-                  <span className="row-meta">
-                    <StatusChip item={r} previewing={previewing === r.id} />
-                    {r.duration != null && <span>{formatTime(r.duration)}</span>}
-                    <span>{new Date(r.createdAt).toLocaleDateString("ko-KR", { month: "short", day: "numeric" })}</span>
-                    {!r.audioAvailable && r.status !== "recording" && <span className="muted">클라우드</span>}
-                  </span>
-                  {!!r.tags?.length && <span className="row-tags">{r.tags.join(", ")}</span>}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </main>
+        <main className="content list">
+          {recordings.length === 0 ? (
+            <div className="empty">
+              <p>녹음이 없습니다.</p>
+              <p className="muted">아래 버튼으로 녹음하거나, 설정에서 iCloud Drive를 연결해 Mac의 녹음을 가져오세요.</p>
+            </div>
+          ) : (
+            <ul className="recordings">
+              {shown.map((r) => (
+                <li key={r.id}>
+                  <button className="recording-row" onClick={() => onOpen(r.id)}>
+                    <span className="row-title">
+                      <span className="number">#{r.number}</span> {r.title}
+                    </span>
+                    <span className="row-meta">
+                      <StatusChip item={r} previewing={previewing === r.id} />
+                      {r.duration != null && <span>{formatTime(r.duration)}</span>}
+                      <span>{new Date(r.createdAt).toLocaleDateString("ko-KR", { month: "short", day: "numeric" })}</span>
+                      {!r.audioAvailable && r.status !== "recording" && <span className="muted">클라우드</span>}
+                    </span>
+                    {!!r.tags?.length && <span className="row-tags">{r.tags.join(", ")}</span>}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </main>
+      </PullToRefresh>
 
       <div className="record-dock">
         <button className="record-button" onClick={onRecord} aria-label="녹음 시작">

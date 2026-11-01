@@ -96,6 +96,19 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: .github/scripts/upload-release.sh latest.json
 
+  # 모든 파일이 붙으면 초안을 공개한다. 그 전까지 releases/latest는 이전 버전을 가리켜 업데이트 확인과 AltStore가 깨지지 않는다.
+  # 하나라도 실패하면 초안으로 남는다(Releases 화면에서 확인하고 고쳐서 다시 태그를 올린다)
+  publish:
+    needs: [desktop, updater, ios]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Release 공개
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest
+
   # iPhone 앱. AltStore가 설치할 때 본인 Apple ID로 서명하므로 서명 없이 빌드해 .ipa로 묶는다(docs/mobile.md)
   ios:
     runs-on: macos-latest

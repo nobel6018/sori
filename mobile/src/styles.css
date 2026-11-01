@@ -779,3 +779,48 @@ button.note-time {
 .update-banner button {
   min-height: 44px;
 }
+
+/* 당겨서 새로고침(PullToRefresh.tsx). 스피너는 iOS 활동 표시기처럼 살 8개 */
+.ptr {
+  position: relative;
+}
+.ptr-indicator {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  pointer-events: none;
+}
+.ptr-content {
+  transition: transform 0.35s cubic-bezier(0.2, 0.9, 0.3, 1);
+  will-change: transform;
+}
+.ptr-spinner {
+  position: relative;
+  width: 24px;
+  height: 24px;
+}
+.ptr-spinner i {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 3px;
+  height: 7px;
+  margin-left: -1.5px;
+  border-radius: 2px;
+  background: var(--muted);
+  transform-origin: 50% 12px;
+  transition: opacity 0.1s;
+}
+.ptr-spinner.spinning {
+  animation: ptr-spin 0.8s steps(8) infinite;
+}
+@keyframes ptr-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

@@ -194,6 +194,12 @@ fn remote(app: &AppHandle) -> Result<Option<(FolderRemote, String)>> {
     }
     let name = root.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
     set_status(app, |s| s.folder = Some(name));
+    // Mac이 고친 meta.json 등이 아직 이 iPhone에 내려오지 않았으면 먼저 받는다. 안 하면 엔진이 예전 파일을 보고 바뀐 게 없다고 본다
+    match app.sori_native().refresh_icloud(&root.to_string_lossy()) {
+        Ok(0) => {}
+        Ok(n) => eprintln!("sori: iCloud에서 새로 바뀐 파일 {n}개를 받았습니다"),
+        Err(e) => eprintln!("sori: iCloud 파일을 새로 받지 못했습니다: {e}"),
+    }
     let native = app.clone();
     let remote = FolderRemote::new(root.clone()).with_materialize(Box::new(move |p: &Path| {
         native.sori_native().materialize(&p.to_string_lossy()).map_err(|e| eyre!("{e}"))

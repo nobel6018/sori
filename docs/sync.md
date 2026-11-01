@@ -87,3 +87,10 @@ Mac 데스크톱과 iOS 앱이 녹음, 전사, 요약, 메모를 주고받는 �
 | 동기화 엔진, iCloud Drive(폴더), 데스크톱 연결 | 0.5.0 |
 | OneDrive(폴더) | 0.5.1에 넣었다가 0.5.2에서 뺌 |
 | iOS 앱 (Tauri 2, AltStore로 직접 설치, docs/mobile.md) | 0.6.0 |
+
+## iPhone iCloud가 바뀐 파일을 늦게 받는 문제
+
+iOS iCloud Drive는 한 번 내려받은 파일이 클라우드에서 바뀌어도 바로 받지 않고 예전 내용을 둡니다(`ubiquitousItemDownloadingStatus`가 `.current`가 아닌 `.downloaded`). 동기화 엔진은 폴더의 파일 수정 시각과 크기로 클라우드 쪽 변경을 알아채므로(`crates/sori-sync/src/folder.rs` `version_of`), 내려오기 전에는 바뀐 게 없다고 봅니다. 0.9.5까지 Mac에서 고친 태그가 iPhone에 한 시간 넘게 반영되지 않았습니다(Mac은 00:54에 올렸고 iPhone은 계속 예전 태그).
+
+0.9.6부터 iPhone은 동기화할 때마다 먼저 폴더를 훑어 최신이 아닌 작은 파일(meta.json, 전사, 요약, 메모)을 받아 옵니다(`SoriNativePlugin.swift` `refreshIcloud`, `mobile/src-tauri/src/sync.rs` `remote`). 오디오는 크므로 건드리지 않고 필요할 때 받습니다. 최대 15초 기다립니다.
+

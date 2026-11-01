@@ -276,6 +276,41 @@ class SoriNativePlugin: Plugin, UIDocumentPickerDelegate {
     invoke.resolve()
   }
 
+  /// 동기화 폴더에서 다른 기기가 고친 뒤 아직 이 iPhone에 내려오지 않은 작은 파일(meta.json 등)을 받아 온다.
+  /// iOS iCloud는 한 번 받은 파일이 클라우드에서 바뀌어도 바로 내려받지 않고 예전 내용을 그대로 둔다(상태 .downloaded).
+  /// 동기화 엔진은 파일 수정 시각과 크기로 바뀐 것을 알아채므로, 내려오기 전에는 Mac이 고친 태그를 몰랐다(0.9.5까지).
+  /// 오디오는 크므로 건드리지 않는다(필요할 때 materialize). 최대 15초 기다리고, 받은 개수를 돌려준다. @see docs/sync.md
+  @objc public func refreshIcloud(_ invoke: Invoke) throws {
+    let args = try invoke.parseArgs(PathArgs.self)
+    DispatchQueue.global(qos: .userInitiated).async {
+      let root = URL(fileURLWithPath: args.path)
+      let keys: [URLResourceKey] = [.isRegularFileKey, .ubiquitousItemDownloadingStatusKey]
+      var stale: [URL] = []
+      if let walker = FileManager.default.enumerator(at: root, includingPropertiesForKeys: keys) {
+        for case let url as URL in walker {
+          let name = url.lastPathComponent
+          if name.hasPrefix("audio.") || name.hasSuffix(".tmp") { continue }
+          guard let values = try? url.resourceValues(forKeys: Set(keys)), values.isRegularFile == true else { continue }
+          if let status = values.ubiquitousItemDownloadingStatus, status != .current {
+            stale.append(url)
+          }
+        }
+      }
+      let group = DispatchGroup()
+      for url in stale {
+        try? FileManager.default.startDownloadingUbiquitousItem(at: url)
+        group.enter()
+        DispatchQueue.global(qos: .userInitiated).async {
+          var error: NSError?
+          NSFileCoordinator(filePresenter: nil).coordinate(readingItemAt: url, options: [], error: &error) { _ in }
+          group.leave()
+        }
+      }
+      _ = group.wait(timeout: .now() + 15)
+      invoke.resolve(["count": stale.count])
+    }
+  }
+
   /// 받지 않은 iCloud 파일을 받아 온다. 읽기 조정(coordinate reading)은 파일이 기기에 내려올 때까지 기다린다
   @objc public func materialize(_ invoke: Invoke) throws {
     let args = try invoke.parseArgs(PathArgs.self)
@@ -294,6 +329,14 @@ class SoriNativePlugin: Plugin, UIDocumentPickerDelegate {
 }
 
 extension SoriNativePlugin {
+  /// 당겨서 새로고침이 기준선을 넘을 때 iOS 목록과 같은 가벼운 진동. 웹뷰(navigator.vibrate)는 iOS에서 동작하지 않는다
+  @objc public func haptic(_ invoke: Invoke) {
+    onMain {
+      UIImpactFeedbackGenerator(style: .light).impactOccurred()
+      invoke.resolve()
+    }
+  }
+
   /// 지도 앱이나 Safari로 연다. 화면(WebView) 안에서 열면 앱 화면이 그 페이지로 바뀐다
   @objc public func openUrl(_ invoke: Invoke) throws {
     let args = try invoke.parseArgs(UrlArgs.self)

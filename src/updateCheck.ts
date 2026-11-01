@@ -18,17 +18,23 @@ export interface UpdateInfo {
  * Release는 플랫폼마다 빌드가 끝나는 대로 파일이 붙으므로, 이 플랫폼 파일이 아직 없으면 알리지 않는다
  */
 export async function checkForUpdate(asset: RegExp): Promise<UpdateInfo | null> {
+  const r = await checkForUpdateDetailed(asset);
+  return typeof r === "object" ? r : null;
+}
+
+/** 새 버전이 있으면 그 정보, 없으면 "none", GitHub에 묻지 못했으면 "error" */
+export async function checkForUpdateDetailed(asset: RegExp): Promise<UpdateInfo | "none" | "error"> {
   try {
     const [current, res] = await Promise.all([getVersion(), fetch(LATEST_RELEASE, { headers: { Accept: "application/vnd.github+json" } })]);
-    if (!res.ok) return null;
+    if (!res.ok) return "error";
     const release: { tag_name: string; html_url: string; assets: { name: string }[] } = await res.json();
     const latest = release.tag_name.replace(/^v/, "");
-    if (!isNewer(latest, current)) return null;
-    if (!release.assets.some((a) => asset.test(a.name))) return null;
+    if (!isNewer(latest, current)) return "none";
+    if (!release.assets.some((a) => asset.test(a.name))) return "none";
     return { current, latest, url: release.html_url };
   } catch (e) {
     console.warn(`업데이트 확인 실패: ${e}`);
-    return null;
+    return "error";
   }
 }
 

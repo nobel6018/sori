@@ -53,6 +53,7 @@ export const api = {
   renameRecording: (id: string, title: string) => invoke<Recording>("rename_recording", { id, title }),
   setTags: (id: string, tags: string[]) => invoke<Recording>("set_tags", { id, tags }),
   openUrl: (url: string) => invoke<void>("open_url", { url }),
+  haptic: () => invoke<void>("haptic").catch(() => {}),
   previewTranscribe: (id: string) => invoke<boolean>("preview_transcribe", { id }),
   getPreferences: () => invoke<Preferences>("get_preferences"),
   setPreferences: (preferences: Preferences) => invoke<void>("set_preferences", { preferences }),

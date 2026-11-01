@@ -145,6 +145,15 @@ mod native {
             self.call::<Empty>("materialize", serde_json::json!({ "path": path })).map(|_| ())
         }
 
+        /// 다른 기기가 고친 뒤 아직 내려오지 않은 작은 파일을 받아 온다. 받은 개수
+        pub fn refresh_icloud(&self, path: &str) -> crate::Result<u32> {
+            #[derive(serde::Deserialize)]
+            struct Count {
+                count: u32,
+            }
+            self.call::<Count>("refreshIcloud", serde_json::json!({ "path": path })).map(|c| c.count)
+        }
+
         /// 지금 위치와 주소. 권한이 없거나 못 받으면 found가 false다(최대 약 18초)
         pub fn current_location(&self) -> crate::Result<Fix> {
             self.call("currentLocation", ())
@@ -153,6 +162,11 @@ mod native {
         /// 기기 안에서 미리 전사한다(iOS 26 SpeechAnalyzer). 몇 분 걸릴 수 있다
         pub fn transcribe_preview(&self, path: &str) -> crate::Result<Preview> {
             self.call("transcribePreview", serde_json::json!({ "path": path }))
+        }
+
+        /// 가벼운 진동(당겨서 새로고침)
+        pub fn haptic(&self) -> crate::Result<()> {
+            self.call::<Empty>("haptic", serde_json::json!({})).map(|_| ())
         }
 
         /// 지도 앱이나 Safari로 링크를 연다
@@ -191,8 +205,14 @@ mod native {
         pub fn materialize(&self, _: &str) -> crate::Result<()> {
             Ok(())
         }
+        pub fn refresh_icloud(&self, _: &str) -> crate::Result<u32> {
+            Ok(0)
+        }
         pub fn open_url(&self, _: &str) -> crate::Result<()> {
             Err(Error::Unsupported)
+        }
+        pub fn haptic(&self) -> crate::Result<()> {
+            Ok(())
         }
         pub fn current_location(&self) -> crate::Result<Fix> {
             Ok(Fix::default())
