@@ -3,24 +3,18 @@ name: release
 # v로 시작하는 태그를 올리면 macOS, Windows 설치 파일과 iPhone 앱(.ipa)을 만들어 GitHub Release에 붙인다.
 # 플랫폼마다 빌드가 끝나는 대로 바로 올린다. 처음 끝난 작업이 Release를 만든다.
 #
-# main에서 빌드만 돌려 릴리스 빌드 캐시를 데워 둔다. GitHub 캐시는 브랜치(기본 브랜치 포함) 단위라
-# 태그에서 만든 캐시는 다음 태그가 못 읽는다. main에서 만든 캐시는 모든 태그가 읽는다.
-# 이게 없으면 태그마다 whisper.cpp와 sherpa-onnx를 릴리스 프로필로 처음부터 빌드해 Windows가 12분 걸렸다.
-# 캐시에 드는 것은 의존성뿐이라, main push는 의존성이나 이 파일이 바뀔 때만 돈다(평소 커밋은 build.yml만).
-# GitHub 캐시는 7일 쓰지 않으면 지워지므로 일주일에 한 번 정해진 시간에도 돈다. paths는 태그 push에는 적용되지 않는다
+# 릴리스 빌드 캐시는 일주일에 한 번 main에서 데워 둔다. GitHub 캐시는 브랜치(기본 브랜치 포함) 단위라
+# 태그에서 만든 캐시는 다음 태그가 못 읽고, main에서 만든 캐시는 모든 태그가 읽는다. 캐시가 없으면
+# whisper.cpp와 sherpa-onnx를 처음부터 빌드해 Windows가 12분 걸렸다.
+# rust-cache는 Cargo.lock이 달라도 같은 prefix의 가장 최근 캐시를 이어 쓰므로, 버전만 올린 태그도 main 캐시로 빠르다.
+# main push마다 데우던 것은 뺐다(버전을 올리면 Cargo.toml, Cargo.lock이 바뀌어 매번 돌았고 태그 빌드와 겹쳤다).
+# 의존성을 크게 바꾼 직후에는 Actions에서 release를 손으로 한 번 돌리면(workflow_dispatch) 다음 태그가 빠르다
 on:
   push:
     tags: ["v*"]
-    branches: [main]
-    paths:
-      - "**/Cargo.lock"
-      - "**/Cargo.toml"
-      - "pnpm-lock.yaml"
-      - ".github/workflows/release.yml"
   schedule:
     # 월요일 03:00 KST
     - cron: "0 18 * * 0"
-  # 태그 없이 설치 파일 빌드만 시험할 때. 게시는 하지 않는다
   workflow_dispatch:
 
 permissions:
