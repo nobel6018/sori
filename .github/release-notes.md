@@ -3,7 +3,7 @@
 ## 설치
 - macOS (Apple Silicon): `.dmg`
 - Windows: `.msi` 또는 `-setup.exe`
-- iPhone: `sori-ios.ipa`를 AltStore로 설치합니다([설치 방법](https://github.com/nobel6018/sori/blob/main/docs/mobile.md))
+- iPhone: AltStore에 소스 `https://github.com/nobel6018/sori/releases/latest/download/apps.json`을 추가해 설치합니다([설치 방법](https://github.com/nobel6018/sori/blob/main/docs/mobile.md))
 
 코드 서명을 하지 않은 빌드입니다.
 - macOS: dmg에서 `sori.app`을 응용 프로그램 폴더로 옮긴 뒤 터미널에서 아래 명령을 한 번 실행합니다. 브라우저로 받은 파일에 붙는 격리 표시를 지워, "손상되었기 때문에 열 수 없습니다" 경고 없이 열립니다

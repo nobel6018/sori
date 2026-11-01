@@ -9,11 +9,24 @@ App Store에 올리지 않고 AltStore로 본인 iPhone에만 설치합니다. �
 
 1. Mac에 [AltServer](https://altstore.io)를 설치하고, iPhone을 케이블로 연결해 AltStore를 설치합니다
 2. iPhone 설정 > 일반 > VPN 및 기기 관리에서 본인 Apple ID 개발자를 신뢰합니다. iOS 16 이상은 설정 > 개인정보 보호 및 보안 > 개발자 모드도 켭니다
-3. [Releases](https://github.com/nobel6018/sori/releases/latest)에서 `sori-ios.ipa`를 iPhone으로 받습니다(Safari로 받으면 파일 앱의 다운로드 폴더에 들어갑니다)
-4. AltStore > My Apps > 왼쪽 위 `+` > `sori-ios.ipa`를 고릅니다
-5. sori를 열고 설정 > iCloud Drive를 눌러 `iCloud Drive/sori` 폴더를 고릅니다. Mac의 sori 설정에서 동기화를 iCloud Drive로 켜 두어야 이 폴더가 있습니다
+3. 케이블을 연결한 채로 Finder 사이드바에서 iPhone을 고르고, 일반 탭의 "Wi-Fi에 연결되어 있을 때 이 iPhone 보기"를 켭니다. 이후 설치, 업데이트, 재서명은 같은 Wi-Fi에서 케이블 없이 됩니다
+4. AltStore > Sources > `+`에 아래 주소를 넣어 sori 소스를 추가합니다
 
-iOS 18 이상이 필요합니다. 녹음 중 화면(Live Activity)을 그리는 위젯 확장이 앱 안에 함께 들어 있어, 무료 Apple ID의 App ID(7일에 10개)를 2개 씁니다.
+   ```
+   https://github.com/nobel6018/sori/releases/latest/download/apps.json
+   ```
+5. Sources > sori에서 sori를 설치합니다
+6. sori를 열고 설정 > iCloud Drive를 눌러 `iCloud Drive/sori` 폴더를 고릅니다. Mac의 sori 설정에서 동기화를 iCloud Drive로 켜 두어야 이 폴더가 있습니다
+
+iOS 18 이상이 필요합니다. 녹음 중 화면(Live Activity)을 그리는 위젯 확장이 앱 안에 함께 들어 있어, 무료 Apple ID의 App ID(7일에 10개)를 2개 씁니다. 같은 bundle ID로 하는 업데이트는 App ID를 새로 쓰지 않습니다.
+
+### 업데이트
+
+새 버전 태그를 올리면 release.yml이 `sori-ios.ipa`와 함께 AltStore 소스 `apps.json`을 Release에 붙입니다(`.github/scripts/altstore-source.sh`). 위 소스 주소는 늘 최신 Release로 이어지므로, AltStore를 열면 My Apps에 sori의 Update 버튼이 뜹니다. 버튼을 누르면 Mac의 AltServer가 Wi-Fi로 서명해 설치합니다. iOS가 사이드로딩 앱의 무인 설치를 막으므로 이 버튼 한 번은 남습니다.
+
+AltStore는 소스에 적힌 권한이 받은 ipa와 다르면 설치를 거부합니다. 그래서 소스의 버전과 권한(`…UsageDescription` 키)은 손으로 적지 않고, 스크립트가 빌드된 앱과 앱 확장의 Info.plist에서 읽습니다. 서명 없이 빌드해 바이너리에 entitlements가 없으므로 entitlements는 빈 배열입니다. 앱에 entitlements를 넣게 되면 스크립트도 함께 고쳐야 합니다.
+
+소스를 쓰지 않을 때는 [Releases](https://github.com/nobel6018/sori/releases/latest)에서 `sori-ios.ipa`를 iPhone으로 받아 AltStore > My Apps > 왼쪽 위 `+`로 설치합니다.
 
 무료 Apple ID 서명은 7일 뒤 만료됩니다. Mac에서 AltServer가 켜져 있고 iPhone과 같은 Wi-Fi에 있으면 AltStore가 자동으로 다시 서명합니다.
 만료돼도 iCloud에 올라간 녹음은 남지만, 올리기 전에 지운 앱 안의 녹음은 사라집니다. 앱은 녹음을 멈추면 바로 올립니다.
@@ -106,7 +119,8 @@ iOS 18 이상이 필요합니다. 녹음 중 화면(Live Activity)을 그리는 
 | `mobile/src-tauri/Info.ios.plist` | 마이크 권한 설명, 백그라운드 오디오, Live Activity 사용 |
 | `design/logo-ios.svg`, `design/logo-ios-1024.png` | 앱 아이콘. iOS가 모서리를 깎으므로 데스크톱 로고의 여백, 둥근 모서리, 그림자를 뺐다. `pnpm tauri icon ../design/logo-ios-1024.png`로 만들고 알파 채널을 없앤다(투명한 곳은 검게 보인다) |
 | `mobile/src-tauri/gen/apple/project.yml` | Xcode 프로젝트. 서명 없이 빌드하도록 `CODE_SIGNING_ALLOWED: NO`. 위젯 확장 타깃 `sori-widgets`와 버전 맞추기 스크립트 |
-| `.github/workflows/release.yml` `ios` | 태그를 올리면 `sori-ios.ipa`를 만들어 Release에 붙인다 |
+| `.github/workflows/release.yml` `ios` | 태그를 올리면 `sori-ios.ipa`와 AltStore 소스 `apps.json`을 만들어 Release에 붙인다 |
+| `.github/scripts/altstore-source.sh` | 빌드된 앱의 Info.plist에서 버전과 권한을 읽어 `apps.json`을 만든다 |
 
 ## 빌드
 

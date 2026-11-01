@@ -95,9 +95,16 @@ jobs:
           mkdir -p ipa/Payload && cp -R "$app" ipa/Payload/
           (cd ipa && zip -qry ../sori-ios.ipa Payload)
           ls -la sori-ios.ipa
+      # AltStore 소스. iPhone AltStore가 releases/latest/download/apps.json을 읽어 새 버전을 알린다(docs/mobile.md)
+      - name: AltStore 소스 만들기
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          .github/scripts/altstore-source.sh ipa/Payload/sori.app sori-ios.ipa "$TAG" > apps.json
+          cat apps.json
       - name: Release에 올리기
         if: env.IS_TAG == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ github.ref_name }}
-        run: .github/scripts/upload-release.sh sori-ios.ipa
+        run: .github/scripts/upload-release.sh sori-ios.ipa apps.json
