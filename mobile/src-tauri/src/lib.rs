@@ -220,10 +220,11 @@ async fn preview_transcribe(app: AppHandle, id: String) -> CmdResult<bool> {
     .map_err(err)?
 }
 
-/// 당겨서 새로고침의 진동. 실패해도 화면은 그대로 둔다
+/// 당겨서 새로고침의 진동. 실패해도 화면은 그대로 둔다.
+/// 동기 명령으로 두면 메인 스레드가 Swift 답을 기다리고, Swift는 메인 스레드에서 진동하려고 기다려 앱이 멈춘다(0.9.6)
 #[tauri::command]
-fn haptic(app: AppHandle) {
-    let _ = app.sori_native().haptic();
+async fn haptic(app: AppHandle) {
+    let _ = tauri::async_runtime::spawn_blocking(move || app.sori_native().haptic()).await;
 }
 
 /// 지도 같은 바깥 링크를 연다. 화면(WebView) 안에서 열면 앱 화면이 그 페이지로 바뀐다
@@ -488,4 +489,28 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running sori");
+}
+
+#[cfg(test)]
+mod tests {
+    /// 동기 명령은 메인 스레드에서 돈다. 거기서 Swift를 부르면 Swift가 메인 스레드를 기다려 앱이 멈춘다(0.6.0, 0.9.6).
+    /// 명령 본문에 sori_native()가 있으면 async여야 한다
+    #[test]
+    fn 네이티브를_부르는_명령은_모두_async다() {
+        let src = include_str!("lib.rs");
+        // 이 테스트 자신은 빼고 본다
+        let src = &src[..src.find("#[cfg(test)]").unwrap()];
+        let mut offenders = Vec::new();
+        let mut rest = src;
+        while let Some(at) = rest.find("#[tauri::command]") {
+            rest = &rest[at + "#[tauri::command]".len()..];
+            let sig_end = rest.find('{').unwrap_or(rest.len());
+            let sig = rest[..sig_end].trim();
+            let body_end = rest.find("\n}\n").unwrap_or(rest.len());
+            if !sig.starts_with("async fn") && rest[..body_end].contains("sori_native()") {
+                offenders.push(sig.lines().next().unwrap_or("").to_string());
+            }
+        }
+        assert!(offenders.is_empty(), "동기 명령에서 Swift를 부릅니다: {offenders:?}");
+    }
 }
