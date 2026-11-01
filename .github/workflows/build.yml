@@ -19,11 +19,11 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 40
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
-          node-version: lts/*
+          node-version: 26
           cache: pnpm
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -51,7 +51,7 @@ jobs:
         working-directory: src-tauri
         run: cargo build --locked --bins --examples
       # 엔진 전체(디코딩, 화자 분리, 전사)를 실제 OS에서 돌려 본다. 작은 tiny 모델과 40초 3개 언어 녹음을 쓴다
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: smoke-models
           key: smoke-models-v1
@@ -79,7 +79,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: macOS 스크립트 (기본 폴더)
         if: runner.os == 'macOS'
         run: |
@@ -125,10 +125,10 @@ jobs:
       run:
         working-directory: raycast
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 26
           cache: npm
           cache-dependency-path: raycast/package-lock.json
       - run: npm ci
@@ -142,10 +142,10 @@ jobs:
       run:
         working-directory: mcp
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 26
           cache: npm
           cache-dependency-path: mcp/package-lock.json
       - run: npm ci
