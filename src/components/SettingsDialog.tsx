@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
-import { api, formatBytes, GlobalShortcuts, InputDevice, installCommand, LANGUAGES, ModelCatalog, Settings, VoiceInfo } from "../api";
+import { api, formatBytes, Recording, GlobalShortcuts, InputDevice, installCommand, LANGUAGES, ModelCatalog, Settings, VoiceInfo } from "../api";
 import { acceleratorFromEvent, acceleratorLabel } from "../shortcuts";
 import { useModelInstall } from "../useModelInstall";
 import { InstallProgress } from "./InstallProgress";
@@ -481,25 +481,32 @@ function VoiceList({ enabled, onToggle }: { enabled: boolean; onToggle: (on: boo
   );
 }
 
-/** 아직 AI로 정리하지 않은 예전 녹음을 하나씩 정리한다. 한꺼번에 돌리면 구독 사용량 한도에 금방 걸린다
+/** 아직 AI로 정리하지 않은 예전 녹음을 하나씩 정리한다. 한꺼번에 돌리면 구독 사용량 한도에 금방 걸린다.
+ * 자동 정리를 켜기 전에 받아 적은 녹음이나, 정리하다 실패한 녹음이 대상이다
  * @see docs/organize.md */
 function BulkTag() {
-  const [state, setState] = useState<{ done: number; total: number; failed: number } | null>(null);
+  const [targets, setTargets] = useState<Recording[] | null>(null);
+  const [state, setState] = useState<{ done: number; total: number } | null>(null);
   const [running, setRunning] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
+  const load = () =>
+    api
+      .listRecordings()
+      .then((all) => setTargets(all.filter((r) => r.status === "done" && !r.autoTaggedAt)))
+      .catch(() => setTargets([]));
+  useEffect(() => {
+    load();
+  }, []);
+
   const run = async () => {
-    const targets = (await api.listRecordings()).filter((r) => r.status === "done" && !r.autoTaggedAt);
-    if (targets.length === 0) {
-      setMessage("정리할 녹음이 없습니다. 받아 적기가 끝났고 아직 AI로 정리하지 않은 녹음만 정리합니다");
-      return;
-    }
-    if (!confirm(`아직 정리하지 않은 녹음 ${targets.length}개를 AI로 정리할까요? 하나씩 차례로 하고, 구독 사용량을 씁니다. 손으로 고친 제목과 태그는 그대로 둡니다.`)) return;
+    if (!targets || targets.length === 0) return;
+    if (!confirm(`녹음 ${targets.length}개를 AI로 정리할까요? 하나씩 차례로 하고, 구독 사용량을 씁니다. 손으로 고친 제목과 태그는 그대로 둡니다.`)) return;
     setRunning(true);
     setMessage(null);
     let failed = 0;
     for (let i = 0; i < targets.length; i++) {
-      setState({ done: i, total: targets.length, failed });
+      setState({ done: i, total: targets.length });
       try {
         await api.organize(targets[i].id);
       } catch (e) {
@@ -507,17 +514,26 @@ function BulkTag() {
         console.warn(`정리 실패 ${targets[i].title}: ${e}`);
       }
     }
-    setState({ done: targets.length, total: targets.length, failed });
+    setState(null);
     setRunning(false);
     setMessage(failed ? `${targets.length - failed}개를 정리했고 ${failed}개는 실패했습니다` : `${targets.length}개를 정리했습니다`);
+    load();
   };
 
+  const count = targets?.length ?? 0;
   return (
-    <div className="setting-row bulk-tag">
-      <button onClick={run} disabled={running}>
-        {running && state ? `정리 중 ${state.done}/${state.total}` : "아직 정리하지 않은 녹음 AI로 정리"}
-      </button>
-      {message && <span className="muted">{message}</span>}
+    <div className="setting-row">
+      <div className="setting-label">
+        <span>예전 녹음 AI로 정리</span>
+        <button onClick={run} disabled={running || count === 0}>
+          {running && state ? `정리 중 ${state.done}/${state.total}` : count === 0 ? "정리할 녹음 없음" : `${count}개 정리하기`}
+        </button>
+      </div>
+      <p className="muted small">
+        위 자동 정리는 새로 받아 적는 녹음에만 돕니다. 자동 정리를 켜기 전에 받아 적었거나 정리하다 실패해서 아직 AI 제목, 태그, 할 일이 없는 녹음을
+        한 번에 정리합니다.
+      </p>
+      {message && <p className="muted small">{message}</p>}
     </div>
   );
 }
