@@ -106,10 +106,20 @@ export function useAppUpdate() {
       }
       setState({ kind: "installing", ...base });
       await u.install();
-      await relaunch();
     } catch (e) {
+      // plugin-updater 2.14.1은 설치에 실패하면 받은 바이트를 남겨 두지만(Rust install이 성공한 뒤에만 닫는다),
+      // 버전이 바뀌어도 재시도가 빈 상태로 install()을 부르지 않도록 다음에 누를 때 다시 받는다
+      downloaded.current = false;
       setError(`업데이트하지 못했습니다: ${e}`);
       setState({ kind: "ready", version: u.version, current: u.currentVersion });
+      return;
+    }
+    // 설치가 끝나면 받은 바이트는 닫힌다. 다시 켜기만 실패했으면 다시 설치하지 않고 손으로 켜 달라고 한다
+    downloaded.current = false;
+    try {
+      await relaunch();
+    } catch (e) {
+      setError(`설치는 끝났습니다. sori를 끄고 다시 켜 주세요(${e})`);
     }
   }, [state.kind]);
 
