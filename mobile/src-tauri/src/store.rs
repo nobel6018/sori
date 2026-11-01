@@ -71,14 +71,11 @@ impl Store {
         write_json(&dir.join("meta.json"), &meta)
     }
 
-    /// 이 기기에서 새로 녹음할 항목. 번호는 이 기기에서 쓴 가장 큰 번호 + 1이고, 동기화할 때 겹치면 엔진이 고친다
+    /// 이 기기에서 새로 녹음할 항목. 번호는 남은 녹음의 가장 큰 번호 + 1이고(맨 뒤를 지우면 이어 쓴다),
+    /// 동기화할 때 겹치면 엔진이 고친다. 데스크톱 store.rs next_number와 같은 규칙. @see docs/sync.md
     pub fn create_recording(&self, title: &str) -> Result<Value> {
         let _guard = self.create_lock.lock().unwrap();
-        let counter = self.data_file("last-number");
-        let saved: u64 = fs::read_to_string(&counter).ok().and_then(|s| s.trim().parse().ok()).unwrap_or(0);
-        let listed = self.list()?.iter().filter_map(|m| m["number"].as_u64()).max().unwrap_or(0);
-        let number = saved.max(listed) + 1;
-        fs::write(&counter, number.to_string())?;
+        let number = self.list()?.iter().filter_map(|m| m["number"].as_u64()).max().unwrap_or(0) + 1;
 
         let id = uuid::Uuid::new_v4().to_string();
         let now = Utc::now().to_rfc3339();
@@ -179,13 +176,26 @@ mod tests {
     }
 
     #[test]
-    fn 지운_녹음의_번호는_다시_쓰지_않는다() {
+    fn 맨_뒤_녹음을_지우면_그_번호부터_이어_쓴다() {
+        let s = store();
+        s.create_recording("a").unwrap();
+        let b = s.create_recording("b").unwrap();
+        s.delete(b["id"].as_str().unwrap()).unwrap();
+
+        let c = s.create_recording("c").unwrap();
+
+        assert_eq!(c["number"].as_u64(), Some(2));
+    }
+
+    #[test]
+    fn 중간_녹음을_지우면_빈칸으로_두고_남은_번호는_그대로다() {
         let s = store();
         let a = s.create_recording("a").unwrap();
+        s.create_recording("b").unwrap();
         s.delete(a["id"].as_str().unwrap()).unwrap();
 
-        let b = s.create_recording("b").unwrap();
+        let c = s.create_recording("c").unwrap();
 
-        assert_eq!(b["number"].as_u64(), Some(2));
+        assert_eq!(c["number"].as_u64(), Some(3));
     }
 }

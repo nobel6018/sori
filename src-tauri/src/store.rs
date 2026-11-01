@@ -24,7 +24,8 @@ pub enum Status {
 #[serde(rename_all = "camelCase")]
 pub struct Recording {
     pub id: String,
-    /// 사람이 부르기 쉬운 번호(#12). 만든 순서대로 1부터 붙고 지워도 다시 쓰지 않는다. 0.4.3 이하 녹음은 시작할 때 채운다
+    /// 사람이 부르기 쉬운 번호(#12). 남은 녹음의 가장 큰 번호 + 1을 붙인다. 맨 뒤 번호를 지우면 그 번호부터 다시 쓰고,
+    /// 중간을 지우면 빈칸으로 둔다(남은 녹음의 번호는 바뀌지 않는다). 0.4.3 이하 녹음은 시작할 때 채운다. @see docs/sync.md
     #[serde(default)]
     pub number: u32,
     pub title: String,
@@ -296,14 +297,10 @@ impl Store {
         write_json(&self.settings_path, settings)
     }
 
-    /// 지금까지 쓴 가장 큰 번호 + 1. 지운 녹음의 번호를 다시 쓰지 않도록 기록 파일에도 남긴다
+    /// 남은 녹음의 가장 큰 번호 + 1. 0.9.1까지는 지운 번호를 다시 쓰지 않으려고 last-number 파일에 기록했는데,
+    /// 테스트 녹음을 지우면 번호가 크게 건너뛰어(#5 다음 #117) 0.9.2부터 쓰지 않는다
     fn next_number(&self) -> Result<u32> {
-        let counter = self.settings_path.with_file_name("last-number");
-        let saved: u32 = fs::read_to_string(&counter).ok().and_then(|s| s.trim().parse().ok()).unwrap_or(0);
-        let listed = self.list()?.iter().map(|r| r.number).max().unwrap_or(0);
-        let next = saved.max(listed) + 1;
-        fs::write(&counter, next.to_string())?;
-        Ok(next)
+        Ok(self.list()?.iter().map(|r| r.number).max().unwrap_or(0) + 1)
     }
 
     /// 번호가 없는 녹음(0.4.3 이하)에 만든 순서대로 번호를 붙인다
@@ -320,7 +317,6 @@ impl Store {
             let n = next;
             self.update(&r.id, |m| m.number = n)?;
         }
-        fs::write(self.settings_path.with_file_name("last-number"), next.to_string())?;
         Ok(())
     }
 
@@ -585,7 +581,7 @@ mod number_tests {
     }
 
     #[test]
-    fn 번호는_순서대로_붙고_지운_번호는_다시_쓰지_않는다() {
+    fn 맨_뒤_번호를_지우면_그_번호부터_이어_쓴다() {
         let (store, dir) = store();
 
         let a = store.create_for_recording("a".into(), "s".into(), vec![]).unwrap();
@@ -593,10 +589,23 @@ mod number_tests {
         store.delete(&b.id).unwrap();
         let c = store.create_for_recording("c".into(), "s".into(), vec![]).unwrap();
 
-        assert_eq!((a.number, b.number, c.number), (1, 2, 3));
-        assert_eq!(store.resolve("#3").unwrap().id, c.id);
+        assert_eq!((a.number, b.number, c.number), (1, 2, 2));
+        assert_eq!(store.resolve("#2").unwrap().id, c.id);
         assert_eq!(store.resolve("1").unwrap().id, a.id);
-        assert!(store.resolve("#2").is_err());
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn 중간_번호를_지우면_빈칸으로_두고_남은_번호는_그대로다() {
+        let (store, dir) = store();
+
+        let a = store.create_for_recording("a".into(), "s".into(), vec![]).unwrap();
+        let b = store.create_for_recording("b".into(), "s".into(), vec![]).unwrap();
+        store.delete(&a.id).unwrap();
+        let c = store.create_for_recording("c".into(), "s".into(), vec![]).unwrap();
+
+        assert_eq!((b.number, c.number), (2, 3));
+        assert!(store.resolve("#1").is_err());
         fs::remove_dir_all(dir).unwrap();
     }
 
