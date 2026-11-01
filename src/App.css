@@ -1526,3 +1526,25 @@ kbd {
   display: flex;
   gap: 8px;
 }
+
+/* 예전 녹음 AI 정리 진행 상황(BulkProgress.tsx) */
+.bulk-progress {
+  margin: 6px 0;
+}
+.bulk-bar {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border);
+  overflow: hidden;
+}
+.bulk-bar > div {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.3s;
+}
+.bulk-badge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+}

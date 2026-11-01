@@ -1,3 +1,4 @@
+import { BulkBadge } from "./BulkProgress";
 import { ReactNode, useEffect, useMemo, useState } from "react";
 import { api, formatTime, ProgressEvent, Recording, Status, SyncStatus } from "../api";
 import { describe } from "./SyncSettings";
@@ -102,6 +103,7 @@ export function Sidebar({ recordings, selectedId, progress, onSelect, onImport, 
         <button className="ghost" onClick={onOpenSettings}>
           설정
         </button>
+        <BulkBadge />
         <SyncBadge />
       </footer>
     </aside>
