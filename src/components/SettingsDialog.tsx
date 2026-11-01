@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { getVersion } from "@tauri-apps/api/app";
 import { open } from "@tauri-apps/plugin-dialog";
 import { api, formatBytes, GlobalShortcuts, InputDevice, installCommand, LANGUAGES, ModelCatalog, Settings, VoiceInfo } from "../api";
 import { acceleratorFromEvent, acceleratorLabel } from "../shortcuts";
@@ -22,11 +23,13 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const install = useModelInstall();
   const [installing, setInstalling] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [version, setVersion] = useState<string | null>(null);
 
   useEffect(() => {
     api.getSettings().then(setSettings);
     refreshCatalog();
     api.listInputDevices().then(setDevices).catch(() => setDevices([]));
+    getVersion().then(setVersion).catch(() => setVersion(null));
   }, []);
 
   // 단축키를 받는 도중 창을 닫으면 받기 칸의 blur가 오지 않을 수 있다. 꺼 둔 전역 단축키를 다시 켠다
@@ -301,6 +304,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
         </div>
         {saveError && <div className="error">{saveError}</div>}
         <div className="modal-actions">
+          {version && <span className="muted app-version">sori {version}</span>}
           <button onClick={onClose}>닫기</button>
           <button className="primary" onClick={save} disabled={saving}>
             저장

@@ -483,6 +483,13 @@ button:focus-visible {
   gap: 8px;
 }
 
+/* 버전은 왼쪽 끝, 버튼은 오른쪽에 둔다 */
+.modal-actions .app-version {
+  margin-right: auto;
+  align-self: center;
+  font-size: 12px;
+}
+
 .recorder {
   padding: 0 14px 12px;
 }

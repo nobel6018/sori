@@ -1,13 +1,16 @@
 import { useEffect, useState } from "react";
+import { getVersion } from "@tauri-apps/api/app";
 import { api, Preferences, SyncStatus, syncLabel } from "./api";
 
 export function Settings({ sync, onBack }: { sync: SyncStatus | null; onBack: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [prefs, setPrefs] = useState<Preferences | null>(null);
+  const [version, setVersion] = useState<string | null>(null);
   const provider = sync?.provider ?? "local";
 
   useEffect(() => {
     api.getPreferences().then(setPrefs);
+    getVersion().then(setVersion).catch(() => setVersion(null));
   }, []);
 
   const savePrefs = (next: Preferences) => {
@@ -106,6 +109,8 @@ export function Settings({ sync, onBack }: { sync: SyncStatus | null; onBack: ()
             </label>
           )}
         </section>
+
+        {version && <p className="muted small app-version">sori {version}</p>}
       </main>
     </div>
   );
