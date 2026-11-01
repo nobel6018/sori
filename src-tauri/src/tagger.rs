@@ -10,7 +10,7 @@ use eyre::{eyre, Result};
 use serde::Deserialize;
 
 use crate::engine::Transcript;
-use crate::store::Recording;
+use crate::store::{CalendarEvent, Recording};
 use crate::summarize;
 
 /// AI가 붙이는 태그 수
@@ -96,7 +96,14 @@ pub fn is_default_title(title: &str) -> bool {
     chrono::NaiveDateTime::parse_from_str(rest, "%Y-%m-%d %H:%M").is_ok()
 }
 
-pub fn build_prompt(recording: &Recording, transcript: &Transcript, summary: Option<&str>, vocab: &[(String, usize)]) -> String {
+/// events: 녹음 시각과 겹치는 캘린더 일정 후보(calendar::events_for). AI가 대화와 맞는지 확인해 하나를 고르거나 고르지 않는다
+pub fn build_prompt(
+    recording: &Recording,
+    transcript: &Transcript,
+    summary: Option<&str>,
+    vocab: &[(String, usize)],
+    events: &[CalendarEvent],
+) -> String {
     let vocab_lines = if vocab.is_empty() {
         "아직 없음".to_string()
     } else {
@@ -108,21 +115,31 @@ pub fn build_prompt(recording: &Recording, transcript: &Transcript, summary: Opt
         .and_then(|l| l.place.as_deref())
         .map(|p| format!("녹음한 곳: {p}\n"))
         .unwrap_or_default();
-    let event = recording
-        .event
-        .as_ref()
-        .map(|e| {
-            let who = if e.attendees.is_empty() { String::new() } else { format!(", 참석자: {}", e.attendees.join(", ")) };
-            format!("겹치는 캘린더 일정: {}{who}\n", e.title)
-        })
-        .unwrap_or_default();
+    let event = if events.is_empty() {
+        String::new()
+    } else {
+        let lines: Vec<String> = events
+            .iter()
+            .enumerate()
+            .map(|(i, e)| {
+                let local = |t: &chrono::DateTime<chrono::Utc>| t.with_timezone(&chrono::Local).format("%H:%M").to_string();
+                let who = if e.attendees.is_empty() { String::new() } else { format!(", 참석자: {}", e.attendees.join(", ")) };
+                format!("{}. {} ({}~{}{who})", i + 1, e.title, local(&e.start), local(&e.end))
+            })
+            .collect();
+        format!("녹음 시각과 겹치는 캘린더 일정 후보(시간만 겹친 것이라 이 녹음의 일정인지는 모른다):\n{}\n", lines.join("\n"))
+    };
     let summary_block = summary.map(|s| format!("<summary>\n{}\n</summary>\n", s.trim())).unwrap_or_default();
     let text = summarize::format_transcript(recording, transcript);
     format!(
         "녹음 하나를 정리한다. 제목, 모아 볼 태그, 할 일을 고른다.\n\
 제목 규칙:\n\
 - 30자 이내. 무슨 일로 누구와 나눈 이야기인지 알 수 있게 쓴다. 날짜는 넣지 않는다\n\
-- 겹치는 캘린더 일정이 있으면 그 제목을 바탕으로 한다\n\
+- 고른 캘린더 일정이 있으면 그 제목을 참고한다\n\
+일정 고르기 규칙:\n\
+- 캘린더 일정 후보는 녹음 시각과 겹친다는 것만 안다. 같은 시간에 일정이 여러 개거나, 일정에 가지 않고 다른 일을 했을 수 있다\n\
+- 대화에 그 일정의 회사, 행사, 사람, 주제가 분명히 나올 때만 고른다. 대화 내용이 다른 회사나 다른 일이면 고르지 않는다\n\
+- 확실하지 않으면 고르지 않는다(null). 고르지 않은 일정의 이름은 제목과 태그에 쓰지 않는다\n\
 태그 규칙:\n\
 - 1~{MAX_AI_TAGS}개. 녹음을 모아 볼 분류(어떤 일, 누구와, 무슨 주제)를 고른다\n\
 - 계층은 /로 나눈다. 예: 업무/영업/한빛로보틱스. 3단계까지\n\
@@ -136,7 +153,7 @@ pub fn build_prompt(recording: &Recording, transcript: &Transcript, summary: Opt
 - 회사, 사람, 제품 이름은 대화나 일정에 분명히 나온 것만 쓴다. 추측하지 않는다\n\
 - 대화가 한국어면 한국어로 쓴다\n\
 - 답은 JSON 한 줄만 쓴다. 설명을 붙이지 않는다:\n\
-{{\"title\": \"...\", \"tags\": [\"...\"], \"todos\": [{{\"text\": \"...\", \"due\": \"YYYY-MM-DD\" 또는 null}}]}}\n\n\
+{{\"event\": 후보 번호 또는 null, \"title\": \"...\", \"tags\": [\"...\"], \"todos\": [{{\"text\": \"...\", \"due\": \"YYYY-MM-DD\" 또는 null}}]}}\n\n\
 쓰던 태그(녹음 수):\n{vocab_lines}\n\n\
 지금 제목: {}\n녹음 날짜: {}\n{place}{event}{}\n{summary_block}<transcript>\n{}\n</transcript>\n",
         recording.title,
@@ -155,6 +172,9 @@ struct RawTodo {
 
 #[derive(Deserialize)]
 struct Answer {
+    /// 고른 캘린더 일정 후보 번호(1부터). 숫자가 아니면 고르지 않은 것으로 본다
+    #[serde(default)]
+    event: Option<serde_json::Value>,
     #[serde(default)]
     title: Option<String>,
     #[serde(default)]
@@ -166,6 +186,8 @@ struct Answer {
 /// AI가 정리한 결과
 #[derive(Debug, PartialEq)]
 pub struct Organized {
+    /// 고른 캘린더 일정 후보의 자리(0부터). 범위 확인은 쓰는 쪽에서 한다
+    pub event: Option<usize>,
     pub title: Option<String>,
     pub tags: Vec<String>,
     /// 할 일과 기한(YYYY-MM-DD)
@@ -194,7 +216,8 @@ pub fn parse_answer(answer: &str) -> Result<Organized> {
         })
         .take(MAX_TODOS)
         .collect();
-    Ok(Organized { title, tags, todos })
+    let event = parsed.event.and_then(|v| v.as_u64()).filter(|n| *n >= 1).map(|n| n as usize - 1);
+    Ok(Organized { event, title, tags, todos })
 }
 
 #[cfg(test)]
@@ -219,6 +242,15 @@ mod tests {
             o.todos,
             vec![("김대리: 견적서 보내기".to_string(), Some("2026-11-07".to_string())), ("자료 공유".to_string(), None)]
         );
+    }
+
+    #[test]
+    fn 고른_일정_번호를_읽고_고르지_않았으면_none() {
+        assert_eq!(parse_answer(r#"{"event": 2, "tags": []}"#).unwrap().event, Some(1));
+        assert_eq!(parse_answer(r#"{"event": null, "tags": []}"#).unwrap().event, None);
+        assert_eq!(parse_answer(r#"{"event": "1", "tags": []}"#).unwrap().event, None);
+        assert_eq!(parse_answer(r#"{"event": 0, "tags": []}"#).unwrap().event, None);
+        assert_eq!(parse_answer(r#"{"tags": []}"#).unwrap().event, None);
     }
 
     #[test]

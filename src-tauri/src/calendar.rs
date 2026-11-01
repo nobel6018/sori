@@ -11,16 +11,20 @@ use crate::store::{CalendarEvent, Todo};
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 const SLACK_MINUTES: i64 = 10;
 
-/// 녹음 구간과 가장 많이 겹치는 일정. 종일 일정은 뺀다. 캘린더를 허락하지 않았으면 None
+/// 녹음 구간과 겹치는 일정 후보(많이 겹치는 순, 최대 MAX_CANDIDATES개). 종일 일정은 뺀다. 캘린더를 허락하지 않았으면 빈 목록.
+/// 시간만 겹친다고 그 일정의 녹음은 아니다(같은 시간에 일정이 두 개면 하나는 가지 않았다). 어느 것이 맞는지는 AI가 대화로 확인한다(tagger.rs)
 #[cfg(target_os = "macos")]
-pub fn event_for(start: DateTime<Utc>, end: DateTime<Utc>) -> Option<CalendarEvent> {
-    mac::event_for(start, end)
+pub fn events_for(start: DateTime<Utc>, end: DateTime<Utc>) -> Vec<CalendarEvent> {
+    mac::events_for(start, end)
 }
 
 #[cfg(not(target_os = "macos"))]
-pub fn event_for(_: DateTime<Utc>, _: DateTime<Utc>) -> Option<CalendarEvent> {
-    None
+pub fn events_for(_: DateTime<Utc>, _: DateTime<Utc>) -> Vec<CalendarEvent> {
+    Vec::new()
 }
+
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+const MAX_CANDIDATES: usize = 5;
 
 /// 할 일을 미리 알림의 기본 목록에 넣는다. 넣은 개수를 돌려준다. 처음에는 macOS가 허락을 묻는다
 #[cfg(target_os = "macos")]
@@ -41,17 +45,15 @@ fn overlap(a: (DateTime<Utc>, DateTime<Utc>), b: (DateTime<Utc>, DateTime<Utc>))
     (end - start).num_seconds().max(0)
 }
 
-/// 겹치는 시간이 가장 긴 것. 녹음이 일정 바로 앞뒤(SLACK_MINUTES 안)에 걸쳐도 고른다
+/// 겹치는 일정을 많이 겹치는 순으로. 녹음이 일정 바로 앞뒤(SLACK_MINUTES 안)에 걸쳐도 넣는다
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
-fn best_match(recording: (DateTime<Utc>, DateTime<Utc>), events: Vec<CalendarEvent>) -> Option<CalendarEvent> {
+fn candidates(recording: (DateTime<Utc>, DateTime<Utc>), events: Vec<CalendarEvent>) -> Vec<CalendarEvent> {
     let slack = chrono::Duration::minutes(SLACK_MINUTES);
     let widened = (recording.0 - slack, recording.1 + slack);
-    events
-        .into_iter()
-        .map(|e| (overlap(widened, (e.start, e.end)), e))
-        .filter(|(o, _)| *o > 0)
-        .max_by_key(|(o, _)| *o)
-        .map(|(_, e)| e)
+    let mut found: Vec<(i64, CalendarEvent)> =
+        events.into_iter().map(|e| (overlap(widened, (e.start, e.end)), e)).filter(|(o, _)| *o > 0).collect();
+    found.sort_by(|a, b| b.0.cmp(&a.0));
+    found.into_iter().take(MAX_CANDIDATES).map(|(_, e)| e).collect()
 }
 
 #[cfg(target_os = "macos")]
@@ -102,10 +104,10 @@ mod mac {
         rx.recv_timeout(ASK_TIMEOUT).unwrap_or(false)
     }
 
-    pub fn event_for(start: DateTime<Utc>, end: DateTime<Utc>) -> Option<CalendarEvent> {
+    pub fn events_for(start: DateTime<Utc>, end: DateTime<Utc>) -> Vec<CalendarEvent> {
         let store = unsafe { EKEventStore::new() };
         if !access(&store, EKEntityType::Event) {
-            return None;
+            return Vec::new();
         }
         let slack = chrono::Duration::minutes(super::SLACK_MINUTES);
         let events = unsafe {
@@ -136,7 +138,7 @@ mod mac {
             })
             .filter(|e| !e.title.trim().is_empty())
             .collect();
-        super::best_match((start, end), candidates)
+        super::candidates((start, end), candidates)
     }
 
     pub fn add_reminders(todos: &[Todo], note: &str) -> Result<usize> {
@@ -181,22 +183,23 @@ mod tests {
     }
 
     #[test]
-    fn 가장_많이_겹치는_일정을_고른다() {
-        let found = best_match(
+    fn 겹치는_일정을_모두_많이_겹치는_순으로_넘긴다() {
+        let found = candidates(
             (at(10, 0), at(11, 0)),
             vec![event("짧게 겹침", at(9, 0), at(10, 10)), event("주간 회의", at(10, 0), at(11, 0))],
         );
-        assert_eq!(found.unwrap().title, "주간 회의");
+        let titles: Vec<&str> = found.iter().map(|e| e.title.as_str()).collect();
+        assert_eq!(titles, vec!["주간 회의", "짧게 겹침"]);
     }
 
     #[test]
-    fn 일정_직전에_시작한_녹음도_그_일정으로_본다() {
-        let found = best_match((at(9, 55), at(9, 58)), vec![event("고객 미팅", at(10, 0), at(11, 0))]);
-        assert_eq!(found.unwrap().title, "고객 미팅");
+    fn 일정_직전에_시작한_녹음도_후보에_넣는다() {
+        let found = candidates((at(9, 55), at(9, 58)), vec![event("고객 미팅", at(10, 0), at(11, 0))]);
+        assert_eq!(found[0].title, "고객 미팅");
     }
 
     #[test]
-    fn 멀리_떨어진_일정은_고르지_않는다() {
-        assert!(best_match((at(13, 0), at(14, 0)), vec![event("오전 회의", at(10, 0), at(11, 0))]).is_none());
+    fn 멀리_떨어진_일정은_넣지_않는다() {
+        assert!(candidates((at(13, 0), at(14, 0)), vec![event("오전 회의", at(10, 0), at(11, 0))]).is_empty());
     }
 }

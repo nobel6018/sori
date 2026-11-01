@@ -535,15 +535,15 @@ async fn organize_recording(app: AppHandle, id: String, force: Option<bool>) -> 
     let transcript = state.store.get_transcript(&id).map_err(err)?.ok_or("먼저 전사를 끝내 주세요")?;
     let settings = state.store.get_settings(&state.home);
 
-    // 일정은 한 번 찾으면 남긴다. 처음에는 macOS가 캘린더 허락을 묻는다
-    let mut recording = recording;
-    if settings.use_calendar && recording.event.is_none() {
+    // 겹치는 일정은 후보로만 넘기고, 대화와 맞는지는 AI가 확인해 고른다(같은 시간 다른 일정에 갔을 수 있다).
+    // 정리할 때마다 다시 찾는다. 처음에는 macOS가 캘린더 허락을 묻는다. @see docs/organize.md
+    let events = if settings.use_calendar {
         let start = recording.created_at;
         let end = start + chrono::Duration::milliseconds((recording.duration.unwrap_or(0.0) * 1000.0) as i64);
-        if let Ok(Some(event)) = tauri::async_runtime::spawn_blocking(move || calendar::event_for(start, end)).await {
-            recording = state.store.update(&id, |r| r.event = Some(event)).map_err(err)?;
-        }
-    }
+        tauri::async_runtime::spawn_blocking(move || calendar::events_for(start, end)).await.unwrap_or_default()
+    } else {
+        Vec::new()
+    };
 
     let summary = state.store.get_summary(&id).ok().flatten().map(|s| s.markdown);
     let vocab = tagger::vocabulary(&state.store.list().map_err(err)?, &id);
@@ -557,11 +557,12 @@ async fn organize_recording(app: AppHandle, id: String, force: Option<bool>) -> 
             .map(|s| s.provider)
             .ok_or("claude 또는 codex CLI가 없어 AI로 정리할 수 없습니다")?,
     };
-    let prompt = tagger::build_prompt(&recording, &transcript, summary.as_deref(), &vocab);
+    let prompt = tagger::build_prompt(&recording, &transcript, summary.as_deref(), &vocab, &events);
     // 취소 버튼은 없다. 보내는 쪽을 끝까지 들고 있어야 run이 취소로 읽지 않는다
     let (_cancel_tx, cancel_rx) = tokio::sync::oneshot::channel();
     let answer = summarize::run(provider, prompt, cancel_rx).await.map_err(|e| format!("{e:#}"))?;
     let organized = tagger::parse_answer(&answer).map_err(|e| format!("{e:#}"))?;
+    let chosen_event = organized.event.and_then(|i| events.get(i).cloned());
 
     // 미리 알림에 넣은 할 일은 남기고, 아직 넣지 않은 후보만 새로 바꾼다
     let mut todos: Vec<store::Todo> = state.store.get_todos(&id).map_err(err)?.into_iter().filter(|t| t.added_at.is_some()).collect();
@@ -583,6 +584,10 @@ async fn organize_recording(app: AppHandle, id: String, force: Option<bool>) -> 
                 if r.title_edited_at.is_none() && tagger::is_default_title(&r.title) {
                     r.title = title;
                 }
+            }
+            // 캘린더를 쓰면 AI가 고른 일정으로 바꾼다(고르지 않았으면 비운다). 끈 상태면 예전 값을 그대로 둔다
+            if settings.use_calendar {
+                r.event = chosen_event;
             }
             r.auto_tagged_at = Some(chrono::Utc::now());
         })
