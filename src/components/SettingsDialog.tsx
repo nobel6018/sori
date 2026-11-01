@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { getVersion } from "@tauri-apps/api/app";
 import { open } from "@tauri-apps/plugin-dialog";
 import { api, formatBytes, GlobalShortcuts, InputDevice, installCommand, LANGUAGES, ModelCatalog, Settings, VoiceInfo } from "../api";
 import { acceleratorFromEvent, acceleratorLabel } from "../shortcuts";
 import { useModelInstall } from "../useModelInstall";
 import { InstallProgress } from "./InstallProgress";
+import { UpdateAction, updateMessage, UpdateNotes } from "./UpdateBanner";
+import type { useAppUpdate } from "../useAppUpdate";
 import { SyncSettings } from "./SyncSettings";
 
 const MODEL_FIELDS: { key: keyof Settings["models"]; label: string; hint: string }[] = [
@@ -13,7 +14,7 @@ const MODEL_FIELDS: { key: keyof Settings["models"]; label: string; hint: string
   { key: "embedding", label: "화자 임베딩 모델", hint: "3D-Speaker 등 speaker embedding .onnx" },
 ];
 
-export function SettingsDialog({ onClose }: { onClose: () => void }) {
+export function SettingsDialog({ onClose, appUpdate }: { onClose: () => void; appUpdate: ReturnType<typeof useAppUpdate> }) {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [saving, setSaving] = useState(false);
   const [devices, setDevices] = useState<InputDevice[]>([]);
@@ -24,12 +25,13 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const [installing, setInstalling] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [version, setVersion] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     api.getSettings().then(setSettings);
     refreshCatalog();
     api.listInputDevices().then(setDevices).catch(() => setDevices([]));
-    getVersion().then(setVersion).catch(() => setVersion(null));
+    api.appVersion().then(setVersion).catch(() => setVersion(null));
   }, []);
 
   // 단축키를 받는 도중 창을 닫으면 받기 칸의 blur가 오지 않을 수 있다. 꺼 둔 전역 단축키를 다시 켠다
@@ -101,6 +103,25 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal" role="dialog" aria-label="설정" onClick={(e) => e.stopPropagation()}>
         <h2>설정</h2>
+        <div className="setting-row">
+          <div className="setting-label">
+            <span>버전 {version ?? ""}</span>
+            <button className="ghost" disabled={appUpdate.state.kind === "checking" || appUpdate.state.kind === "downloading" || appUpdate.state.kind === "installing"} onClick={appUpdate.checkNow}>
+              업데이트 확인하기
+            </button>
+          </div>
+          {appUpdate.state.kind !== "none" && (
+            <div className="update-row">
+              <span className="muted">
+                {updateMessage(appUpdate)}
+                <UpdateNotes update={appUpdate} />
+              </span>
+              <UpdateAction update={appUpdate} onError={setError} />
+            </div>
+          )}
+          {appUpdate.state.kind === "none" && <UpdateNotes update={appUpdate} />}
+          {error && <div className="error">{error}</div>}
+        </div>
         <SyncSettings value={settings.sync} onChange={(sync) => setSettings({ ...settings, sync })} />
         <div className="setting-row">
           <div className="setting-label">
@@ -304,7 +325,6 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
         </div>
         {saveError && <div className="error">{saveError}</div>}
         <div className="modal-actions">
-          {version && <span className="muted app-version">sori {version}</span>}
           <button onClick={onClose}>닫기</button>
           <button className="primary" onClick={save} disabled={saving}>
             저장

@@ -475,6 +475,55 @@ fn summary_running(state: State<AppState>, id: String) -> bool {
 /// 이미 정리했으면 force일 때만 다시 한다. 사람이 고친 제목과 태그는 그대로 두고, 미리 알림에 넣은 할 일은 남긴다.
 /// 건너뛰면 None. 받아 적기가 끝난 녹음만 된다
 /// @see docs/organize.md
+/// macOS 앱 메뉴(sori)의 "sori에 관하여" 아래에 "업데이트 확인하기…"를 넣는다. 누르면 화면에 check-update를 보낸다
+/// @see docs/update.md
+#[cfg(target_os = "macos")]
+fn add_update_menu(app: &tauri::App) -> tauri::Result<()> {
+    use tauri::menu::{Menu, MenuItem};
+    let menu = Menu::default(app.handle())?;
+    if let Some(tauri::menu::MenuItemKind::Submenu(app_menu)) = menu.items()?.into_iter().next() {
+        let item = MenuItem::with_id(app, "check-update", "업데이트 확인하기…", true, None::<&str>)?;
+        app_menu.insert(&item, 1)?;
+    }
+    app.set_menu(menu)?;
+    app.on_menu_event(|app, event| {
+        if event.id() == "check-update" {
+            let _ = app.emit("check-update", ());
+        }
+    });
+    Ok(())
+}
+
+/// 앱을 다시 켜면 끊기는 작업 목록. 비어 있어야 업데이트를 설치하고 다시 켠다(화면이 누를 때와 설치 직전에 두 번 묻는다)
+/// @see docs/update.md
+#[tauri::command]
+fn busy_tasks(state: State<AppState>) -> Vec<String> {
+    let label = |kind: &str, id: &str| match state.store.get(id) {
+        Ok(r) => format!("{kind} #{} {}", r.number, r.title),
+        Err(_) => kind.to_string(),
+    };
+    let mut tasks = Vec::new();
+    if let Some((id, _)) = state.recorder.lock().unwrap().as_ref() {
+        tasks.push(label("녹음", id));
+    }
+    for id in state.cancels.lock().unwrap().keys() {
+        tasks.push(label("전사", id));
+    }
+    for id in state.summaries.lock().unwrap().keys() {
+        tasks.push(label("요약", id));
+    }
+    for id in tagger::running() {
+        tasks.push(label("AI 정리", &id));
+    }
+    if state.model_install.lock().unwrap().is_some() {
+        tasks.push("모델 내려받기".to_string());
+    }
+    if state.syncer.status().running {
+        tasks.push("동기화".to_string());
+    }
+    tasks
+}
+
 #[tauri::command]
 async fn organize_recording(app: AppHandle, id: String, force: Option<bool>) -> CmdResult<Option<Recording>> {
     let state = app.state::<AppState>();
@@ -1158,7 +1207,11 @@ pub fn run() {
         .manage(actions::Bus::new())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .setup(|app| {
+            #[cfg(target_os = "macos")]
+            add_update_menu(app)?;
             let data_dir = app.path().app_data_dir()?;
             let home = app.path().home_dir()?;
             let store = Store::new(data_dir)?;
@@ -1220,6 +1273,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            busy_tasks,
             get_settings,
             save_settings,
             model_catalog,

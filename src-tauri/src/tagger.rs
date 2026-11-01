@@ -37,6 +37,11 @@ impl Drop for RunningGuard {
 }
 
 /// 이미 분류 중이면 None
+/// 지금 AI로 정리 중인 녹음 id. 업데이트 전에 진행 중인 작업을 알린다(lib.rs busy_tasks)
+pub fn running() -> Vec<String> {
+    RUNNING.lock().unwrap().as_ref().map(|s| s.iter().cloned().collect()).unwrap_or_default()
+}
+
 pub fn begin(id: &str) -> Option<RunningGuard> {
     let mut lock = RUNNING.lock().unwrap();
     let set = lock.get_or_insert_with(HashSet::new);

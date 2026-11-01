@@ -1,0 +1,123 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import { getVersion } from "@tauri-apps/api/app";
+import { listen } from "@tauri-apps/api/event";
+import { relaunch } from "@tauri-apps/plugin-process";
+import { check, Update } from "@tauri-apps/plugin-updater";
+import { api } from "./api";
+import { IS_MAC } from "./shortcuts";
+import { checkForUpdate } from "./updateCheck";
+
+// 데스크톱 앱 업데이트. 켤 때 확인만 하고, 설치와 재시작은 사람이 버튼을 눌러야 한다.
+// 녹음, 전사 같은 작업이 하나라도 진행 중이면 설치하지 않고 무엇이 진행 중인지 알린다.
+// @see docs/update.md
+
+export type AppUpdateState =
+  | { kind: "none" }
+  /** 손으로 확인했다(메뉴, 설정) */
+  | { kind: "checking" }
+  | { kind: "latest"; current: string }
+  /** 앱 안에서 받아 설치할 수 있다(Tauri updater) */
+  | { kind: "ready"; version: string; current: string }
+  | { kind: "downloading"; version: string; current: string; percent: number | null }
+  | { kind: "installing"; version: string; current: string }
+  /** updater로 확인하지 못했다(0.9.2 이하 Release 등). Release 페이지로 안내한다 */
+  | { kind: "link"; version: string; current: string; url: string };
+
+export function useAppUpdate() {
+  const [state, setState] = useState<AppUpdateState>({ kind: "none" });
+  /** 진행 중인 작업이 있어 설치하지 않았을 때 보여 줄 문구 */
+  const [blocked, setBlocked] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const update = useRef<Update | null>(null);
+  /** 받아 두었으면 다음에 누를 때 다시 받지 않는다 */
+  const downloaded = useRef(false);
+
+  /** manual: 메뉴나 설정에서 눌렀다. 새 버전이 없어도 "최신 버전" 결과를 남긴다 */
+  const runCheck = useCallback(async (manual: boolean) => {
+    if (manual) {
+      setState({ kind: "checking" });
+      setBlocked(null);
+      setError(null);
+    }
+    try {
+      const u = await check();
+      if (u) {
+        update.current = u;
+        downloaded.current = false;
+        setState({ kind: "ready", version: u.version, current: u.currentVersion });
+      } else if (manual) {
+        setState({ kind: "latest", current: await getVersion() });
+      }
+    } catch (e) {
+      console.warn(`업데이트 확인 실패, Release 안내로 대신합니다: ${e}`);
+      const info = await checkForUpdate(IS_MAC ? /\.dmg$/ : /(\.msi|-setup\.exe)$/);
+      if (info) setState({ kind: "link", version: info.latest, current: info.current, url: info.url });
+      else if (manual) {
+        setState({ kind: "none" });
+        setError(`업데이트를 확인하지 못했습니다: ${e}`);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    runCheck(false);
+    // macOS 앱 메뉴의 "업데이트 확인하기…"(lib.rs add_update_menu)
+    const unlisten = listen("check-update", () => runCheck(true));
+    return () => {
+      unlisten.then((f) => f());
+    };
+  }, [runCheck]);
+
+  const checkNow = useCallback(() => runCheck(true), [runCheck]);
+
+  /** 진행 중인 작업이 있으면 문구를 띄우고 true */
+  const stopIfBusy = async () => {
+    const tasks = await api.busyTasks();
+    if (tasks.length === 0) return false;
+    setBlocked(`진행 중인 작업 [${tasks.join(", ")}]을 완료하거나 종료한 뒤 다시 눌러 주세요`);
+    return true;
+  };
+
+  const install = useCallback(async () => {
+    const u = update.current;
+    if (!u || state.kind !== "ready") return;
+    setBlocked(null);
+    setError(null);
+    try {
+      if (await stopIfBusy()) return;
+      const base = { version: u.version, current: u.currentVersion };
+      if (!downloaded.current) {
+        let total: number | null = null;
+        let received = 0;
+        setState({ kind: "downloading", ...base, percent: null });
+        await u.download((event) => {
+          if (event.event === "Started") total = event.data.contentLength ?? null;
+          if (event.event === "Progress") {
+            received += event.data.chunkLength;
+            if (total) setState({ kind: "downloading", ...base, percent: Math.round((received / total) * 100) });
+          }
+        });
+        downloaded.current = true;
+      }
+      // 받는 동안 녹음을 시작했을 수 있다. 설치 직전에 다시 확인한다
+      if (await stopIfBusy()) {
+        setState({ kind: "ready", ...base });
+        return;
+      }
+      setState({ kind: "installing", ...base });
+      await u.install();
+      await relaunch();
+    } catch (e) {
+      setError(`업데이트하지 못했습니다: ${e}`);
+      setState({ kind: "ready", version: u.version, current: u.currentVersion });
+    }
+  }, [state.kind]);
+
+  const dismiss = useCallback(() => {
+    setState({ kind: "none" });
+    setBlocked(null);
+    setError(null);
+  }, []);
+
+  return { state, blocked, error, install, dismiss, checkNow };
+}

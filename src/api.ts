@@ -1,3 +1,4 @@
+import { getVersion } from "@tauri-apps/api/app";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
@@ -328,6 +329,9 @@ export const api = {
   deleteNote: (id: string, index: number) => invoke<Recording>("delete_note", { id, index }),
   syncStatus: () => invoke<SyncStatus>("sync_status"),
   syncNow: () => invoke<void>("sync_now"),
+  /** 앱을 다시 켜면 끊기는 작업(녹음 #12 제목, 전사, 요약, AI 정리, 모델 내려받기, 동기화). 비어 있어야 업데이트한다 */
+  busyTasks: () => invoke<string[]>("busy_tasks"),
+  appVersion: () => getVersion(),
   /** macOS가 아니면 null */
   defaultSyncFolder: (provider: SyncProvider) => invoke<string | null>("default_sync_folder", { provider }),
   downloadAudio: (id: string) => invoke<void>("download_audio", { id }),

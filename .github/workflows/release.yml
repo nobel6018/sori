@@ -49,7 +49,11 @@ jobs:
           prefix-key: v1-release-msvc-mt
           shared-key: desktop
       - run: pnpm install --frozen-lockfile
+      # createUpdaterArtifacts가 켜져 있어 업데이트 파일(.app.tar.gz, setup.exe)과 서명(.sig)도 만든다(docs/update.md)
       - run: pnpm tauri build
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
       - name: Release에 올리기
         if: env.IS_TAG == 'true'
         shell: bash
@@ -59,9 +63,34 @@ jobs:
         run: |
           # macOS 기본 bash는 3.2라 mapfile이 없다(v0.6.2, v0.7.0에서 dmg가 빠진 원인)
           files=()
-          while IFS= read -r -d '' f; do files+=("$f"); done < <(find src-tauri/target/release/bundle -type f \( -name '*.dmg' -o -name '*.msi' -o -name '*-setup.exe' \) -print0)
+          while IFS= read -r -d '' f; do files+=("$f"); done < <(find src-tauri/target/release/bundle -type f \( -name '*.dmg' -o -name '*.msi' -o -name '*-setup.exe' -o -name '*-setup.exe.sig' \) -print0)
+          # macOS 업데이트 파일은 이름이 sori.app.tar.gz로 고정이라 버전과 아키텍처를 붙여 올린다
+          app=src-tauri/target/release/bundle/macos/sori.app.tar.gz
+          if [ -f "$app" ]; then
+            cp "$app" "sori_${TAG#v}_aarch64.app.tar.gz"
+            cp "$app.sig" "sori_${TAG#v}_aarch64.app.tar.gz.sig"
+            files+=("sori_${TAG#v}_aarch64.app.tar.gz" "sori_${TAG#v}_aarch64.app.tar.gz.sig")
+          fi
           if [ "${#files[@]}" -eq 0 ]; then echo "올릴 설치 파일이 없습니다"; exit 1; fi
           .github/scripts/upload-release.sh "${files[@]}"
+
+  # 데스크톱 앱이 읽는 업데이트 목록(releases/latest/download/latest.json). 두 OS 파일이 다 올라간 뒤 만든다
+  updater:
+    needs: desktop
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: latest.json 만들기
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: .github/scripts/updater-manifest.sh
+      - name: Release에 올리기
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: .github/scripts/upload-release.sh latest.json
 
   # iPhone 앱. AltStore가 설치할 때 본인 Apple ID로 서명하므로 서명 없이 빌드해 .ipa로 묶는다(docs/mobile.md)
   ios:

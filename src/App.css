@@ -1508,3 +1508,16 @@ kbd {
   display: flex;
   gap: 8px;
 }
+
+/* 업데이트를 미룬 이유(진행 중인 작업)나 오류는 알림 안에서 한 줄 아래에 */
+.update-banner .update-note {
+  display: block;
+  margin-top: 4px;
+}
+
+.update-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
