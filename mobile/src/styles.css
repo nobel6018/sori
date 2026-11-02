@@ -118,10 +118,33 @@ textarea {
   flex-direction: column;
 }
 
-/* 가장자리 스와이프로 밀리는 화면(useEdgeSwipeBack). 미는 동안만 그림자와 배경을 둬서 뒤가 비쳐 보이지 않게 한다 */
-.swipe-back.swiping {
+/* 목록 위에 쌓이는 화면(상세, 설정). 아래 목록을 가리도록 배경을 칠한다 */
+.swipe-back {
+  position: relative;
+  z-index: 1;
+  min-height: 100vh;
+  min-height: 100dvh;
   background: var(--bg);
+}
+
+/* 가장자리 스와이프로 미는 동안(useEdgeSwipeBack) */
+.swipe-back.swiping {
   box-shadow: -8px 0 24px rgba(0, 0, 0, 0.18);
+  will-change: transform;
+}
+
+/* 다른 화면 아래에 깔린 목록. 보던 위치는 scrollTop으로 두고, 밀 때(peek)만 보인다 */
+.list-layer.under {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.list-layer.under.peek {
+  visibility: visible;
   will-change: transform;
 }
 

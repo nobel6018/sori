@@ -1,4 +1,4 @@
-import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ReactNode, RefObject, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { tagCounts } from "../../src/tags";
 import { checkForUpdate, UpdateInfo } from "../../src/updateCheck";
 import { api, RecorderState, RecordingItem, SyncStatus } from "./api";
@@ -88,6 +88,28 @@ export function App() {
     };
   }, [recordings, previewing, recorder, refresh]);
 
+  /**
+   * 목록은 다른 화면이 떠 있어도 내리지 않고 아래 층(.list-layer.under)에 고정해 둔다. 가장자리를 밀 때 뒤에 보이고,
+   * 돌아오면 보던 위치 그대로다. 문서 스크롤은 늘 맨 위 화면 몫이라 상태 표시줄을 누르면 그 화면이 맨 위로 간다
+   */
+  const listLayer = useRef<HTMLDivElement>(null);
+  const listScroll = useRef(0);
+  const open = useCallback((next: Screen) => {
+    setScreen((current) => {
+      // 목록을 고정하면 문서 높이가 줄어 scrollY가 깎이므로 바꾸기 전에 읽어 둔다
+      if (current.name === "list") listScroll.current = window.scrollY;
+      return next;
+    });
+  }, []);
+  useLayoutEffect(() => {
+    if (screen.name === "list") {
+      window.scrollTo(0, listScroll.current);
+    } else {
+      if (listLayer.current) listLayer.current.scrollTop = listScroll.current;
+      window.scrollTo(0, 0);
+    }
+  }, [screen.name]);
+
   const backToList = useCallback(() => {
     setScreen({ name: "list" });
     refresh();
@@ -121,27 +143,28 @@ export function App() {
           </button>
         </div>
       )}
-      {screen.name === "list" && (
+      <div ref={listLayer} className={`list-layer ${screen.name === "list" ? "" : "under"}`} inert={screen.name !== "list"}>
         <List
+          visible={screen.name === "list"}
           recordings={recordings}
           previewing={previewing}
           sync={sync}
-          onOpen={(id) => setScreen({ name: "detail", id })}
-          onSettings={() => setScreen({ name: "settings" })}
+          onOpen={(id) => open({ name: "detail", id })}
+          onSettings={() => open({ name: "settings" })}
           onRecord={startRecording}
           onRefresh={() => {
             refresh();
             api.syncNow();
           }}
         />
-      )}
+      </div>
       {screen.name === "detail" && (
-        <SwipeBack key={screen.id} onBack={backToList} enabled={!recorder?.id}>
+        <SwipeBack key={screen.id} under={listLayer} onBack={backToList} enabled={!recorder?.id}>
           <Detail id={screen.id} allTags={allTags} onBack={backToList} />
         </SwipeBack>
       )}
       {screen.name === "settings" && (
-        <SwipeBack onBack={backToList} enabled={!recorder?.id}>
+        <SwipeBack under={listLayer} onBack={backToList} enabled={!recorder?.id}>
           <Settings sync={sync} onBack={backToList} />
         </SwipeBack>
       )}
@@ -151,7 +174,7 @@ export function App() {
           onStopped={(id) => {
             setRecorder(null);
             refresh();
-            setScreen({ name: "detail", id });
+            open({ name: "detail", id });
           }}
           onError={setError}
         />
@@ -160,10 +183,20 @@ export function App() {
   );
 }
 
-/** 목록 위에 쌓이는 화면. 왼쪽 가장자리에서 밀면 목록으로 돌아간다. 녹음 화면이 떠 있으면 끈다 */
-function SwipeBack({ onBack, enabled, children }: { onBack: () => void; enabled: boolean; children: ReactNode }) {
+/** 목록 위에 쌓이는 화면. 왼쪽 가장자리에서 밀면 아래 목록이 드러나며 돌아간다. 녹음 화면이 떠 있으면 끈다 */
+function SwipeBack({
+  under,
+  onBack,
+  enabled,
+  children,
+}: {
+  under: RefObject<HTMLDivElement | null>;
+  onBack: () => void;
+  enabled: boolean;
+  children: ReactNode;
+}) {
   const ref = useRef<HTMLDivElement>(null);
-  useEdgeSwipeBack(ref, onBack, enabled);
+  useEdgeSwipeBack(ref, under, onBack, enabled);
   return (
     <div ref={ref} className="swipe-back">
       {children}

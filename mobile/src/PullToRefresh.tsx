@@ -17,7 +17,18 @@ const SPOKES = 8;
 const MIN_SPIN_MS = 700;
 const MAX_SPIN_MS = 20_000;
 
-export function PullToRefresh({ onRefresh, busy, children }: { onRefresh: () => void; busy: boolean; children: ReactNode }) {
+export function PullToRefresh({
+  onRefresh,
+  busy,
+  enabled = true,
+  children,
+}: {
+  onRefresh: () => void;
+  busy: boolean;
+  /** 목록이 다른 화면 아래에 깔려 있으면 끈다. 문서 스크롤은 위 화면 것이라 그 화면을 당겨도 반응하면 안 된다 */
+  enabled?: boolean;
+  children: ReactNode;
+}) {
   const [pull, setPull] = useState(0);
   const [dragging, setDragging] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -29,6 +40,8 @@ export function PullToRefresh({ onRefresh, busy, children }: { onRefresh: () => 
   const sawBusy = useRef(false);
   const onRefreshRef = useRef(onRefresh);
   onRefreshRef.current = onRefresh;
+  const enabledRef = useRef(enabled);
+  enabledRef.current = enabled;
 
   useEffect(() => {
     const setP = (v: number) => {
@@ -36,7 +49,7 @@ export function PullToRefresh({ onRefresh, busy, children }: { onRefresh: () => 
       setPull(v);
     };
     const onStart = (e: TouchEvent) => {
-      if (refreshingRef.current || window.scrollY > 0 || e.touches.length !== 1) return;
+      if (!enabledRef.current || refreshingRef.current || window.scrollY > 0 || e.touches.length !== 1) return;
       const t = e.touches[0];
       start.current = { y: t.clientY, x: t.clientX };
       armed.current = false;

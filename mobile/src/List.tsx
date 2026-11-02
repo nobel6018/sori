@@ -14,6 +14,7 @@ export function List({
   onSettings,
   onRecord,
   onRefresh,
+  visible = true,
 }: {
   recordings: RecordingItem[];
   /** iPhone에서 미리 전사하고 있는 녹음 */
@@ -23,6 +24,8 @@ export function List({
   onSettings: () => void;
   onRecord: () => void;
   onRefresh: () => void;
+  /** 다른 화면 아래에 깔려 있으면 false. 당겨서 새로고침을 끈다 */
+  visible?: boolean;
 }) {
   const [filter, setFilter] = useState<string | null>(() => localStorage.getItem(FILTER_KEY));
   const tree = useMemo(() => buildTagTree(recordings), [recordings]);
@@ -52,7 +55,7 @@ export function List({
         </div>
       </header>
 
-      <PullToRefresh onRefresh={onRefresh} busy={!!sync?.running}>
+      <PullToRefresh onRefresh={onRefresh} busy={!!sync?.running} enabled={visible}>
         {tree.length > 0 && <TagBar tree={tree} recordings={recordings} active={active} onChoose={choose} />}
 
         <main className="content list">
