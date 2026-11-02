@@ -9,7 +9,8 @@ use sori_lib::engine::{audio, Transcript};
 fn main() -> eyre::Result<()> {
     let args: Vec<String> = std::env::args().collect();
     let model = PathBuf::from(&args[1]);
-    let thresholds: Vec<f32> = (6..=14).map(|i| i as f32 * 0.05).collect();
+    // 모델마다 맞는 기준값이 달라 넓게 본다(docs/speaker-model.md)
+    let thresholds: Vec<f32> = (2..=16).map(|i| i as f32 * 0.05).collect();
     println!("{:<12} 정답  {}", "녹음", thresholds.iter().map(|t| format!("{t:.2}")).collect::<Vec<_>>().join("  "));
     for spec in &args[2..] {
         let (dir, truth) = spec.rsplit_once('=').unwrap();
