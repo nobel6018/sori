@@ -118,6 +118,13 @@ textarea {
   flex-direction: column;
 }
 
+/* 가장자리 스와이프로 밀리는 화면(useEdgeSwipeBack). 미는 동안만 그림자와 배경을 둬서 뒤가 비쳐 보이지 않게 한다 */
+.swipe-back.swiping {
+  background: var(--bg);
+  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.18);
+  will-change: transform;
+}
+
 /* 위 막대: 노치 아래에 붙고 스크롤해도 남는다 */
 .bar {
   position: sticky;

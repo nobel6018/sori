@@ -42,6 +42,7 @@ AltStore는 소스에 적힌 권한이 받은 ipa와 다르면 설치를 거부�
 | 전사, 요약 | Mac이 만든 transcript.json, summaries.json을 읽기만 한다 |
 | 오디오 | 다른 기기에서 온 녹음은 "오디오 받기"를 눌러야 받는다 |
 | 동기화 | 앱을 열 때, 녹음을 멈출 때, 메모를 고칠 때, 앱이 앞에 있는 동안 20초마다. 목록 위 "↻ 동기화"나 목록을 아래로 당기면 기다리지 않고 바로 맞춘다 |
+| 가장자리 스와이프로 뒤로 | 상세, 설정 화면에서 왼쪽 가장자리(24px 안)부터 오른쪽으로 밀면 화면이 손가락을 따라오고, 폭의 35%를 넘기거나 빠르게 튕기면 목록으로 간다. 덜 밀면 제자리로 돌아온다. 세로로 먼저 움직이면 평소 스크롤. 녹음 화면이 떠 있을 때는 끈다. 웹뷰의 네이티브 제스처(`allowsBackForwardNavigationGestures`)는 화면 전환을 history로 하지 않아 쓰지 않았다 |
 
 ## 동작 버튼, 단축어로 바로 녹음
 
@@ -117,6 +118,7 @@ iOS 27.2부터는 `AudioRecordingIntent`가 Live Activity 없이 오디오 세�
 | `mobile/src-tauri/src/store.rs` `Store` | 기기 저장소(데스크톱과 같은 폴더 구조, meta.json은 JSON 값 그대로) |
 | `mobile/src-tauri/src/sync.rs` `MobileLocal`, `remote` | 동기화 엔진(crates/sori-sync) 연결, 폴더 권한 열기 |
 | `mobile/plugin/ios/Sources/SoriNativePlugin.swift` | 녹음, 폴더 고르기와 권한 저장, iCloud 파일 받기 |
+| `mobile/src/useEdgeSwipeBack.ts`, `App.tsx` `SwipeBack` | 가장자리 스와이프로 뒤로. 미는 동안만 화면에 transform을 건다(평소에 걸면 안쪽 fixed 요소의 기준이 바뀐다) |
 | `mobile/src/PullToRefresh.tsx`, 플러그인 `haptic` | 당겨서 새로고침. 웹뷰는 문서 전체가 스크롤되고 바운스를 꺼 두어 터치를 직접 다룬다. 고무줄 저항, 살 8개 스피너, 기준선(64px)을 넘을 때 가벼운 진동(웹뷰 `navigator.vibrate`는 iOS에서 안 돼 네이티브 `UIImpactFeedbackGenerator`). 놓으면 동기화가 끝날 때까지(최소 0.7초) 스피너가 머문다 |
 | `mobile/src-tauri/src/intents.rs` | 단축어 인텐트가 부르는 C 함수, Live Activity 훅 보관 |
 | `mobile/src-tauri/gen/apple/Sources/sori-mobile/RecordingIntents.swift` | 녹음 시작, 시작/멈춤 인텐트와 단축어 목록(`SoriShortcuts`) |

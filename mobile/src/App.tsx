@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { tagCounts } from "../../src/tags";
 import { checkForUpdate, UpdateInfo } from "../../src/updateCheck";
 import { api, RecorderState, RecordingItem, SyncStatus } from "./api";
@@ -6,6 +6,7 @@ import { Detail } from "./Detail";
 import { List } from "./List";
 import { Recorder } from "./Recorder";
 import { Settings } from "./Settings";
+import { useEdgeSwipeBack } from "./useEdgeSwipeBack";
 
 type Screen = { name: "list" } | { name: "detail"; id: string } | { name: "settings" };
 
@@ -87,6 +88,11 @@ export function App() {
     };
   }, [recordings, previewing, recorder, refresh]);
 
+  const backToList = useCallback(() => {
+    setScreen({ name: "list" });
+    refresh();
+  }, [refresh]);
+
   const startRecording = async () => {
     setError(null);
     try {
@@ -130,17 +136,15 @@ export function App() {
         />
       )}
       {screen.name === "detail" && (
-        <Detail
-          key={screen.id}
-          id={screen.id}
-          allTags={allTags}
-          onBack={() => {
-            setScreen({ name: "list" });
-            refresh();
-          }}
-        />
+        <SwipeBack key={screen.id} onBack={backToList} enabled={!recorder?.id}>
+          <Detail id={screen.id} allTags={allTags} onBack={backToList} />
+        </SwipeBack>
       )}
-      {screen.name === "settings" && <Settings sync={sync} onBack={() => setScreen({ name: "list" })} />}
+      {screen.name === "settings" && (
+        <SwipeBack onBack={backToList} enabled={!recorder?.id}>
+          <Settings sync={sync} onBack={backToList} />
+        </SwipeBack>
+      )}
       {recorder?.id && (
         <Recorder
           id={recorder.id}
@@ -152,6 +156,17 @@ export function App() {
           onError={setError}
         />
       )}
+    </div>
+  );
+}
+
+/** 목록 위에 쌓이는 화면. 왼쪽 가장자리에서 밀면 목록으로 돌아간다. 녹음 화면이 떠 있으면 끈다 */
+function SwipeBack({ onBack, enabled, children }: { onBack: () => void; enabled: boolean; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEdgeSwipeBack(ref, onBack, enabled);
+  return (
+    <div ref={ref} className="swipe-back">
+      {children}
     </div>
   );
 }
