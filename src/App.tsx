@@ -12,6 +12,7 @@ import { Recorder } from "./components/Recorder";
 import { Sidebar } from "./components/Sidebar";
 import { SidebarResizer, useSidebarWidth } from "./components/SidebarResizer";
 import { RecordingView } from "./components/RecordingView";
+import { showRecordingMenu } from "./recordingMenu";
 import { SettingsDialog } from "./components/SettingsDialog";
 import { useAppUpdate } from "./useAppUpdate";
 import { UpdateBanner } from "./components/UpdateBanner";
@@ -298,6 +299,20 @@ export default function App() {
         onImport={pickFiles}
         onSearch={() => setQuickOpen("")}
         onOpenSettings={() => setSettingsOpen(true)}
+        onContextMenu={(r) =>
+          showRecordingMenu(r, {
+            process: async (rec) => {
+              await processDefaults([rec]);
+              await refresh();
+            },
+            refresh,
+            onDeleted: async (id) => {
+              setSelectedId((current) => (current === id ? null : current));
+              await refresh();
+            },
+            onError: setError,
+          }).catch((e) => setError(String(e)))
+        }
         recorder={
           <Recorder
             onStarted={async (r) => {

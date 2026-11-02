@@ -24,10 +24,12 @@ interface Props {
   onImport: () => void;
   onSearch: () => void;
   onOpenSettings: () => void;
+  /** 녹음 항목을 우클릭했다 */
+  onContextMenu: (recording: Recording) => void;
   recorder: ReactNode;
 }
 
-export function Sidebar({ recordings, selectedId, progress, onSelect, onImport, onSearch, onOpenSettings, recorder }: Props) {
+export function Sidebar({ recordings, selectedId, progress, onSelect, onImport, onSearch, onOpenSettings, onContextMenu, recorder }: Props) {
   const [filter, setFilter] = useState<string | null>(() => {
     try {
       return localStorage.getItem(FILTER_KEY);
@@ -73,7 +75,14 @@ export function Sidebar({ recordings, selectedId, progress, onSelect, onImport, 
           const p = progress[r.id];
           return (
             <li key={r.id}>
-              <button className={`recording-item ${r.id === selectedId ? "selected" : ""}`} onClick={() => onSelect(r.id)}>
+              <button
+                className={`recording-item ${r.id === selectedId ? "selected" : ""}`}
+                onClick={() => onSelect(r.id)}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  onContextMenu(r);
+                }}
+              >
                 <span className="recording-title">
                   <span className="recording-number">#{r.number}</span>
                   {r.title}
