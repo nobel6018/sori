@@ -10,6 +10,7 @@ import { allTagPaths, tagCounts } from "./tags";
 import { ModelSetup } from "./components/ModelSetup";
 import { Recorder } from "./components/Recorder";
 import { Sidebar } from "./components/Sidebar";
+import { SidebarResizer, useSidebarWidth } from "./components/SidebarResizer";
 import { RecordingView } from "./components/RecordingView";
 import { SettingsDialog } from "./components/SettingsDialog";
 import { useAppUpdate } from "./useAppUpdate";
@@ -283,10 +284,12 @@ export default function App() {
   }, [refresh, importPaths, autoProcess]);
 
   const selected = recordings.find((r) => r.id === selectedId) ?? null;
+  const [sidebarWidth, setSidebarWidth] = useSidebarWidth();
   const allTags = useMemo(() => tagCounts(recordings), [recordings]);
 
   return (
-    <div className="app">
+    <div className="app" style={{ gridTemplateColumns: `${sidebarWidth}px 1fr` }}>
+      <SidebarResizer width={sidebarWidth} onResize={setSidebarWidth} />
       <Sidebar
         recordings={recordings}
         selectedId={selectedId}

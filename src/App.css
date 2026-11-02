@@ -111,10 +111,48 @@ button:focus-visible {
 }
 
 .app {
+  position: relative;
   display: grid;
   grid-template-columns: 280px 1fr;
   height: 100vh;
   height: 100dvh;
+}
+
+/* 사이드바 폭 손잡이. 그리드 칸을 차지하지 않게 경계선 위에 겹쳐 둔다 */
+.sidebar-resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 9px;
+  margin-left: -5px;
+  z-index: 5;
+  cursor: col-resize;
+  touch-action: none;
+}
+.sidebar-resizer::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 4px;
+  width: 1px;
+  background: transparent;
+  transition: background 0.15s;
+}
+.sidebar-resizer:hover::after,
+.sidebar-resizer:focus-visible::after,
+.sidebar-resizer.dragging::after {
+  left: 3px;
+  width: 3px;
+  background: var(--accent);
+}
+.sidebar-resizer:focus-visible {
+  outline: none;
+}
+body.col-resizing {
+  cursor: col-resize;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .sidebar {
