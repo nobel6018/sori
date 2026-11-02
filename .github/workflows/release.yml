@@ -46,12 +46,19 @@ jobs:
           node-version: 26
           cache: pnpm
       - uses: dtolnay/rust-toolchain@stable
+      # 러너 이미지가 바뀌면(VS, CMake 경로 등) 캐시가 맞아도 whisper-rs-sys, sherpa-rs-sys의 build.rs가 다시 돌아
+      # Windows가 10분 더 걸렸다(v0.9.11, 이미지 20261021 → 20261030). rust-cache는 키가 정확히 맞으면 저장하지 않아
+      # 주간 데우기도 소용없었다. 이미지 버전을 키에 넣어 새 이미지에서는 한 번 빌드해 새로 저장한다
+      - name: 러너 이미지 버전을 캐시 키로
+        shell: bash
+        run: echo "RUNNER_IMAGE=${ImageOS:-unknown}-${ImageVersion:-unknown}" >> "$GITHUB_ENV"
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
           # build.yml의 디버그 빌드 캐시(작업 이름이 같은 build였다)를 가져오지 않도록 릴리스 전용 키를 쓴다
           prefix-key: v1-release-msvc-mt
           shared-key: desktop
+          key: ${{ env.RUNNER_IMAGE }}
       - run: pnpm install --frozen-lockfile
       # createUpdaterArtifacts가 켜져 있어 업데이트 파일(.app.tar.gz, setup.exe)과 서명(.sig)도 만든다(docs/update.md)
       - run: pnpm tauri build
