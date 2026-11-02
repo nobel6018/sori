@@ -1,22 +1,61 @@
 import { useEffect, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
-import { api, formatBytes, Recording, GlobalShortcuts, InputDevice, installCommand, LANGUAGES, ModelCatalog, Settings, VoiceInfo } from "../api";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import {
+  api,
+  formatBytes,
+  Recording,
+  GlobalShortcuts,
+  InputDevice,
+  installCommand,
+  LANGUAGES,
+  LocationStatus,
+  ModelCatalog,
+  Settings,
+  VoiceInfo,
+} from "../api";
 import { acceleratorFromEvent, acceleratorLabel } from "../shortcuts";
 import { useModelInstall } from "../useModelInstall";
 import { InstallProgress } from "./InstallProgress";
 import { UpdateAction, updateMessage, UpdateNotes } from "./UpdateBanner";
 import { BulkProgress } from "./BulkProgress";
-import { startBulkOrganize, stopBulkOrganize, useBulkOrganize } from "../bulkOrganize";
+import {
+  startBulkOrganize,
+  stopBulkOrganize,
+  useBulkOrganize,
+} from "../bulkOrganize";
 import type { useAppUpdate } from "../useAppUpdate";
 import { SyncSettings } from "./SyncSettings";
 
-const MODEL_FIELDS: { key: keyof Settings["models"]; label: string; hint: string }[] = [
-  { key: "whisper", label: "Whisper 모델", hint: "ggml 형식 .bin (예: ggml-large-v3-turbo.bin)" },
-  { key: "segmentation", label: "화자 구간 모델", hint: "pyannote segmentation 3.0 model.onnx" },
-  { key: "embedding", label: "화자 임베딩 모델", hint: "3D-Speaker 등 speaker embedding .onnx" },
+const MODEL_FIELDS: {
+  key: keyof Settings["models"];
+  label: string;
+  hint: string;
+}[] = [
+  {
+    key: "whisper",
+    label: "Whisper 모델",
+    hint: "ggml 형식 .bin (예: ggml-large-v3-turbo.bin)",
+  },
+  {
+    key: "segmentation",
+    label: "화자 구간 모델",
+    hint: "pyannote segmentation 3.0 model.onnx",
+  },
+  {
+    key: "embedding",
+    label: "화자 임베딩 모델",
+    hint: "3D-Speaker 등 speaker embedding .onnx",
+  },
 ];
 
-export function SettingsDialog({ onClose, appUpdate }: { onClose: () => void; appUpdate: ReturnType<typeof useAppUpdate> }) {
+export function SettingsDialog({
+  onClose,
+  appUpdate,
+}: {
+  onClose: () => void;
+  appUpdate: ReturnType<typeof useAppUpdate>;
+}) {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [saving, setSaving] = useState(false);
   const [devices, setDevices] = useState<InputDevice[]>([]);
@@ -32,8 +71,14 @@ export function SettingsDialog({ onClose, appUpdate }: { onClose: () => void; ap
   useEffect(() => {
     api.getSettings().then(setSettings);
     refreshCatalog();
-    api.listInputDevices().then(setDevices).catch(() => setDevices([]));
-    api.appVersion().then(setVersion).catch(() => setVersion(null));
+    api
+      .listInputDevices()
+      .then(setDevices)
+      .catch(() => setDevices([]));
+    api
+      .appVersion()
+      .then(setVersion)
+      .catch(() => setVersion(null));
   }, []);
 
   // 단축키를 받는 도중 창을 닫으면 받기 칸의 blur가 오지 않을 수 있다. 꺼 둔 전역 단축키를 다시 켠다
@@ -53,8 +98,12 @@ export function SettingsDialog({ onClose, appUpdate }: { onClose: () => void; ap
   if (!settings) return null;
 
   const pick = async (key: keyof Settings["models"]) => {
-    const path = await open({ multiple: false, defaultPath: settings.models[key] });
-    if (path) setSettings({ ...settings, models: { ...settings.models, [key]: path } });
+    const path = await open({
+      multiple: false,
+      defaultPath: settings.models[key],
+    });
+    if (path)
+      setSettings({ ...settings, models: { ...settings.models, [key]: path } });
   };
 
   const installWhisper = async (id: string) => {
@@ -65,7 +114,10 @@ export function SettingsDialog({ onClose, appUpdate }: { onClose: () => void; ap
       // 받은 모델로 바로 바꾼다. 설치 후 백엔드가 고친 다른 경로도 함께 읽어 온다
       const path = next.whisper.find((w) => w.id === id)?.path;
       const saved = await api.getSettings();
-      setSettings({ ...saved, models: { ...saved.models, whisper: path ?? saved.models.whisper } });
+      setSettings({
+        ...saved,
+        models: { ...saved.models, whisper: path ?? saved.models.whisper },
+      });
     }
     setInstalling(null);
   };
@@ -80,7 +132,9 @@ export function SettingsDialog({ onClose, appUpdate }: { onClose: () => void; ap
     const langs = settings.defaultLanguages;
     setSettings({
       ...settings,
-      defaultLanguages: langs.includes(code) ? langs.filter((l) => l !== code) : [...langs, code],
+      defaultLanguages: langs.includes(code)
+        ? langs.filter((l) => l !== code)
+        : [...langs, code],
     });
   };
 
@@ -99,16 +153,32 @@ export function SettingsDialog({ onClose, appUpdate }: { onClose: () => void; ap
   };
 
   const setShortcut = (key: keyof GlobalShortcuts, value: string) =>
-    setSettings({ ...settings, shortcuts: { ...settings.shortcuts, [key]: value } });
+    setSettings({
+      ...settings,
+      shortcuts: { ...settings.shortcuts, [key]: value },
+    });
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" role="dialog" aria-label="설정" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="modal"
+        role="dialog"
+        aria-label="설정"
+        onClick={(e) => e.stopPropagation()}
+      >
         <h2>설정</h2>
         <div className="setting-row">
           <div className="setting-label">
             <span>버전 {version ?? ""}</span>
-            <button className="ghost" disabled={appUpdate.state.kind === "checking" || appUpdate.state.kind === "downloading" || appUpdate.state.kind === "installing"} onClick={appUpdate.checkNow}>
+            <button
+              className="ghost"
+              disabled={
+                appUpdate.state.kind === "checking" ||
+                appUpdate.state.kind === "downloading" ||
+                appUpdate.state.kind === "installing"
+              }
+              onClick={appUpdate.checkNow}
+            >
               업데이트 확인하기
             </button>
           </div>
@@ -121,10 +191,15 @@ export function SettingsDialog({ onClose, appUpdate }: { onClose: () => void; ap
               <UpdateAction update={appUpdate} onError={setError} />
             </div>
           )}
-          {appUpdate.state.kind === "none" && <UpdateNotes update={appUpdate} />}
+          {appUpdate.state.kind === "none" && (
+            <UpdateNotes update={appUpdate} />
+          )}
           {error && <div className="error">{error}</div>}
         </div>
-        <SyncSettings value={settings.sync} onChange={(sync) => setSettings({ ...settings, sync })} />
+        <SyncSettings
+          value={settings.sync}
+          onChange={(sync) => setSettings({ ...settings, sync })}
+        />
         <div className="setting-row">
           <div className="setting-label">
             <span>받아 적기 모델</span>
@@ -132,22 +207,38 @@ export function SettingsDialog({ onClose, appUpdate }: { onClose: () => void; ap
               설치 다시 확인
             </button>
           </div>
-          <div className="model-options" role="radiogroup" aria-label="Whisper 모델">
+          <div
+            className="model-options"
+            role="radiogroup"
+            aria-label="Whisper 모델"
+          >
             {catalog?.whisper.map((m) => {
-              const selected = m.path !== null && m.path === settings.models.whisper;
+              const selected =
+                m.path !== null && m.path === settings.models.whisper;
               return (
-                <div key={m.id} className={`model-option ${selected ? "on" : ""}`}>
+                <div
+                  key={m.id}
+                  className={`model-option ${selected ? "on" : ""}`}
+                >
                   <label>
                     <input
                       type="radio"
                       name="whisper"
                       checked={selected}
                       disabled={m.path === null}
-                      onChange={() => m.path && setSettings({ ...settings, models: { ...settings.models, whisper: m.path } })}
+                      onChange={() =>
+                        m.path &&
+                        setSettings({
+                          ...settings,
+                          models: { ...settings.models, whisper: m.path },
+                        })
+                      }
                     />
                     <span className="model-name">{m.label}</span>
                     <span className="muted">{formatBytes(m.sizeBytes)}</span>
-                    <span className={`badge ${m.path ? "badge-done" : ""}`}>{m.path ? "설치됨" : "설치 안 됨"}</span>
+                    <span className={`badge ${m.path ? "badge-done" : ""}`}>
+                      {m.path ? "설치됨" : "설치 안 됨"}
+                    </span>
                   </label>
                   <p className="muted">{m.description}</p>
                   {m.path === null && (
@@ -158,16 +249,30 @@ export function SettingsDialog({ onClose, appUpdate }: { onClose: () => void; ap
                           <button onClick={install.cancel}>멈추기</button>
                         </>
                       ) : (
-                        <button className="primary" disabled={install.running} onClick={() => installWhisper(m.id)}>
-                          {installing === m.id && install.error ? "이어서 받기" : `설치 (${formatBytes(m.sizeBytes)})`}
+                        <button
+                          className="primary"
+                          disabled={install.running}
+                          onClick={() => installWhisper(m.id)}
+                        >
+                          {installing === m.id && install.error
+                            ? "이어서 받기"
+                            : `설치 (${formatBytes(m.sizeBytes)})`}
                         </button>
                       )}
-                      {installing === m.id && install.error && !install.running && <div className="error">{install.error}</div>}
+                      {installing === m.id &&
+                        install.error &&
+                        !install.running && (
+                          <div className="error">{install.error}</div>
+                        )}
                       <details>
                         <summary className="muted">터미널로 받기</summary>
                         <div className="install-row">
                           <code>{installCommand(m.scriptArg)}</code>
-                          <button onClick={() => copyCommand(m.scriptArg)}>{copied === m.scriptArg ? "복사했습니다" : "명령 복사"}</button>
+                          <button onClick={() => copyCommand(m.scriptArg)}>
+                            {copied === m.scriptArg
+                              ? "복사했습니다"
+                              : "명령 복사"}
+                          </button>
                         </div>
                       </details>
                     </div>
@@ -178,7 +283,8 @@ export function SettingsDialog({ onClose, appUpdate }: { onClose: () => void; ap
           </div>
           {catalog && (
             <p className="muted small">
-              설치하면 없는 화자 분리 모델도 함께 받습니다. 받는 곳: {catalog.modelsDir}
+              설치하면 없는 화자 분리 모델도 함께 받습니다. 받는 곳:{" "}
+              {catalog.modelsDir}
             </p>
           )}
         </div>
@@ -191,7 +297,12 @@ export function SettingsDialog({ onClose, appUpdate }: { onClose: () => void; ap
             <div className="path-row">
               <input
                 value={settings.models[f.key]}
-                onChange={(e) => setSettings({ ...settings, models: { ...settings.models, [f.key]: e.target.value } })}
+                onChange={(e) =>
+                  setSettings({
+                    ...settings,
+                    models: { ...settings.models, [f.key]: e.target.value },
+                  })
+                }
               />
               <button onClick={() => pick(f.key)}>찾기</button>
             </div>
@@ -204,9 +315,19 @@ export function SettingsDialog({ onClose, appUpdate }: { onClose: () => void; ap
           </div>
           <select
             value={settings.inputDeviceId ?? ""}
-            onChange={(e) => setSettings({ ...settings, inputDeviceId: e.target.value || null })}
+            onChange={(e) =>
+              setSettings({
+                ...settings,
+                inputDeviceId: e.target.value || null,
+              })
+            }
           >
-            <option value="">시스템 기본값{devices.find((d) => d.isDefault) ? ` (${devices.find((d) => d.isDefault)!.name})` : ""}</option>
+            <option value="">
+              시스템 기본값
+              {devices.find((d) => d.isDefault)
+                ? ` (${devices.find((d) => d.isDefault)!.name})`
+                : ""}
+            </option>
             {devices.map((d) => (
               <option key={d.id} value={d.id}>
                 {d.name}
@@ -218,11 +339,17 @@ export function SettingsDialog({ onClose, appUpdate }: { onClose: () => void; ap
           <input
             type="checkbox"
             checked={settings.captureSystemAudio}
-            onChange={(e) => setSettings({ ...settings, captureSystemAudio: e.target.checked })}
+            onChange={(e) =>
+              setSettings({ ...settings, captureSystemAudio: e.target.checked })
+            }
           />
           <span>
             시스템 소리도 함께 녹음
-            <span className="muted"> 화상 회의, 통화 상대 목소리처럼 이 컴퓨터에서 나오는 소리. macOS는 14.6 이상, 처음 녹음할 때 권한을 묻습니다</span>
+            <span className="muted">
+              {" "}
+              화상 회의, 통화 상대 목소리처럼 이 컴퓨터에서 나오는 소리. macOS는
+              14.6 이상, 처음 녹음할 때 권한을 묻습니다
+            </span>
           </span>
         </label>
         <div className="setting-row">
@@ -247,54 +374,102 @@ export function SettingsDialog({ onClose, appUpdate }: { onClose: () => void; ap
           <input
             type="checkbox"
             checked={settings.defaultDiarize}
-            onChange={(e) => setSettings({ ...settings, defaultDiarize: e.target.checked })}
+            onChange={(e) =>
+              setSettings({ ...settings, defaultDiarize: e.target.checked })
+            }
           />
           <span>
             기본으로 화자도 나누기
-            <span className="muted"> 끄면 자동 처리와 새 녹음이 전사만 합니다. 혼자 말한 메모나 강의가 많다면 끄세요. 녹음마다 바꿀 수 있습니다</span>
+            <span className="muted">
+              {" "}
+              끄면 자동 처리와 새 녹음이 전사만 합니다. 혼자 말한 메모나 강의가
+              많다면 끄세요. 녹음마다 바꿀 수 있습니다
+            </span>
           </span>
         </label>
         <label className="setting-toggle">
-          <input type="checkbox" checked={settings.autoProcess} onChange={(e) => setSettings({ ...settings, autoProcess: e.target.checked })} />
+          <input
+            type="checkbox"
+            checked={settings.autoProcess}
+            onChange={(e) =>
+              setSettings({ ...settings, autoProcess: e.target.checked })
+            }
+          />
           <span>
             녹음을 멈추거나 파일을 가져오면 바로 받아 적기
-            <span className="muted"> 화자 수는 자동으로 추정하고 언어는 위의 기본값을 씁니다</span>
+            <span className="muted">
+              {" "}
+              화자 수는 자동으로 추정하고 언어는 위의 기본값을 씁니다
+            </span>
           </span>
         </label>
         <label className="setting-toggle">
           <input
             type="checkbox"
             checked={settings.autoSummarize}
-            onChange={(e) => setSettings({ ...settings, autoSummarize: e.target.checked })}
+            onChange={(e) =>
+              setSettings({ ...settings, autoSummarize: e.target.checked })
+            }
           />
           <span>
             받아 적기가 끝나면 기본 템플릿으로 요약
-            <span className="muted"> 구독한 claude, codex CLI의 사용량을 씁니다</span>
+            <span className="muted">
+              {" "}
+              구독한 claude, codex CLI의 사용량을 씁니다
+            </span>
           </span>
         </label>
         <label className="setting-toggle">
           <input
             type="checkbox"
             checked={settings.meetingDetection}
-            onChange={(e) => setSettings({ ...settings, meetingDetection: e.target.checked })}
+            onChange={(e) =>
+              setSettings({ ...settings, meetingDetection: e.target.checked })
+            }
           />
           <span>
             회의 앱이 마이크를 쓰기 시작하면 녹음할지 묻기
-            <span className="muted"> Zoom, Teams, Meet(브라우저), Slack 허들, Discord, FaceTime, 카카오톡 통화. 그 질문으로 시작한 녹음은 통화가 끝나면 멈출지도 묻습니다</span>
+            <span className="muted">
+              {" "}
+              Zoom, Teams, Meet(브라우저), Slack 허들, Discord, FaceTime,
+              카카오톡 통화. 그 질문으로 시작한 녹음은 통화가 끝나면 멈출지도
+              묻습니다
+            </span>
           </span>
         </label>
         <label className="setting-toggle">
-          <input type="checkbox" checked={settings.autoTag} onChange={(e) => setSettings({ ...settings, autoTag: e.target.checked })} />
+          <input
+            type="checkbox"
+            checked={settings.autoTag}
+            onChange={(e) =>
+              setSettings({ ...settings, autoTag: e.target.checked })
+            }
+          />
           <span>
             받아 적기가 끝나면 AI로 정리하기(제목, 태그, 할 일)
-            <span className="muted"> 요약과 같은 CLI를 씁니다. 쓰던 태그를 먼저 고르고, 손으로 고친 제목과 태그는 덮어쓰지 않습니다. 할 일은 후보로만 두고 확인한 것만 미리 알림에 넣습니다. iPhone에서 온 녹음도 받아 적은 뒤 정리합니다</span>
+            <span className="muted">
+              {" "}
+              요약과 같은 CLI를 씁니다. 쓰던 태그를 먼저 고르고, 손으로 고친
+              제목과 태그는 덮어쓰지 않습니다. 할 일은 후보로만 두고 확인한 것만
+              미리 알림에 넣습니다. iPhone에서 온 녹음도 받아 적은 뒤 정리합니다
+            </span>
           </span>
         </label>
         <label className="setting-toggle">
-          <input type="checkbox" checked={settings.useCalendar} onChange={(e) => setSettings({ ...settings, useCalendar: e.target.checked })} />
+          <input
+            type="checkbox"
+            checked={settings.useCalendar}
+            onChange={(e) =>
+              setSettings({ ...settings, useCalendar: e.target.checked })
+            }
+          />
           <span>
             정리할 때 캘린더 일정 쓰기
-            <span className="muted"> 녹음 시각과 겹치는 일정의 제목과 참석자로 녹음 제목과 화자 이름 후보를 정합니다. 처음에 macOS가 허락을 묻습니다</span>
+            <span className="muted">
+              {" "}
+              녹음 시각과 겹치는 일정의 제목과 참석자로 녹음 제목과 화자 이름
+              후보를 정합니다. 처음에 macOS가 허락을 묻습니다
+            </span>
           </span>
         </label>
         <BulkTag />
@@ -302,13 +477,21 @@ export function SettingsDialog({ onClose, appUpdate }: { onClose: () => void; ap
           <input
             type="checkbox"
             checked={settings.recordLocation}
-            onChange={(e) => setSettings({ ...settings, recordLocation: e.target.checked })}
+            onChange={(e) =>
+              setSettings({ ...settings, recordLocation: e.target.checked })
+            }
           />
           <span>
             녹음할 때 위치 남기기
-            <span className="muted"> 녹음을 시작할 때 Wi-Fi로 위치를 한 번 받아 주소와 함께 남깁니다. 처음에 macOS가 허락을 묻습니다. iPhone은 iPhone 앱 설정에서 따로 정합니다</span>
+            <span className="muted">
+              {" "}
+              녹음을 시작할 때 Wi-Fi로 위치를 한 번 받아 주소와 함께 남깁니다.
+              처음에 macOS가 허락을 묻습니다. iPhone은 iPhone 앱 설정에서 따로
+              정합니다
+            </span>
           </span>
         </label>
+        {settings.recordLocation && <LocationHint />}
         <TemplateEditor settings={settings} onChange={setSettings} />
         <VoiceList
           enabled={settings.rememberVoices}
@@ -317,12 +500,26 @@ export function SettingsDialog({ onClose, appUpdate }: { onClose: () => void; ap
         <div className="setting-row">
           <div className="setting-label">
             <span>전역 단축키</span>
-            <span className="muted">sori가 앞에 없어도 동작합니다. 칸을 누르고 새 조합을 누르세요</span>
+            <span className="muted">
+              sori가 앞에 없어도 동작합니다. 칸을 누르고 새 조합을 누르세요
+            </span>
           </div>
           <div className="shortcut-settings">
-            <ShortcutInput label="녹음 시작/멈춤" value={settings.shortcuts.toggleRecording} onChange={(v) => setShortcut("toggleRecording", v)} />
-            <ShortcutInput label="sori 창 앞으로" value={settings.shortcuts.showWindow} onChange={(v) => setShortcut("showWindow", v)} />
-            <ShortcutInput label="북마크 (녹음 중)" value={settings.shortcuts.bookmark} onChange={(v) => setShortcut("bookmark", v)} />
+            <ShortcutInput
+              label="녹음 시작/멈춤"
+              value={settings.shortcuts.toggleRecording}
+              onChange={(v) => setShortcut("toggleRecording", v)}
+            />
+            <ShortcutInput
+              label="sori 창 앞으로"
+              value={settings.shortcuts.showWindow}
+              onChange={(v) => setShortcut("showWindow", v)}
+            />
+            <ShortcutInput
+              label="북마크 (녹음 중)"
+              value={settings.shortcuts.bookmark}
+              onChange={(v) => setShortcut("bookmark", v)}
+            />
           </div>
         </div>
         {saveError && <div className="error">{saveError}</div>}
@@ -338,7 +535,15 @@ export function SettingsDialog({ onClose, appUpdate }: { onClose: () => void; ap
 }
 
 /** 누른 키 조합을 받아 적는 칸. Backspace는 단축키를 끄고, Esc는 받기를 그만둔다 */
-function ShortcutInput({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+function ShortcutInput({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+}) {
   const [listening, setListening] = useState(false);
   return (
     <label className="shortcut-input">
@@ -371,35 +576,60 @@ function ShortcutInput({ label, value, onChange }: { label: string; value: strin
           }
         }}
       >
-        {listening ? "키 조합을 누르세요" : <kbd>{acceleratorLabel(value)}</kbd>}
+        {listening ? (
+          "키 조합을 누르세요"
+        ) : (
+          <kbd>{acceleratorLabel(value)}</kbd>
+        )}
       </button>
     </label>
   );
 }
 
 /** 요약 템플릿 고치기. 저장을 눌러야 반영된다 */
-function TemplateEditor({ settings, onChange }: { settings: Settings; onChange: (s: Settings) => void }) {
+function TemplateEditor({
+  settings,
+  onChange,
+}: {
+  settings: Settings;
+  onChange: (s: Settings) => void;
+}) {
   const templates = settings.summaryTemplates;
   const [selected, setSelected] = useState(templates[0]?.id ?? "");
   const current = templates.find((t) => t.id === selected) ?? templates[0];
 
   const update = (patch: Partial<{ name: string; prompt: string }>) =>
-    onChange({ ...settings, summaryTemplates: templates.map((t) => (t.id === current.id ? { ...t, ...patch } : t)) });
+    onChange({
+      ...settings,
+      summaryTemplates: templates.map((t) =>
+        t.id === current.id ? { ...t, ...patch } : t,
+      ),
+    });
 
   const add = () => {
     const id = `custom-${Date.now()}`;
     const base = current?.prompt ?? "";
-    onChange({ ...settings, summaryTemplates: [...templates, { id, name: "새 템플릿", prompt: base }] });
+    onChange({
+      ...settings,
+      summaryTemplates: [...templates, { id, name: "새 템플릿", prompt: base }],
+    });
     setSelected(id);
   };
 
   const remove = () => {
-    if (templates.length <= 1 || !confirm(`"${current.name}" 템플릿을 지울까요?`)) return;
+    if (
+      templates.length <= 1 ||
+      !confirm(`"${current.name}" 템플릿을 지울까요?`)
+    )
+      return;
     const rest = templates.filter((t) => t.id !== current.id);
     onChange({
       ...settings,
       summaryTemplates: rest,
-      defaultTemplate: settings.defaultTemplate === current.id ? rest[0].id : settings.defaultTemplate,
+      defaultTemplate:
+        settings.defaultTemplate === current.id
+          ? rest[0].id
+          : settings.defaultTemplate,
     });
     setSelected(rest[0].id);
   };
@@ -415,28 +645,56 @@ function TemplateEditor({ settings, onChange }: { settings: Settings; onChange: 
       </div>
       <div className="chips">
         {templates.map((t) => (
-          <button key={t.id} className={`chip ${t.id === current.id ? "on" : ""}`} onClick={() => setSelected(t.id)}>
+          <button
+            key={t.id}
+            className={`chip ${t.id === current.id ? "on" : ""}`}
+            onClick={() => setSelected(t.id)}
+          >
             {t.name}
             {t.id === settings.defaultTemplate ? " (기본)" : ""}
           </button>
         ))}
       </div>
       <div className="template-edit">
-        <input value={current.name} onChange={(e) => update({ name: e.target.value })} aria-label="템플릿 이름" />
-        <button className="ghost" disabled={current.id === settings.defaultTemplate} onClick={() => onChange({ ...settings, defaultTemplate: current.id })}>
+        <input
+          value={current.name}
+          onChange={(e) => update({ name: e.target.value })}
+          aria-label="템플릿 이름"
+        />
+        <button
+          className="ghost"
+          disabled={current.id === settings.defaultTemplate}
+          onClick={() => onChange({ ...settings, defaultTemplate: current.id })}
+        >
           기본으로
         </button>
-        <button className="ghost" disabled={templates.length <= 1} onClick={remove}>
+        <button
+          className="ghost"
+          disabled={templates.length <= 1}
+          onClick={remove}
+        >
           지우기
         </button>
       </div>
-      <textarea className="prompt-input" rows={8} value={current.prompt} onChange={(e) => update({ prompt: e.target.value })} aria-label="요약 지시문" />
+      <textarea
+        className="prompt-input"
+        rows={8}
+        value={current.prompt}
+        onChange={(e) => update({ prompt: e.target.value })}
+        aria-label="요약 지시문"
+      />
     </div>
   );
 }
 
 /** 기억한 목소리. 이름 바꾸기와 지우기는 바로 반영된다 */
-function VoiceList({ enabled, onToggle }: { enabled: boolean; onToggle: (on: boolean) => void }) {
+function VoiceList({
+  enabled,
+  onToggle,
+}: {
+  enabled: boolean;
+  onToggle: (on: boolean) => void;
+}) {
   const [voices, setVoices] = useState<VoiceInfo[]>([]);
   const refresh = () => api.listVoices().then(setVoices);
   useEffect(() => {
@@ -446,12 +704,17 @@ function VoiceList({ enabled, onToggle }: { enabled: boolean; onToggle: (on: boo
   return (
     <div className="setting-row">
       <label className="setting-toggle">
-        <input type="checkbox" checked={enabled} onChange={(e) => onToggle(e.target.checked)} />
+        <input
+          type="checkbox"
+          checked={enabled}
+          onChange={(e) => onToggle(e.target.checked)}
+        />
         <span>
           화자 목소리 기억하기
           <span className="muted">
             {" "}
-            화자 이름을 바꾸면 그 목소리를 기억하고, 다음 녹음에서 같은 사람에게 이름을 붙입니다. 목소리 특징은 이 컴퓨터에만 저장됩니다
+            화자 이름을 바꾸면 그 목소리를 기억하고, 다음 녹음에서 같은 사람에게
+            이름을 붙입니다. 목소리 특징은 이 컴퓨터에만 저장됩니다
           </span>
         </span>
       </label>
@@ -464,14 +727,18 @@ function VoiceList({ enabled, onToggle }: { enabled: boolean; onToggle: (on: boo
                 aria-label="목소리 이름"
                 onBlur={(e) => {
                   const name = e.target.value.trim();
-                  if (name && name !== v.name) api.renameVoice(v.id, name).then(refresh);
+                  if (name && name !== v.name)
+                    api.renameVoice(v.id, name).then(refresh);
                 }}
                 onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
               />
               <span className="muted">녹음 {v.samples}개</span>
               <button
                 className="ghost"
-                onClick={() => confirm(`"${v.name}"의 목소리를 잊을까요?`) && api.deleteVoice(v.id).then(refresh)}
+                onClick={() =>
+                  confirm(`"${v.name}"의 목소리를 잊을까요?`) &&
+                  api.deleteVoice(v.id).then(refresh)
+                }
               >
                 잊기
               </button>
@@ -522,10 +789,18 @@ function BulkTag() {
             </button>
           ) : (
             <>
-              <button onClick={() => run(untagged, false)} disabled={untagged.length === 0}>
-                {untagged.length === 0 ? "새로 붙일 녹음 없음" : `${untagged.length}개에 붙이기`}
+              <button
+                onClick={() => run(untagged, false)}
+                disabled={untagged.length === 0}
+              >
+                {untagged.length === 0
+                  ? "새로 붙일 녹음 없음"
+                  : `${untagged.length}개에 붙이기`}
               </button>
-              <button onClick={() => run(all, true)} disabled={all.length === 0}>
+              <button
+                onClick={() => run(all, true)}
+                disabled={all.length === 0}
+              >
                 {`모두 다시 붙이기 (${all.length}개)`}
               </button>
             </>
@@ -534,11 +809,52 @@ function BulkTag() {
       </div>
       {bulk.running && <BulkProgress />}
       <p className="muted small">
-        위의 "AI로 정리하기"와 같은 일(제목 짓기, 태그 붙이기, 할 일 후보 찾기)을 예전 녹음에 합니다. "붙이기"는 그 설정을 켜기 전에 받아 적었거나 중간에 실패해
-        아직 비어 있는 녹음만, "모두 다시 붙이기"는 받아 적기가 끝난 모든 녹음을 지금 규칙으로 다시 정리합니다(태그 규칙이나 캘린더 확인 방식이 바뀌었을 때).
-        요약은 만들지 않습니다(요약은 녹음 화면의 요약 탭에서).
+        위의 "AI로 정리하기"와 같은 일(제목 짓기, 태그 붙이기, 할 일 후보
+        찾기)을 예전 녹음에 합니다. "붙이기"는 그 설정을 켜기 전에 받아 적었거나
+        중간에 실패해 아직 비어 있는 녹음만, "모두 다시 붙이기"는 받아 적기가
+        끝난 모든 녹음을 지금 규칙으로 다시 정리합니다(태그 규칙이나 캘린더 확인
+        방식이 바뀌었을 때). 요약은 만들지 않습니다(요약은 녹음 화면의 요약
+        탭에서).
       </p>
-      {!bulk.running && bulk.message && <p className="muted small">{bulk.message}</p>}
+      {!bulk.running && bulk.message && (
+        <p className="muted small">{bulk.message}</p>
+      )}
+    </div>
+  );
+}
+
+const LOCATION_SETTINGS_URL =
+  "x-apple.systempreferences:com.apple.preference.security?Privacy_LocationServices";
+
+/** 위치를 못 남기는 이유. 위치 받기는 실패해도 조용히 건너뛰므로, 여기서 알리지 않으면 왜 안 남는지 알 길이 없다 */
+function LocationHint() {
+  const [status, setStatus] = useState<LocationStatus | null>(null);
+  useEffect(() => {
+    const check = () =>
+      api
+        .locationStatus()
+        .then(setStatus)
+        .catch(() => setStatus(null));
+    check();
+    // 시스템 설정에서 켜고 돌아오면 바로 반영한다
+    window.addEventListener("focus", check);
+    return () => window.removeEventListener("focus", check);
+  }, []);
+  const message =
+    status === "off"
+      ? "이 Mac의 위치 서비스가 꺼져 있어 위치를 남기지 못합니다. 시스템 설정에서 위치 서비스를 켜 주세요."
+      : status === "denied"
+        ? "sori에 위치 접근을 허락하지 않아 위치를 남기지 못합니다. 시스템 설정의 위치 서비스 목록에서 sori를 켜 주세요."
+        : null;
+  if (!message) return null;
+  return (
+    <div className="setting-warning">
+      <span>{message}</span>
+      <button
+        onClick={() => openUrl(LOCATION_SETTINGS_URL).catch(() => undefined)}
+      >
+        위치 서비스 열기
+      </button>
     </div>
   );
 }

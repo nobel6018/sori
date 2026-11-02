@@ -1286,6 +1286,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             busy_tasks,
+            location_status,
             get_settings,
             save_settings,
             model_catalog,
@@ -1433,6 +1434,12 @@ fn setup_deep_links(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> 
 }
 
 /// 녹음의 오디오 파일을 Finder(Windows는 탐색기)에서 보여 준다
+/// 녹음할 때 위치를 남길 수 있는지. 설정 화면의 안내에 쓴다
+#[tauri::command]
+fn location_status() -> &'static str {
+    location::status()
+}
+
 #[tauri::command]
 fn sync_status(state: State<AppState>) -> sync::SyncStatus {
     state.syncer.status()

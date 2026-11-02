@@ -286,6 +286,7 @@ export interface ProgressEvent {
 
 export const api = {
   getSettings: () => invoke<Settings>("get_settings"),
+  locationStatus: () => invoke<LocationStatus>("location_status"),
   saveSettings: (settings: Settings) => invoke<void>("save_settings", { settings }),
   modelCatalog: () => invoke<ModelCatalog>("model_catalog"),
   installModels: (whisper: string[]) => invoke<ModelCatalog>("install_models", { whisper }),
@@ -387,3 +388,6 @@ export function formatTime(seconds: number): string {
 export function speakerName(recording: Recording, speaker: number): string {
   return recording.speakerNames[String(speaker)] ?? `화자 ${speaker + 1}`;
 }
+
+/** 녹음할 때 위치를 남길 수 있는 상태(`location.rs` `status`) */
+export type LocationStatus = "off" | "denied" | "ask" | "ok" | "unsupported";

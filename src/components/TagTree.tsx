@@ -1,4 +1,6 @@
 import { useState } from "react";
+
+const COLLAPSED_KEY = "sori.tagTreeCollapsed";
 import { TagNode, UNTAGGED } from "../tags";
 
 interface Props {
@@ -14,7 +16,9 @@ interface Props {
  * @see docs/organize.md */
 export function TagTree({ tree, total, untagged, selected, onSelect }: Props) {
   // 처음에는 첫 단계만 보이고, 고른 태그의 상위는 펼쳐 둔다
-  const [open, setOpen] = useState<Set<string>>(() => new Set(ancestors(selected)));
+  const [open, setOpen] = useState<Set<string>>(
+    () => new Set(ancestors(selected)),
+  );
   const toggle = (path: string) =>
     setOpen((prev) => {
       const next = new Set(prev);
@@ -23,52 +27,136 @@ export function TagTree({ tree, total, untagged, selected, onSelect }: Props) {
       return next;
     });
 
+  // 태그 목록 전체를 접어 녹음 목록을 넓게 본다. 접어도 고른 태그는 머리줄에 남겨 걸러 보는 중임을 알린다
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem(COLLAPSED_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const toggleAll = () => {
+    const next = !collapsed;
+    setCollapsed(next);
+    try {
+      if (next) localStorage.setItem(COLLAPSED_KEY, "1");
+      else localStorage.removeItem(COLLAPSED_KEY);
+    } catch {
+      // 저장하지 못해도 이번 실행에서는 접힌다
+    }
+  };
+  const current =
+    selected === null
+      ? { name: "전체", count: total }
+      : selected === UNTAGGED
+        ? { name: "태그 없음", count: untagged }
+        : (() => {
+            const node = findNode(tree, selected);
+            return { name: node?.path ?? selected, count: node?.count ?? 0 };
+          })();
+
   const row = (node: TagNode, depth: number) => (
     <li key={node.path}>
-      <div className={`tag-row ${selected === node.path ? "selected" : ""}`} style={{ paddingLeft: 6 + depth * 14 }}>
+      <div
+        className={`tag-row ${selected === node.path ? "selected" : ""}`}
+        style={{ paddingLeft: 6 + depth * 14 }}
+      >
         {node.children.length > 0 ? (
-          <button className="tag-toggle" aria-label={open.has(node.path) ? "접기" : "펼치기"} onClick={() => toggle(node.path)}>
+          <button
+            className="tag-toggle"
+            aria-label={open.has(node.path) ? "접기" : "펼치기"}
+            onClick={() => toggle(node.path)}
+          >
             {open.has(node.path) ? "▾" : "▸"}
           </button>
         ) : (
           <span className="tag-toggle" />
         )}
-        <button className="tag-name" onClick={() => onSelect(selected === node.path ? null : node.path)} title={node.path}>
+        <button
+          className="tag-name"
+          onClick={() => onSelect(selected === node.path ? null : node.path)}
+          title={node.path}
+        >
           {node.name}
         </button>
         <span className="tag-count">{node.count}</span>
       </div>
-      {open.has(node.path) && node.children.length > 0 && <ul>{node.children.map((c) => row(c, depth + 1))}</ul>}
+      {open.has(node.path) && node.children.length > 0 && (
+        <ul>{node.children.map((c) => row(c, depth + 1))}</ul>
+      )}
     </li>
   );
 
   return (
-    <nav className="tag-tree" aria-label="태그">
-      <ul>
-        <li>
-          <div className={`tag-row ${selected === null ? "selected" : ""}`} style={{ paddingLeft: 6 }}>
-            <span className="tag-toggle" />
-            <button className="tag-name" onClick={() => onSelect(null)}>
-              전체
-            </button>
-            <span className="tag-count">{total}</span>
-          </div>
-        </li>
-        {tree.map((n) => row(n, 0))}
-        {untagged > 0 && untagged < total && (
+    <nav
+      className={`tag-tree ${collapsed ? "collapsed" : ""}`}
+      aria-label="태그"
+    >
+      <button
+        className="tag-tree-head"
+        aria-expanded={!collapsed}
+        onClick={toggleAll}
+        title={collapsed ? "태그 펼치기" : "태그 접기"}
+      >
+        <span className="tag-toggle">{collapsed ? "▸" : "▾"}</span>
+        <span className="tag-tree-title">태그</span>
+        {collapsed && (
+          <>
+            <span
+              className={`tag-tree-current ${selected === null ? "" : "active"}`}
+            >
+              {current.name}
+            </span>
+            <span className="tag-count">{current.count}</span>
+          </>
+        )}
+      </button>
+      {!collapsed && (
+        <ul>
           <li>
-            <div className={`tag-row ${selected === UNTAGGED ? "selected" : ""}`} style={{ paddingLeft: 6 }}>
+            <div
+              className={`tag-row ${selected === null ? "selected" : ""}`}
+              style={{ paddingLeft: 6 }}
+            >
               <span className="tag-toggle" />
-              <button className="tag-name muted" onClick={() => onSelect(selected === UNTAGGED ? null : UNTAGGED)}>
-                태그 없음
+              <button className="tag-name" onClick={() => onSelect(null)}>
+                전체
               </button>
-              <span className="tag-count">{untagged}</span>
+              <span className="tag-count">{total}</span>
             </div>
           </li>
-        )}
-      </ul>
+          {tree.map((n) => row(n, 0))}
+          {untagged > 0 && untagged < total && (
+            <li>
+              <div
+                className={`tag-row ${selected === UNTAGGED ? "selected" : ""}`}
+                style={{ paddingLeft: 6 }}
+              >
+                <span className="tag-toggle" />
+                <button
+                  className="tag-name muted"
+                  onClick={() =>
+                    onSelect(selected === UNTAGGED ? null : UNTAGGED)
+                  }
+                >
+                  태그 없음
+                </button>
+                <span className="tag-count">{untagged}</span>
+              </div>
+            </li>
+          )}
+        </ul>
+      )}
     </nav>
   );
+}
+
+function findNode(nodes: TagNode[], path: string): TagNode | undefined {
+  for (const n of nodes) {
+    if (n.path === path) return n;
+    if (path.startsWith(`${n.path}/`)) return findNode(n.children, path);
+  }
+  return undefined;
 }
 
 function ancestors(path: string | null): string[] {

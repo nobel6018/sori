@@ -28,6 +28,18 @@ pub fn capture() -> Option<Location> {
     None
 }
 
+/// 위치를 남길 수 있는 상태. 설정 화면이 왜 안 남는지 알려 주는 데 쓴다
+/// "off": Mac 전체 위치 서비스 꺼짐, "denied": sori를 허락하지 않음, "ask": 아직 묻지 않음, "ok": 허락함, "unsupported": macOS 밖
+#[cfg(target_os = "macos")]
+pub fn status() -> &'static str {
+    mac::status()
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn status() -> &'static str {
+    "unsupported"
+}
+
 /// 주소 조각에서 겹치는 것을 빼고 잇는다. "서울특별시", "서울특별시", "중구", "세종대로 110" → "서울특별시 중구 세종대로 110"
 pub fn join_place(parts: &[Option<String>]) -> Option<String> {
     let mut out: Vec<String> = Vec::new();
@@ -52,8 +64,28 @@ mod mac {
     use objc2_core_location::{kCLLocationAccuracyHundredMeters, CLAuthorizationStatus, CLGeocoder, CLLocation, CLLocationManager, CLPlacemark};
     use objc2_foundation::{NSArray, NSDate, NSError, NSRunLoop};
 
+    const PUMP: Duration = Duration::from_millis(250);
+
+    /// 작업 스레드의 런루프는 입력 소스가 없으면 바로 돌아와, 그대로 두면 기다리는 내내 CPU를 태운다. 남은 시간은 잔다
     fn pump(run_loop: &NSRunLoop) {
-        run_loop.runUntilDate(&NSDate::dateWithTimeIntervalSinceNow(0.25));
+        let started = Instant::now();
+        run_loop.runUntilDate(&NSDate::dateWithTimeIntervalSinceNow(PUMP.as_secs_f64()));
+        if let Some(rest) = PUMP.checked_sub(started.elapsed()) {
+            std::thread::sleep(rest);
+        }
+    }
+
+    pub fn status() -> &'static str {
+        unsafe {
+            if !CLLocationManager::locationServicesEnabled_class() {
+                return "off";
+            }
+            match CLLocationManager::new().authorizationStatus() {
+                CLAuthorizationStatus::NotDetermined => "ask",
+                CLAuthorizationStatus::Denied | CLAuthorizationStatus::Restricted => "denied",
+                _ => "ok",
+            }
+        }
     }
 
     /// 위도, 경도, 오차(m). 이 스레드의 런루프를 돌리며 기다린다(CLLocationManager는 만든 스레드의 런루프로 받는다)
