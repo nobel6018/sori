@@ -1508,17 +1508,45 @@ kbd {
   color: var(--muted);
 }
 .todo-panel {
-  margin: 8px 0 12px;
-  padding: 10px 12px;
+  margin: 0;
+  padding: 4px 8px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--panel);
 }
-.todo-panel h3 {
-  margin: 0 0 6px;
+.todo-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 32px;
+  padding: 2px 4px;
+  background: transparent;
+  border-color: transparent;
   font-size: 13px;
-  color: var(--muted);
   font-weight: 600;
+  color: var(--muted);
+  text-align: left;
+}
+.todo-toggle .caret {
+  width: 10px;
+}
+.todo-toggle + ul {
+  margin: 4px 4px 0;
+}
+.todo-panel .todo-actions {
+  margin: 8px 4px 6px;
+}
+.process-actions {
+  display: flex;
+  gap: 8px;
+}
+.process-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
 }
 .todo-panel ul {
   list-style: none;

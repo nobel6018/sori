@@ -7,6 +7,8 @@ interface Props {
   version: string | undefined;
 }
 
+const OPEN_KEY = "sori.todoOpen";
+
 /** AI가 뽑은 할 일 후보. 사용자가 고르고 고친 것만 "미리 알림에 넣기"를 눌러야 들어간다
  * @see docs/organize.md */
 export function TodoPanel({ recordingId, version }: Props) {
@@ -14,6 +16,14 @@ export function TodoPanel({ recordingId, version }: Props) {
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  // 접힘 여부는 녹음마다가 아니라 앱 전체에서 기억한다
+  const [open, setOpen] = useState(() => localStorage.getItem(OPEN_KEY) === "1");
+  const toggleOpen = () =>
+    setOpen((prev) => {
+      if (prev) localStorage.removeItem(OPEN_KEY);
+      else localStorage.setItem(OPEN_KEY, "1");
+      return !prev;
+    });
 
   const load = useCallback(() => {
     api
@@ -68,7 +78,14 @@ export function TodoPanel({ recordingId, version }: Props) {
 
   return (
     <section className="todo-panel">
-      <h3>할 일 후보</h3>
+      <button className="todo-toggle" aria-expanded={open} onClick={toggleOpen}>
+        <span className="caret">{open ? "▾" : "▸"}</span>
+        할 일 후보 {todos.length}개
+        {pending.length > 0 && pending.length < todos.length && <span className="muted"> (안 넣은 것 {pending.length}개)</span>}
+        {pending.length === 0 && <span className="muted"> (모두 넣음)</span>}
+      </button>
+      {open && (
+      <>
       <ul>
         {todos.map((t) => (
           <li key={t.id} className={t.addedAt ? "added" : ""}>
@@ -110,6 +127,8 @@ export function TodoPanel({ recordingId, version }: Props) {
           </button>
           <span className="muted">고른 할 일만 미리 알림의 기본 목록에 넣습니다. 처음에 macOS가 허락을 묻습니다</span>
         </div>
+      )}
+      </>
       )}
       {message && <p className="muted">{message}</p>}
     </section>

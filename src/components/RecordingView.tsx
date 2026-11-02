@@ -39,6 +39,8 @@ export function RecordingView({ recording, allTags, progress, seekTo, onSeekDone
   const [languages, setLanguages] = useState<string[]>(recording.languages);
   const [diarize, setDiarize] = useState(recording.diarize ?? true);
   const [running, setRunning] = useState(recording.status === "processing");
+  // 다 받아 적은 녹음은 처리 설정을 한 줄로 접어 전사에 자리를 내준다
+  const [processOpen, setProcessOpen] = useState(recording.status !== "done");
   const [error, setError] = useState<string | null>(recording.error);
   const [currentTime, setCurrentTime] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -381,7 +383,22 @@ export function RecordingView({ recording, allTags, progress, seekTo, onSeekDone
         />
       )}
 
-      {rec.status !== "recording" && (
+      {rec.status !== "recording" && !(processOpen || running || error) && (
+        <section className="process-summary">
+          <span className="muted">
+            {diarize ? "전사 + 화자 나누기" : "전사만"}
+            {diarize && numSpeakers ? `, 화자 ${numSpeakers}명` : ""}
+            {languages.length
+              ? `, ${LANGUAGES.filter((l) => languages.includes(l.code))
+                  .map((l) => l.label)
+                  .join(", ")}`
+              : ", 언어 자동 감지"}
+          </span>
+          <button onClick={() => setProcessOpen(true)}>설정 바꿔 다시 처리</button>
+        </section>
+      )}
+
+      {rec.status !== "recording" && (processOpen || running || error) && (
       <section className="process-panel">
         <div className="field">
           <span>처리 방식</span>
@@ -425,6 +442,11 @@ export function RecordingView({ recording, allTags, progress, seekTo, onSeekDone
           </div>
         </div>
         <div className="process-actions">
+          {transcript && !running && (
+            <button className="ghost" onClick={() => setProcessOpen(false)}>
+              접기
+            </button>
+          )}
           {running ? (
             <button onClick={() => api.cancelProcessing(rec.id)}>취소</button>
           ) : (
