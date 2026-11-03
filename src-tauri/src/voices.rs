@@ -155,7 +155,14 @@ impl VoiceBook {
             let _guard = self.lock.lock().unwrap();
             self.load().unwrap_or_default()
         };
-        assign(&voices.iter().map(|v| (v.id.clone(), v.name.clone(), v.centroid())).collect::<Vec<_>>(), speakers, skip)
+        // 예전 버전에서 "화자 1"처럼 기본 이름으로 기억한 목소리는 다른 녹음에 붙이지 않는다.
+        // 붙이면 새 녹음의 다른 사람이 "화자 1"로 나와 그 녹음의 진짜 화자 1과 헷갈린다
+        let named: Vec<_> = voices
+            .iter()
+            .filter(|v| !is_placeholder_name(&v.name))
+            .map(|v| (v.id.clone(), v.name.clone(), v.centroid()))
+            .collect();
+        assign(&named, speakers, skip)
     }
 }
 
@@ -232,5 +239,28 @@ mod tests {
         assert_eq!(list[0].id, id);
         assert_eq!(list[0].samples, MAX_SAMPLES);
         let _ = fs::remove_file(path);
+    }
+}
+
+/// 화면이 이름 없는 화자에 붙이는 기본 이름("화자 1", "Speaker 2")인지. 사람 이름이 아니라서 목소리로 기억하지 않는다
+pub fn is_placeholder_name(name: &str) -> bool {
+    let n = name.trim();
+    ["화자", "Speaker", "speaker"]
+        .iter()
+        .any(|p| n.strip_prefix(p).is_some_and(|rest| { let r = rest.trim(); !r.is_empty() && r.chars().all(|c| c.is_ascii_digit()) }))
+}
+
+#[cfg(test)]
+mod placeholder_tests {
+    use super::*;
+
+    #[test]
+    fn 기본_화자_이름은_사람_이름이_아니다() {
+        assert!(is_placeholder_name("화자 1"));
+        assert!(is_placeholder_name("화자12"));
+        assert!(is_placeholder_name("Speaker 3"));
+        assert!(!is_placeholder_name("화자"));
+        assert!(!is_placeholder_name("영훈"));
+        assert!(!is_placeholder_name("화자 김"));
     }
 }

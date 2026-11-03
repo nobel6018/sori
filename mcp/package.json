@@ -1,6 +1,6 @@
 {
   "name": "sori-mcp",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "private": true,
   "description": "sori 녹음을 Claude 같은 MCP 클라이언트에서 찾고 읽고, 받아 적기와 요약을 앱에 맡기는 서버",
   "type": "module",

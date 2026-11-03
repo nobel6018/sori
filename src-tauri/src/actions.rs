@@ -23,8 +23,9 @@ pub enum Action {
     ShowWindow,
     /// 녹음을 열고, time이 있으면 그 시각부터 재생할 준비를 한다
     Open { id: String, time: Option<f32> },
-    /// process가 true면 가져온 뒤 기본 설정으로 바로 처리한다
-    Import { paths: Vec<PathBuf>, process: bool },
+    /// process가 true면 가져온 뒤 기본 설정으로 바로 처리하고, false면 처리하지 않는다(MCP가 옵션을 붙여 따로 맡길 때).
+    /// 없으면 설정의 "가져오면 자동 처리"를 따른다
+    Import { paths: Vec<PathBuf>, process: Option<bool> },
     Search { query: String },
     /// 녹음을 받아 적는다(MCP, 스크립트용). 비어 있는 값은 앱 설정을 따른다
     #[serde(rename_all = "camelCase")]
@@ -35,9 +36,16 @@ pub enum Action {
         diarize: Option<bool>,
         /// 받아 적은 뒤 요약까지 할지. 없으면 설정의 "자동 요약"을 따른다
         summarize: Option<bool>,
+        /// 요약 템플릿 id. 없으면 설정의 기본 템플릿
+        template: Option<String>,
     },
     /// 이미 받아 적은 녹음을 다시 요약한다
-    Summarize { id: String },
+    Summarize { id: String, template: Option<String> },
+    /// 화자 이름을 붙인다. 빈 이름은 이름을 지운다. 화면의 이름 바꾸기와 같아 목소리 기억도 따른다
+    NameSpeakers { id: String, names: Vec<(u32, String)> },
+    /// AI가 뽑은 할 일 중 고른 것을 미리 알림에 넣는다
+    #[serde(rename_all = "camelCase")]
+    AddReminders { id: String, todo_ids: Vec<String> },
     /// 토큰 없는 녹음, 가져오기 링크를 막았다. 화면에 알린다
     Blocked { message: String },
 }
@@ -54,6 +62,8 @@ impl Action {
                 | Action::Bookmark
                 | Action::Process { .. }
                 | Action::Summarize { .. }
+                | Action::NameSpeakers { .. }
+                | Action::AddReminders { .. }
         )
     }
 }
@@ -204,7 +214,14 @@ fn needs_token(action: &Action) -> bool {
             | Action::Import { .. }
             | Action::Process { .. }
             | Action::Summarize { .. }
+            | Action::NameSpeakers { .. }
+            | Action::AddReminders { .. }
     )
+}
+
+/// 요약 템플릿 id(meeting, one-on-one 같은 영문 소문자, 숫자, -, _)만 받는다
+fn template_id(v: Option<String>) -> Option<String> {
+    v.filter(|t| (1..=40).contains(&t.len()) && t.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'))
 }
 
 /// "1", "true"면 참, "0", "false"면 거짓, 그 밖에는 값 없음
@@ -217,7 +234,8 @@ fn flag(v: Option<String>) -> Option<bool> {
 }
 
 /// sori://record/toggle, sori://open?id=..&t=12.5, sori://import?path=..&path=..&process=1, sori://search?q=..,
-/// sori://process?id=..&speakers=3&lang=ko&diarize=1&summarize=1, sori://summarize?id=..
+/// sori://process?id=..&speakers=3&lang=ko&diarize=1&summarize=1&template=meeting, sori://summarize?id=..&template=..,
+/// sori://speakers?id=..&name=0:영훈&name=1:시안, sori://reminders?id=..&todo=<할 일 id>
 pub fn parse_url(url: &Url) -> Option<Action> {
     if url.scheme() != "sori" {
         return None;
@@ -245,7 +263,7 @@ pub fn parse_url(url: &Url) -> Option<Action> {
             }
             Some(Action::Import {
                 paths,
-                process: query("process").is_some_and(|v| v == "1" || v == "true"),
+                process: flag(query("process")),
             })
         }
         ("search", "") => Some(Action::Search {
@@ -265,11 +283,42 @@ pub fn parse_url(url: &Url) -> Option<Action> {
                 languages: (!languages.is_empty()).then_some(languages),
                 diarize: flag(query("diarize")),
                 summarize: flag(query("summarize")),
+                template: template_id(query("template")),
             })
         }
         ("summarize", "") => Some(Action::Summarize {
             id: query("id").filter(|id| uuid::Uuid::parse_str(id).is_ok())?,
+            template: template_id(query("template")),
         }),
+        ("speakers", "") => {
+            // name=<화자 번호>:<이름>. 이름 안의 :는 그대로 둔다
+            let names: Vec<(u32, String)> = url
+                .query_pairs()
+                .filter(|(k, _)| k == "name")
+                .filter_map(|(_, v)| {
+                    let (n, name) = v.split_once(':')?;
+                    let n = n.parse::<u32>().ok().filter(|n| *n < 100)?;
+                    let name = name.trim();
+                    (name.chars().count() <= 40).then(|| (n, name.to_string()))
+                })
+                .collect();
+            if names.is_empty() {
+                return None;
+            }
+            Some(Action::NameSpeakers { id: query("id").filter(|id| uuid::Uuid::parse_str(id).is_ok())?, names })
+        }
+        ("reminders", "") => {
+            let todo_ids: Vec<String> = url
+                .query_pairs()
+                .filter(|(k, _)| k == "todo")
+                .map(|(_, v)| v.into_owned())
+                .filter(|t| !t.is_empty() && t.len() <= 64)
+                .collect();
+            if todo_ids.is_empty() {
+                return None;
+            }
+            Some(Action::AddReminders { id: query("id").filter(|id| uuid::Uuid::parse_str(id).is_ok())?, todo_ids })
+        }
         _ => None,
     }
 }
@@ -363,7 +412,7 @@ mod tests {
             action,
             Some(Action::Import {
                 paths: vec![PathBuf::from("/Users/a/회의.m4a"), PathBuf::from("/tmp/b.wav")],
-                process: true,
+                process: Some(true),
             })
         );
     }
@@ -371,14 +420,17 @@ mod tests {
     #[test]
     fn 녹음과_가져오기와_처리만_토큰이_필요하다() {
         assert!(needs_token(&Action::StartRecording));
-        assert!(needs_token(&Action::Import { paths: vec![], process: false }));
-        assert!(needs_token(&Action::Summarize { id: String::new() }));
+        assert!(needs_token(&Action::Import { paths: vec![], process: None }));
+        assert!(needs_token(&Action::Summarize { id: String::new(), template: None }));
+        assert!(needs_token(&Action::NameSpeakers { id: String::new(), names: vec![] }));
+        assert!(needs_token(&Action::AddReminders { id: String::new(), todo_ids: vec![] }));
         assert!(needs_token(&Action::Process {
             id: String::new(),
             num_speakers: None,
             languages: None,
             diarize: None,
-            summarize: None
+            summarize: None,
+            template: None
         }));
         assert!(!needs_token(&Action::Search { query: String::new() }));
     }
@@ -387,7 +439,9 @@ mod tests {
     fn 처리_링크는_화자_수와_언어와_요약_여부를_읽는다() {
         let id = "0b8e7c52-3f7a-4c3e-9d55-2a7f0b9a1c11";
 
-        let action = parse(&format!("sori://process?id={id}&speakers=3&lang=ko&lang=en&diarize=1&summarize=0&token=x"));
+        let action = parse(&format!(
+            "sori://process?id={id}&speakers=3&lang=ko&lang=en&diarize=1&summarize=0&template=one-on-one&token=x"
+        ));
 
         assert_eq!(
             action,
@@ -397,6 +451,7 @@ mod tests {
                 languages: Some(vec!["ko".into(), "en".into()]),
                 diarize: Some(true),
                 summarize: Some(false),
+                template: Some("one-on-one".into()),
             })
         );
     }
@@ -405,19 +460,58 @@ mod tests {
     fn 처리_링크의_빈_값은_설정을_따르도록_비워_둔다() {
         let id = "0b8e7c52-3f7a-4c3e-9d55-2a7f0b9a1c11";
 
-        let action = parse(&format!("sori://process?id={id}&speakers=0&lang=../x"));
+        let action = parse(&format!("sori://process?id={id}&speakers=0&lang=../x&template=../x"));
 
         assert_eq!(
             action,
-            Some(Action::Process { id: id.into(), num_speakers: None, languages: None, diarize: None, summarize: None })
+            Some(Action::Process {
+                id: id.into(),
+                num_speakers: None,
+                languages: None,
+                diarize: None,
+                summarize: None,
+                template: None
+            })
         );
         assert_eq!(parse("sori://process?id=nope"), None);
-        assert_eq!(parse(&format!("sori://summarize?id={id}")), Some(Action::Summarize { id: id.into() }));
+        assert_eq!(
+            parse(&format!("sori://summarize?id={id}")),
+            Some(Action::Summarize { id: id.into(), template: None })
+        );
+    }
+
+    #[test]
+    fn 화자_이름_링크는_번호와_이름을_읽는다() {
+        let id = "0b8e7c52-3f7a-4c3e-9d55-2a7f0b9a1c11";
+
+        let action = parse(&format!(
+            "sori://speakers?id={id}&name=0%3A%EC%98%81%ED%9B%88&name=2%3A&name=x%3Ay&name=1%3Aa%3Ab"
+        ));
+
+        assert_eq!(
+            action,
+            Some(Action::NameSpeakers {
+                id: id.into(),
+                names: vec![(0, "영훈".into()), (2, String::new()), (1, "a:b".into())],
+            })
+        );
+        assert_eq!(parse(&format!("sori://speakers?id={id}")), None);
+    }
+
+    #[test]
+    fn 미리_알림_링크는_할_일_id를_여러_개_받는다() {
+        let id = "0b8e7c52-3f7a-4c3e-9d55-2a7f0b9a1c11";
+
+        let action = parse(&format!("sori://reminders?id={id}&todo=a&todo=b"));
+
+        assert_eq!(action, Some(Action::AddReminders { id: id.into(), todo_ids: vec!["a".into(), "b".into()] }));
+        assert_eq!(parse(&format!("sori://reminders?id={id}")), None);
     }
 
     #[test]
     fn 처리_요청은_창을_띄우지_않는다() {
-        assert!(!Action::Summarize { id: String::new() }.shows_window());
+        assert!(!Action::Summarize { id: String::new(), template: None }.shows_window());
+        assert!(!Action::NameSpeakers { id: String::new(), names: vec![] }.shows_window());
     }
 
     #[test]

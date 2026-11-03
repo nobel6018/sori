@@ -1,4 +1,5 @@
 mod actions;
+mod activity;
 pub mod ask;
 pub mod engine;
 pub mod meeting;
@@ -57,6 +58,8 @@ struct AppState {
     /// 지금 띄운 회의 질문 창의 내용
     meeting_prompt: Mutex<Option<meeting::Prompt>>,
     syncer: sync::Syncer,
+    /// 앱 밖 도구(MCP)가 읽는 진행 상황 파일
+    activity: Arc<activity::Activity>,
 }
 
 impl AppState {
@@ -687,8 +690,10 @@ async fn summarize_recording(
         summaries.insert(id.clone(), cancel_tx);
     }
     emit_summary_state(&app, &id, true);
+    state.activity.write(&id, "summarizing", None);
     let result = summarize::run(provider, prompt, cancel_rx).await;
     state.summaries.lock().unwrap().remove(&id);
+    state.activity.clear(&id);
     emit_summary_state(&app, &id, false);
 
     let markdown = result.map_err(|e| format!("{e:#}"))?;
@@ -856,7 +861,8 @@ async fn name_speaker(app: AppHandle, id: String, speaker: i32, name: String) ->
                 r.speaker_names.insert(key.clone(), name.clone());
             }
         })?;
-        if !state.store.get_settings(&state.home).remember_voices {
+        // 기본 이름("화자 1")은 사람 이름이 아니므로 목소리로 기억하지 않는다
+        if !state.store.get_settings(&state.home).remember_voices || voices::is_placeholder_name(&name) {
             return Ok(recording);
         }
         match remember_speaker(&state, &recording, speaker, &name, previous_voice.as_deref()) {
@@ -1077,6 +1083,7 @@ pub(crate) async fn run_processing(app: AppHandle, request: ProcessRequest) -> C
         Ok(guard) => guard,
         Err(_) => {
             let _ = app.emit("progress", ProgressEvent { id: id.clone(), stage: Stage::Waiting, progress: 0.0 });
+            state.activity.write(&id, "waiting", None);
             state.pipeline.lock().await
         }
     };
@@ -1104,6 +1111,7 @@ pub(crate) async fn run_processing(app: AppHandle, request: ProcessRequest) -> C
 
         let emitter = worker_app.clone();
         let event_id = worker_id.clone();
+        let activity = state.activity.clone();
         engine::process(
             &audio,
             &whisper,
@@ -1117,6 +1125,9 @@ pub(crate) async fn run_processing(app: AppHandle, request: ProcessRequest) -> C
             },
             cancel,
             move |stage, progress| {
+                if let Some(name) = serde_json::to_value(stage).ok().and_then(|v| v.as_str().map(String::from)) {
+                    activity.write(&event_id, &name, Some(progress));
+                }
                 let _ = emitter.emit(
                     "progress",
                     ProgressEvent {
@@ -1133,6 +1144,7 @@ pub(crate) async fn run_processing(app: AppHandle, request: ProcessRequest) -> C
     .unwrap_or_else(|e| Err(eyre::eyre!("처리하다 멈췄습니다: {e}")));
 
     state.cancels.lock().unwrap().remove(&id);
+    state.activity.clear(&id);
     match result {
         Ok(transcript) => {
             state.store.save_transcript(&id, &transcript).map_err(err)?;
@@ -1203,7 +1215,7 @@ pub fn run() {
             if files.is_empty() {
                 actions::show_main(app);
             } else {
-                actions::dispatch(app, actions::Action::Import { paths: files, process: false });
+                actions::dispatch(app, actions::Action::Import { paths: files, process: None });
             }
         }))
         .plugin(tauri_plugin_deep_link::init())
@@ -1248,7 +1260,9 @@ pub fn run() {
                 store.save(&r)?;
             }
 
+            let activity_dir = store.data_file("activity");
             app.manage(AppState {
+                activity: Arc::new(activity::Activity::new(activity_dir)),
                 store,
                 home,
                 whisper: Mutex::new(None),
@@ -1280,7 +1294,7 @@ pub fn run() {
             // Windows는 파일을 sori로 열면 경로를 실행 인자로 넘긴다. macOS는 RunEvent::Opened로 온다
             let files = opened_files(std::env::args_os().skip(1).map(PathBuf::from));
             if !files.is_empty() {
-                actions::dispatch(&handle, actions::Action::Import { paths: files, process: false });
+                actions::dispatch(&handle, actions::Action::Import { paths: files, process: None });
             }
             Ok(())
         })
@@ -1341,7 +1355,7 @@ pub fn run() {
             if let tauri::RunEvent::Opened { urls } = &event {
                 let files = opened_files(urls.iter().filter_map(|u| u.to_file_path().ok()));
                 if !files.is_empty() {
-                    actions::dispatch(app, actions::Action::Import { paths: files, process: false });
+                    actions::dispatch(app, actions::Action::Import { paths: files, process: None });
                 }
             }
             if let tauri::RunEvent::Exit = &event {

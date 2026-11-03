@@ -83,13 +83,19 @@ export default function App() {
     async (
       id: string,
       title: string,
-      opts: { numSpeakers?: number | null; languages?: string[] | null; diarize?: boolean | null; summarize?: boolean | null } = {},
+      opts: {
+        numSpeakers?: number | null;
+        languages?: string[] | null;
+        diarize?: boolean | null;
+        summarize?: boolean | null;
+        template?: string | null;
+      } = {},
     ) => {
       const settings = await api.getSettings();
       const summarize = opts.summarize ?? settings.autoSummarize;
       return api
         .processRecording(id, opts.numSpeakers ?? null, opts.languages ?? settings.defaultLanguages, opts.diarize ?? null)
-        .then(() => (summarize ? api.summarize(id, null, null) : undefined))
+        .then(() => (summarize ? api.summarize(id, null, opts.template ?? null) : undefined))
         // 요약이 있으면 요약을 보고 정리한다. 정리는 덤이라 실패해도 알리지 않고 기록만 남긴다
         .then(() => (settings.autoTag ? api.organize(id).catch((e) => console.warn(`AI 정리 실패 ${title}: ${e}`)) : undefined))
         .catch((e) => setError(`${title}: ${e}`))
@@ -151,8 +157,9 @@ export default function App() {
           return openRecording(a.id, a.time);
         case "import": {
           const imported = await importPaths(a.paths);
-          if (a.process) await processDefaults(imported);
-          else await autoProcess(imported);
+          // process=0(MCP가 옵션을 붙여 따로 맡길 때)이면 자동 처리도 하지 않는다
+          if (a.process === true) await processDefaults(imported);
+          else if (a.process === null) await autoProcess(imported);
           return;
         }
         case "bookmark":
@@ -176,10 +183,24 @@ export default function App() {
         case "summarize": {
           const title = (await api.listRecordings()).find((r) => r.id === a.id)?.title ?? a.id;
           return api
-            .summarize(a.id, null, null)
+            .summarize(a.id, null, a.template)
             .catch((e) => setError(`${title}: ${e}`))
             .finally(refresh);
         }
+        case "nameSpeakers": {
+          // 화면에서 이름을 바꾸는 것과 같은 함수라 목소리 기억도 같이 따른다. 한 번에 하나씩 바꾼다(같은 녹음 파일을 고친다)
+          try {
+            for (const [speaker, name] of a.names) await api.nameSpeaker(a.id, speaker, name);
+          } catch (e) {
+            setError(`화자 이름을 바꾸지 못했습니다: ${e}`);
+          }
+          return refresh();
+        }
+        case "addReminders":
+          return api
+            .addTodosToReminders(a.id, a.todoIds)
+            .catch((e) => setError(`미리 알림에 넣지 못했습니다: ${e}`))
+            .finally(refresh);
         case "blocked":
           return setError(a.message);
       }

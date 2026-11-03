@@ -13,7 +13,7 @@ function dataDir(): string {
   return join(process.env.XDG_DATA_HOME ?? join(homedir(), ".local/share"), id);
 }
 
-const DATA_DIR = process.env.SORI_DATA_DIR ?? dataDir();
+export const DATA_DIR = process.env.SORI_DATA_DIR ?? dataDir();
 export const RECORDINGS_DIR = join(DATA_DIR, "recordings");
 
 export interface Note {
@@ -31,6 +31,29 @@ export interface Recording {
   speakerNames: Record<string, string>;
   notes?: Note[];
   error?: string | null;
+  /** `/`로 계층을 만든 태그(업무/영업) */
+  tags?: string[];
+  sourceName?: string;
+}
+
+/** 앱이 받아 적기와 요약 중에 적는 진행 상황. src-tauri/src/activity.rs Entry와 같다 */
+export interface Activity {
+  stage: "waiting" | "decoding" | "diarizing" | "transcribing" | "summarizing" | string;
+  progress: number | null;
+  updatedAt: string;
+}
+
+/** src-tauri/src/store.rs Todo와 같다 */
+export interface Todo {
+  id: string;
+  text: string;
+  due?: string | null;
+  addedAt?: string | null;
+}
+
+export interface SummaryTemplate {
+  id: string;
+  name: string;
 }
 
 export interface Utterance {
@@ -143,4 +166,38 @@ export function openLink(url: string): Promise<void> {
   return new Promise((resolve, reject) => {
     execFile(cmd, args as string[], (e) => (e ? reject(new Error(`${cmd} 실행 실패: ${e.message}`)) : resolve()));
   });
+}
+
+/** 진행 상황 파일. 앱이 비정상 종료해 남은 오래된 파일(10분 넘게 안 바뀜)은 없는 것으로 본다 */
+export async function getActivity(id: string): Promise<Activity | null> {
+  const a = await readJson<Activity>(join(DATA_DIR, "activity", `${id}.json`));
+  if (!a || Date.now() - new Date(a.updatedAt).getTime() > 10 * 60 * 1000) return null;
+  return a;
+}
+
+export async function getTodos(id: string): Promise<Todo[]> {
+  return (await readJson<Todo[]>(join(RECORDINGS_DIR, id, "todos.json"))) ?? [];
+}
+
+/** 앱 설정의 요약 템플릿과 기본 템플릿, 자동 요약 여부 */
+export async function summarySettings(): Promise<{ templates: SummaryTemplate[]; defaultTemplate: string | null; autoSummarize: boolean }> {
+  const s = await readJson<{ summaryTemplates?: SummaryTemplate[]; defaultTemplate?: string; autoSummarize?: boolean }>(
+    join(DATA_DIR, "settings.json"),
+  );
+  // 설정에 템플릿이 없으면 앱은 기본 템플릿을 쓴다. 회의록(meeting)이 첫 번째다(src-tauri/src/summarize.rs default_templates)
+  const templates = s?.summaryTemplates?.length ? s.summaryTemplates : [{ id: "meeting", name: "회의록" }];
+  return {
+    templates: templates.map((t) => ({ id: t.id, name: t.name })),
+    defaultTemplate: s?.defaultTemplate ?? templates[0]?.id ?? null,
+    autoSummarize: s?.autoSummarize === true,
+  };
+}
+
+/** "1:02:03", "12:30", "75" 같은 시각을 초로. 못 읽으면 null */
+export function parseTime(v: string | number | undefined): number | null {
+  if (v === undefined) return null;
+  if (typeof v === "number") return v >= 0 ? v : null;
+  const parts = v.trim().split(":").map(Number);
+  if (parts.length === 0 || parts.length > 3 || parts.some((n) => !Number.isFinite(n) || n < 0)) return null;
+  return parts.reduce((acc, n) => acc * 60 + n, 0);
 }

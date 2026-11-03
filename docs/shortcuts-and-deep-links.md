@@ -52,10 +52,12 @@ sori가 앞에 없어도 동작합니다. 설정에서 바꾸고, Backspace로 �
 | `sori://record/bookmark?token=..` | 녹음 중인 지금 시각에 북마크 | 아니요 |
 | `sori://show` | 창 앞으로 | 예 |
 | `sori://open?id=<녹음 id>&t=<초>` | 녹음을 열고 그 시각으로 이동. `t`는 생략 가능 | 예 |
-| `sori://import?path=<경로>&path=<경로>&process=1&token=<토큰>` | 파일을 가져옴. `process=1`이면 기본 설정으로 바로 처리 | 예 |
+| `sori://import?path=<경로>&path=<경로>&process=1&token=<토큰>` | 파일을 가져옴. `process=1`이면 기본 설정으로 바로 처리, `process=0`이면 처리하지 않음, 없으면 설정의 자동 처리를 따름 | 예 |
 | `sori://search?q=<검색어>` | 빠른 찾기 창을 그 검색어로 엶 | 예 |
 | `sori://process?id=<녹음 id>&speakers=<n>&lang=<코드>&diarize=1&summarize=1&token=<토큰>` | 녹음을 받아 적고, `summarize=1`이면 이어서 요약. `lang`은 여러 번 줄 수 있음. 빠진 값은 앱 설정을 따름 | 아니요 |
-| `sori://summarize?id=<녹음 id>&token=<토큰>` | 이미 받아 적은 녹음을 다시 요약 | 아니요 |
+| `sori://summarize?id=<녹음 id>&template=<템플릿 id>&token=<토큰>` | 이미 받아 적은 녹음을 다시 요약. `template`은 생략 가능 | 아니요 |
+| `sori://speakers?id=<녹음 id>&name=<화자 번호>:<이름>&token=<토큰>` | 화자 이름 붙이기. 화자 번호는 0부터, `name`은 여러 번. 빈 이름은 지움 | 아니요 |
+| `sori://reminders?id=<녹음 id>&todo=<할 일 id>&token=<토큰>` | 고른 할 일을 미리 알림에 넣음 | 아니요 |
 
 처리와 요약 링크는 MCP 서버(`mcp/`)가 씁니다. 창을 앞으로 가져오지 않고 뒤에서 처리하며, 진행 표시는 목록과 녹음 화면에 평소처럼 나옵니다(`App.tsx` `handleAction`, `processOne`). 화면 버튼과 달리 링크는 아무 때나 오므로, 녹음 중이거나 이미 처리 중인 녹음은 건너뛰고 알립니다.
 
@@ -65,7 +67,7 @@ macOS에서는 설치된 앱(.app)만 링크를 받습니다. `pnpm tauri dev`�
 
 ### 링크 토큰
 
-웹 페이지도 `sori://` 링크를 열 수 있습니다. 브라우저의 "sori를 여시겠습니까?" 확인창에서 "항상 허용"을 고른 사용자라면, 아무 웹 페이지나 몰래 녹음을 켤 수 있게 됩니다. 그래서 마이크를 켜는 링크(`record/*`), 이 컴퓨터의 파일을 읽는 링크(`import`), 전사와 요약을 덮어쓰는 링크(`process`, `summarize`)는 `token`을 함께 보내야 합니다(`actions::needs_token`). 처리와 요약은 CPU와 요약 사용량도 씁니다.
+웹 페이지도 `sori://` 링크를 열 수 있습니다. 브라우저의 "sori를 여시겠습니까?" 확인창에서 "항상 허용"을 고른 사용자라면, 아무 웹 페이지나 몰래 녹음을 켤 수 있게 됩니다. 그래서 마이크를 켜는 링크(`record/*`), 이 컴퓨터의 파일을 읽는 링크(`import`), 전사와 요약을 덮어쓰거나 이름, 미리 알림을 바꾸는 링크(`process`, `summarize`, `speakers`, `reminders`)는 `token`을 함께 보내야 합니다(`actions::needs_token`). 처리와 요약은 CPU와 요약 사용량도 씁니다.
 
 - sori는 처음 실행할 때 데이터 폴더에 `link-token` 파일을 만듭니다(macOS `~/Library/Application Support/com.nobel6018.sori/link-token`, 권한 600). 이 컴퓨터의 사용자 권한으로 도는 프로그램만 읽을 수 있고, 웹 페이지는 읽지 못합니다
 - 토큰이 없거나 틀리면 요청을 버리고 창을 띄워 막았다고 알립니다

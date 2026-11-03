@@ -189,7 +189,7 @@ export type AppAction =
   | { type: "bookmark" }
   | { type: "showWindow" }
   | { type: "open"; id: string; time: number | null }
-  | { type: "import"; paths: string[]; process: boolean }
+  | { type: "import"; paths: string[]; process: boolean | null }
   | { type: "search"; query: string }
   | {
       type: "process";
@@ -198,8 +198,11 @@ export type AppAction =
       languages: string[] | null;
       diarize: boolean | null;
       summarize: boolean | null;
+      template: string | null;
     }
-  | { type: "summarize"; id: string }
+  | { type: "summarize"; id: string; template: string | null }
+  | { type: "nameSpeakers"; id: string; names: [number, string][] }
+  | { type: "addReminders"; id: string; todoIds: string[] }
   | { type: "blocked"; message: string };
 
 export interface SearchHit {
