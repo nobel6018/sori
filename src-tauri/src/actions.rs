@@ -26,6 +26,18 @@ pub enum Action {
     /// process가 true면 가져온 뒤 기본 설정으로 바로 처리한다
     Import { paths: Vec<PathBuf>, process: bool },
     Search { query: String },
+    /// 녹음을 받아 적는다(MCP, 스크립트용). 비어 있는 값은 앱 설정을 따른다
+    #[serde(rename_all = "camelCase")]
+    Process {
+        id: String,
+        num_speakers: Option<u32>,
+        languages: Option<Vec<String>>,
+        diarize: Option<bool>,
+        /// 받아 적은 뒤 요약까지 할지. 없으면 설정의 "자동 요약"을 따른다
+        summarize: Option<bool>,
+    },
+    /// 이미 받아 적은 녹음을 다시 요약한다
+    Summarize { id: String },
     /// 토큰 없는 녹음, 가져오기 링크를 막았다. 화면에 알린다
     Blocked { message: String },
 }
@@ -33,7 +45,16 @@ pub enum Action {
 impl Action {
     /// 창을 앞으로 가져올지. 녹음 토글은 회의 앱을 보는 중에 누르므로 창을 띄우지 않는다
     fn shows_window(&self) -> bool {
-        !matches!(self, Action::ToggleRecording | Action::StartRecording | Action::StopRecording | Action::Bookmark)
+        // 처리 요청은 뒤에서 돈다. 다른 일을 하는 중에 창을 빼앗지 않는다
+        !matches!(
+            self,
+            Action::ToggleRecording
+                | Action::StartRecording
+                | Action::StopRecording
+                | Action::Bookmark
+                | Action::Process { .. }
+                | Action::Summarize { .. }
+        )
     }
 }
 
@@ -171,15 +192,32 @@ pub fn handle_url(app: &AppHandle, url: &Url) {
     dispatch(app, action);
 }
 
-/// 마이크를 켜거나 이 컴퓨터의 파일을 읽는 요청. 열기, 검색, 창 앞으로는 토큰 없이 받는다
+/// 마이크를 켜거나, 이 컴퓨터의 파일을 읽거나, 녹음의 전사와 요약을 덮어쓰는 요청. 열기, 검색, 창 앞으로는 토큰 없이 받는다.
+/// 처리와 요약은 데이터를 바꾸고 CPU와 요약 사용량을 쓰므로 웹 페이지가 마음대로 부르지 못하게 한다
 fn needs_token(action: &Action) -> bool {
     matches!(
         action,
-        Action::ToggleRecording | Action::StartRecording | Action::StopRecording | Action::Bookmark | Action::Import { .. }
+        Action::ToggleRecording
+            | Action::StartRecording
+            | Action::StopRecording
+            | Action::Bookmark
+            | Action::Import { .. }
+            | Action::Process { .. }
+            | Action::Summarize { .. }
     )
 }
 
-/// sori://record/toggle, sori://open?id=..&t=12.5, sori://import?path=..&path=..&process=1, sori://search?q=..
+/// "1", "true"면 참, "0", "false"면 거짓, 그 밖에는 값 없음
+fn flag(v: Option<String>) -> Option<bool> {
+    match v.as_deref() {
+        Some("1" | "true") => Some(true),
+        Some("0" | "false") => Some(false),
+        _ => None,
+    }
+}
+
+/// sori://record/toggle, sori://open?id=..&t=12.5, sori://import?path=..&path=..&process=1, sori://search?q=..,
+/// sori://process?id=..&speakers=3&lang=ko&diarize=1&summarize=1, sori://summarize?id=..
 pub fn parse_url(url: &Url) -> Option<Action> {
     if url.scheme() != "sori" {
         return None;
@@ -212,6 +250,25 @@ pub fn parse_url(url: &Url) -> Option<Action> {
         }
         ("search", "") => Some(Action::Search {
             query: query("q").unwrap_or_default(),
+        }),
+        ("process", "") => {
+            let languages: Vec<String> = url
+                .query_pairs()
+                .filter(|(k, _)| k == "lang")
+                .map(|(_, v)| v.into_owned())
+                // whisper 언어 코드(ko, en, zh, auto)만 받는다
+                .filter(|l| (2..=5).contains(&l.len()) && l.chars().all(|c| c.is_ascii_lowercase()))
+                .collect();
+            Some(Action::Process {
+                id: query("id").filter(|id| uuid::Uuid::parse_str(id).is_ok())?,
+                num_speakers: query("speakers").and_then(|n| n.parse::<u32>().ok()).filter(|n| (1..=20).contains(n)),
+                languages: (!languages.is_empty()).then_some(languages),
+                diarize: flag(query("diarize")),
+                summarize: flag(query("summarize")),
+            })
+        }
+        ("summarize", "") => Some(Action::Summarize {
+            id: query("id").filter(|id| uuid::Uuid::parse_str(id).is_ok())?,
         }),
         _ => None,
     }
@@ -312,10 +369,55 @@ mod tests {
     }
 
     #[test]
-    fn 녹음과_가져오기만_토큰이_필요하다() {
+    fn 녹음과_가져오기와_처리만_토큰이_필요하다() {
         assert!(needs_token(&Action::StartRecording));
         assert!(needs_token(&Action::Import { paths: vec![], process: false }));
+        assert!(needs_token(&Action::Summarize { id: String::new() }));
+        assert!(needs_token(&Action::Process {
+            id: String::new(),
+            num_speakers: None,
+            languages: None,
+            diarize: None,
+            summarize: None
+        }));
         assert!(!needs_token(&Action::Search { query: String::new() }));
+    }
+
+    #[test]
+    fn 처리_링크는_화자_수와_언어와_요약_여부를_읽는다() {
+        let id = "0b8e7c52-3f7a-4c3e-9d55-2a7f0b9a1c11";
+
+        let action = parse(&format!("sori://process?id={id}&speakers=3&lang=ko&lang=en&diarize=1&summarize=0&token=x"));
+
+        assert_eq!(
+            action,
+            Some(Action::Process {
+                id: id.into(),
+                num_speakers: Some(3),
+                languages: Some(vec!["ko".into(), "en".into()]),
+                diarize: Some(true),
+                summarize: Some(false),
+            })
+        );
+    }
+
+    #[test]
+    fn 처리_링크의_빈_값은_설정을_따르도록_비워_둔다() {
+        let id = "0b8e7c52-3f7a-4c3e-9d55-2a7f0b9a1c11";
+
+        let action = parse(&format!("sori://process?id={id}&speakers=0&lang=../x"));
+
+        assert_eq!(
+            action,
+            Some(Action::Process { id: id.into(), num_speakers: None, languages: None, diarize: None, summarize: None })
+        );
+        assert_eq!(parse("sori://process?id=nope"), None);
+        assert_eq!(parse(&format!("sori://summarize?id={id}")), Some(Action::Summarize { id: id.into() }));
+    }
+
+    #[test]
+    fn 처리_요청은_창을_띄우지_않는다() {
+        assert!(!Action::Summarize { id: String::new() }.shows_window());
     }
 
     #[test]

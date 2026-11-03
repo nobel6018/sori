@@ -191,6 +191,15 @@ export type AppAction =
   | { type: "open"; id: string; time: number | null }
   | { type: "import"; paths: string[]; process: boolean }
   | { type: "search"; query: string }
+  | {
+      type: "process";
+      id: string;
+      numSpeakers: number | null;
+      languages: string[] | null;
+      diarize: boolean | null;
+      summarize: boolean | null;
+    }
+  | { type: "summarize"; id: string }
   | { type: "blocked"; message: string };
 
 export interface SearchHit {

@@ -4123,7 +4123,7 @@ dependencies = [
 
 [[package]]
 name = "sori"
-version = "0.9.13"
+version = "0.10.0"
 dependencies = [
  "block2",
  "chrono",

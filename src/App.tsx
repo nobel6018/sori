@@ -75,20 +75,34 @@ export default function App() {
    * 녹음을 기본 설정(언어는 설정값, 화자 수는 자동)으로 처리한다. 백엔드가 하나씩 차례로 처리한다.
    * 자동 요약이 켜져 있으면 처리가 끝난 뒤 기본 템플릿으로 요약한다
    */
-  const processDefaults = useCallback(
-    async (recordings: Recording[]) => {
+  /**
+   * 받아 적고, 설정에 따라 요약과 AI 정리까지 한다. 비어 있는 옵션은 설정(언어, 화자 분리, 자동 요약)을 따른다.
+   * 가져오기 자동 처리와 sori://process 링크(MCP)가 같이 쓴다
+   */
+  const processOne = useCallback(
+    async (
+      id: string,
+      title: string,
+      opts: { numSpeakers?: number | null; languages?: string[] | null; diarize?: boolean | null; summarize?: boolean | null } = {},
+    ) => {
       const settings = await api.getSettings();
-      for (const r of recordings) {
-        api
-          .processRecording(r.id, null, settings.defaultLanguages)
-          .then(() => (settings.autoSummarize ? api.summarize(r.id, null, null) : undefined))
-          // 요약이 있으면 요약을 보고 정리한다. 정리는 덤이라 실패해도 알리지 않고 기록만 남긴다
-          .then(() => (settings.autoTag ? api.organize(r.id).catch((e) => console.warn(`AI 정리 실패 ${r.title}: ${e}`)) : undefined))
-          .catch((e) => setError(`${r.title}: ${e}`))
-          .finally(refresh);
-      }
+      const summarize = opts.summarize ?? settings.autoSummarize;
+      return api
+        .processRecording(id, opts.numSpeakers ?? null, opts.languages ?? settings.defaultLanguages, opts.diarize ?? null)
+        .then(() => (summarize ? api.summarize(id, null, null) : undefined))
+        // 요약이 있으면 요약을 보고 정리한다. 정리는 덤이라 실패해도 알리지 않고 기록만 남긴다
+        .then(() => (settings.autoTag ? api.organize(id).catch((e) => console.warn(`AI 정리 실패 ${title}: ${e}`)) : undefined))
+        .catch((e) => setError(`${title}: ${e}`))
+        .finally(refresh);
     },
     [refresh],
+  );
+
+  const processDefaults = useCallback(
+    async (recordings: Recording[]) => {
+      for (const r of recordings) void processOne(r.id, r.title);
+    },
+    [processOne],
   );
 
   /** 설정에서 자동 처리를 켰으면 처리한다 */
@@ -148,11 +162,29 @@ export default function App() {
             .catch((e) => setError(String(e)));
         case "search":
           return setQuickOpen(a.query);
+        case "process": {
+          // 화면을 바꾸지 않고 뒤에서 처리한다. 진행 표시는 목록과 녹음 화면에 그대로 나온다.
+          // 화면 버튼은 녹음 중이거나 처리 중이면 막혀 있지만 링크는 아무 때나 오므로 여기서 같은 조건으로 막는다
+          const target = (await api.listRecordings()).find((r) => r.id === a.id);
+          if (!target) return setError("처리할 녹음을 찾지 못했습니다");
+          if (target.status === "recording" || target.status === "processing") {
+            return setError(`${target.title}: ${target.status === "recording" ? "녹음 중" : "이미 처리 중"}이라 처리 요청을 건너뛰었습니다`);
+          }
+          await refresh();
+          return processOne(a.id, target.title, a);
+        }
+        case "summarize": {
+          const title = (await api.listRecordings()).find((r) => r.id === a.id)?.title ?? a.id;
+          return api
+            .summarize(a.id, null, null)
+            .catch((e) => setError(`${title}: ${e}`))
+            .finally(refresh);
+        }
         case "blocked":
           return setError(a.message);
       }
     },
-    [importPaths, openRecording, processDefaults, autoProcess, refresh, setQuickOpen],
+    [importPaths, openRecording, processDefaults, processOne, autoProcess, refresh, setQuickOpen],
   );
 
   // 전역 단축키와 sori:// 링크. 구독을 마친 뒤 그 전에 들어온 요청(링크로 앱을 띄운 경우)을 받아 처리한다

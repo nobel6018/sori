@@ -1,8 +1,9 @@
+import { execFile } from "node:child_process";
 import { readFile, readdir, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-// sori 앱이 저장한 파일을 직접 읽는다. 쓰지는 않는다.
+// sori 앱이 저장한 파일을 직접 읽는다. 쓰지는 않는다. 처리와 요약은 sori:// 링크로 앱에 맡긴다.
 // 형식은 src-tauri/src/store.rs, src-tauri/src/engine/mod.rs와 같아야 한다
 
 function dataDir(): string {
@@ -12,7 +13,8 @@ function dataDir(): string {
   return join(process.env.XDG_DATA_HOME ?? join(homedir(), ".local/share"), id);
 }
 
-export const RECORDINGS_DIR = process.env.SORI_DATA_DIR ? join(process.env.SORI_DATA_DIR, "recordings") : join(dataDir(), "recordings");
+const DATA_DIR = process.env.SORI_DATA_DIR ?? dataDir();
+export const RECORDINGS_DIR = join(DATA_DIR, "recordings");
 
 export interface Note {
   time: number;
@@ -28,6 +30,7 @@ export interface Recording {
   duration: number | null;
   speakerNames: Record<string, string>;
   notes?: Note[];
+  error?: string | null;
 }
 
 export interface Utterance {
@@ -102,4 +105,42 @@ export function formatTime(seconds: number): string {
 /** 대소문자와 띄어쓰기를 무시한다. src-tauri/src/search.rs normalize와 같다 */
 export function normalize(s: string): string {
   return s.replace(/\s+/g, "").toLowerCase();
+}
+
+/** 번호("12", "#12")나 id로 녹음을 찾는다 */
+export async function findRecording(key: string): Promise<Recording | undefined> {
+  const k = key.trim().replace(/^#/, "");
+  const all = await listRecordings();
+  return /^\d+$/.test(k) ? all.find((x) => x.number === Number(k)) : all.find((x) => x.id === k);
+}
+
+export function getRecording(id: string): Promise<Recording | null> {
+  return readJson<Recording>(join(RECORDINGS_DIR, id, "meta.json"));
+}
+
+/**
+ * 녹음, 처리 링크가 함께 보내야 하는 값. sori가 처음 실행할 때 데이터 폴더에 만든다(권한 600).
+ * 웹 페이지는 이 파일을 읽지 못하므로, 이 값이 있으면 이 컴퓨터의 사용자가 보낸 요청으로 본다
+ * @see ../../docs/shortcuts-and-deep-links.md
+ */
+export async function linkToken(): Promise<string | null> {
+  try {
+    const t = (await readFile(join(DATA_DIR, "link-token"), "utf8")).trim();
+    return t.length >= 32 ? t : null;
+  } catch {
+    return null;
+  }
+}
+
+/** sori:// 링크를 연다. 셸을 거치지 않아 링크 안의 &가 명령으로 해석되지 않는다 */
+export function openLink(url: string): Promise<void> {
+  const [cmd, args] =
+    process.platform === "darwin"
+      ? ["open", ["-g", url]] // -g: sori 창을 앞으로 가져오지 않는다
+      : process.platform === "win32"
+        ? ["rundll32", ["url.dll,FileProtocolHandler", url]]
+        : ["xdg-open", [url]];
+  return new Promise((resolve, reject) => {
+    execFile(cmd, args as string[], (e) => (e ? reject(new Error(`${cmd} 실행 실패: ${e.message}`)) : resolve()));
+  });
 }
