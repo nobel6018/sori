@@ -120,9 +120,9 @@ export function SummaryPanel({ recordingId, summaries, onSummarized }: Props) {
           ))}
         </select>
         {running ? (
-          <button onClick={() => api.cancelSummary(recordingId)}>취소</button>
+          <button onClick={() => api.cancelSummary(recordingId)} data-shortcut="cancel">취소</button>
         ) : (
-          <button className="primary" onClick={run} disabled={!provider}>
+          <button className="primary" onClick={run} disabled={!provider} data-shortcut="summarize">
             {summaries.length > 0 ? "새 요약 만들기" : "요약 만들기"}
           </button>
         )}

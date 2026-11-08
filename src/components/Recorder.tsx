@@ -80,7 +80,7 @@ export function Recorder({ onStarted, onStopped, onError }: Props) {
   if (!active) {
     return (
       <div className="recorder">
-        <button className="record-button" onClick={start} disabled={busy}>
+        <button className="record-button" onClick={start} disabled={busy} data-shortcut-global="toggleRecording">
           <span className="record-dot" aria-hidden />
           녹음 시작
         </button>
@@ -93,7 +93,7 @@ export function Recorder({ onStarted, onStopped, onError }: Props) {
       <div className="recorder-row">
         <span className="record-dot live" aria-hidden />
         <span className="recorder-time">{formatTime(elapsed)}</span>
-        <button className="stop-button" onClick={stop} disabled={busy}>
+        <button className="stop-button" onClick={stop} disabled={busy} data-shortcut-global="toggleRecording">
           멈추기
         </button>
       </div>

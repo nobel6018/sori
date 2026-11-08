@@ -1251,20 +1251,57 @@ kbd {
   background: var(--accent-soft);
 }
 
-/* ⌘(윈도우는 Ctrl)를 누르고 있으면 뜨는 단축키 미리보기. 키를 떼면 사라지고 클릭을 가로채지 않는다 */
-.shortcut-peek-backdrop {
+/* ⌘(윈도우는 Ctrl)를 누르고 있으면 버튼 위에 뜨는 단축키. 키를 떼면 사라지고 클릭을 가로채지 않는다
+   @see docs/shortcuts-and-deep-links.md */
+.shortcut-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
   pointer-events: none;
 }
-.shortcut-peek {
-  width: min(920px, 94vw);
+.shortcut-badge {
+  position: fixed;
+  transform: translate(-50%, -50%);
+  padding: 1px 6px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+  color: var(--bg);
+  background: var(--text);
+  border: none;
+  border-radius: 5px;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.3);
+  animation: shortcut-pop 0.12s ease-out;
 }
-.shortcut-peek .shortcut-sections {
-  columns: 3 260px;
-  column-gap: 28px;
+.shortcut-rest {
+  position: fixed;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px 14px;
+  max-width: min(860px, calc(100vw - 32px));
+  padding: 8px 14px;
+  font-size: 12px;
+  color: var(--muted);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.25);
+  animation: shortcut-pop 0.12s ease-out;
 }
-.shortcut-peek section {
-  break-inside: avoid;
-  margin-bottom: 10px;
+.shortcut-rest span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+@keyframes shortcut-pop {
+  from {
+    opacity: 0;
+  }
 }
 .segmented button.on {
   background: var(--accent-soft);

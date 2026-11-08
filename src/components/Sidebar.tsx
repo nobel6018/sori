@@ -60,10 +60,10 @@ export function Sidebar({ recordings, selectedId, progress, onSelect, onImport, 
           sori
         </span>
         <div className="sidebar-actions">
-          <button onClick={onSearch} title={`빠른 찾기 (${IS_MAC ? "⌘K" : "Ctrl+K"})`}>
+          <button onClick={onSearch} data-shortcut="search" title={`빠른 찾기 (${IS_MAC ? "⌘K" : "Ctrl+K"})`}>
             찾기
           </button>
-          <button onClick={onImport} title={`가져오기 (${IS_MAC ? "⌘O" : "Ctrl+O"})`}>
+          <button onClick={onImport} data-shortcut="import" title={`가져오기 (${IS_MAC ? "⌘O" : "Ctrl+O"})`}>
             가져오기
           </button>
         </div>
@@ -109,7 +109,7 @@ export function Sidebar({ recordings, selectedId, progress, onSelect, onImport, 
         })}
       </ul>
       <footer className="sidebar-footer">
-        <button className="ghost" onClick={onOpenSettings}>
+        <button className="ghost" onClick={onOpenSettings} data-shortcut="settings">
           설정
         </button>
         <BulkBadge />

@@ -5,6 +5,7 @@ import { api, AppAction, AUDIO_EXTENSIONS, ModelCatalog, modelsReady, ProgressEv
 import { AskPanel } from "./components/AskPanel";
 import { QuickOpen } from "./components/QuickOpen";
 import { ShortcutHelp } from "./components/ShortcutHelp";
+import { ShortcutOverlay } from "./components/ShortcutOverlay";
 import { AppCommand, Command, IS_MAC, matchShortcut, sendCommand } from "./shortcuts";
 import { allTagPaths, tagCounts } from "./tags";
 import { ModelSetup } from "./components/ModelSetup";
@@ -276,7 +277,7 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, [modalOpen]);
 
-  // ⌘ 하나만 0.6초 누르고 있으면 미리보기를 띄우고, 떼거나 다른 키를 함께 누르면 닫는다.
+  // ⌘ 하나만 0.6초 누르고 있으면 버튼 위에 단축키를 띄우고, 떼거나 다른 키를 함께 누르면 닫는다.
   // ⌘C처럼 바로 다른 키를 누르는 평소 사용에서는 뜨지 않는다. ⌘Tab으로 다른 앱에 가면 keyup이 오지 않아 blur에서도 닫는다
   useEffect(() => {
     const modKey = IS_MAC ? "Meta" : "Control";
@@ -413,7 +414,7 @@ export default function App() {
           <div className="empty">
             <p className="empty-title">녹음 파일을 끌어다 놓거나 가져오세요</p>
             <p className="muted">m4a, mp3, wav, flac, ogg, mp4 등. 받아 적기와 화자 분리는 이 컴퓨터 안에서만 이뤄집니다.</p>
-            <button className="primary" onClick={pickFiles}>
+            <button className="primary" onClick={pickFiles} data-shortcut="import">
               파일 가져오기
             </button>
           </div>
@@ -437,7 +438,7 @@ export default function App() {
         />
       )}
       {helpOpen && <ShortcutHelp onClose={() => setHelpOpen(false)} />}
-      {peekOpen && !helpOpen && !modalOpen && <ShortcutHelp peek onClose={() => setPeekOpen(false)} />}
+      {peekOpen && !helpOpen && !modalOpen && <ShortcutOverlay />}
       {askOpen && (
         <div className="modal-backdrop" onClick={() => setAskOpen(false)} onKeyDown={(e) => e.key === "Escape" && setAskOpen(false)}>
           <div className="modal ask-modal" role="dialog" aria-label="모든 녹음에 물어보기" onClick={(e) => e.stopPropagation()}>

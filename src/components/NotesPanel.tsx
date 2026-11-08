@@ -50,7 +50,7 @@ export function NotesPanel({ recording, recordingNow, currentTime, onSeek, onCha
           placeholder={recordingNow ? "메모를 쓰고 Enter. 지금 시각이 함께 저장됩니다" : `메모를 쓰고 Enter. 재생 위치 ${formatTime(currentTime)}에 저장됩니다`}
           aria-label="메모"
         />
-        <button type="button" onClick={() => add("")} title={`북마크 (${bookmarkKey})`}>
+        <button type="button" onClick={() => add("")} data-shortcut="bookmark" title={`북마크 (${bookmarkKey})`}>
           북마크
         </button>
       </form>

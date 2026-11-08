@@ -304,7 +304,7 @@ export function RecordingView({ recording, allTags, progress, seekTo, onSeekDone
           }}
         />
         <div className="header-actions">
-          <button onClick={() => api.revealAudio(rec.id).catch((e) => setError(String(e)))} title={IS_MAC ? "⇧⌘E" : "Ctrl+Shift+E"}>
+          <button onClick={() => api.revealAudio(rec.id).catch((e) => setError(String(e)))} data-shortcut="reveal" title={IS_MAC ? "⇧⌘E" : "Ctrl+Shift+E"}>
             {IS_MAC ? "Finder에서 보기" : "탐색기에서 보기"}
           </button>
           {transcript && (
@@ -323,12 +323,12 @@ export function RecordingView({ recording, allTags, progress, seekTo, onSeekDone
                 ))}
               </select>
               <button onClick={() => copy("text")}>{copied === "text" ? "복사했습니다" : "전사 복사"}</button>
-              <button onClick={() => copy("markdown")} title={IS_MAC ? "⇧⌘C" : "Ctrl+Shift+C"}>
+              <button onClick={() => copy("markdown")} data-shortcut="copy-markdown" title={IS_MAC ? "⇧⌘C" : "Ctrl+Shift+C"}>
                 {copied === "markdown" ? "복사했습니다" : "마크다운 복사"}
               </button>
             </>
           )}
-          <button className="danger" onClick={remove} disabled={running || rec.status === "recording"}>
+          <button className="danger" onClick={remove} disabled={running || rec.status === "recording"} data-shortcut="delete">
             삭제
           </button>
         </div>
@@ -448,9 +448,9 @@ export function RecordingView({ recording, allTags, progress, seekTo, onSeekDone
             </button>
           )}
           {running ? (
-            <button onClick={() => api.cancelProcessing(rec.id)}>취소</button>
+            <button onClick={() => api.cancelProcessing(rec.id)} data-shortcut="cancel">취소</button>
           ) : (
-            <button className="primary" onClick={start}>
+            <button className="primary" onClick={start} data-shortcut="process">
               {transcript ? "다시 처리" : "전사 시작"}
             </button>
           )}
@@ -483,16 +483,16 @@ export function RecordingView({ recording, allTags, progress, seekTo, onSeekDone
 
       {transcript && (
         <div className="tabs" role="tablist">
-          <button role="tab" aria-selected={tab === "transcript"} className={tab === "transcript" ? "on" : ""} onClick={() => setTab("transcript")}>
+          <button role="tab" aria-selected={tab === "transcript"} className={tab === "transcript" ? "on" : ""} onClick={() => setTab("transcript")} data-shortcut="tab-transcript">
             전사
           </button>
-          <button role="tab" aria-selected={tab === "summary"} className={tab === "summary" ? "on" : ""} onClick={() => setTab("summary")}>
+          <button role="tab" aria-selected={tab === "summary"} className={tab === "summary" ? "on" : ""} onClick={() => setTab("summary")} data-shortcut="tab-summary">
             요약{detail?.summaries.length ? (detail.summaries.length > 1 ? ` ${detail.summaries.length}` : "") : " (없음)"}
           </button>
-          <button role="tab" aria-selected={tab === "ask"} className={tab === "ask" ? "on" : ""} onClick={() => setTab("ask")}>
+          <button role="tab" aria-selected={tab === "ask"} className={tab === "ask" ? "on" : ""} onClick={() => setTab("ask")} data-shortcut="tab-ask">
             질문
           </button>
-          <button role="tab" aria-selected={tab === "notes"} className={tab === "notes" ? "on" : ""} onClick={() => setTab("notes")}>
+          <button role="tab" aria-selected={tab === "notes"} className={tab === "notes" ? "on" : ""} onClick={() => setTab("notes")} data-shortcut="tab-notes">
             메모{rec.notes.length ? ` ${rec.notes.length}` : ""}
           </button>
         </div>
@@ -536,6 +536,7 @@ export function RecordingView({ recording, allTags, progress, seekTo, onSeekDone
           <button
             className={`follow-toggle ${follow ? "on" : ""}`}
             aria-pressed={follow}
+            data-shortcut="toggle-follow"
             title="재생 중 지금 말하는 부분으로 전사를 자동 스크롤합니다"
             onClick={toggleFollow}
           >
