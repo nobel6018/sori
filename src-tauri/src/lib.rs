@@ -254,6 +254,26 @@ fn get_recording(state: State<AppState>, id: String) -> CmdResult<RecordingDetai
     })
 }
 
+/// 제목만 바꾼다(MCP의 sori://title 링크). 사람이 고친 것으로 남겨 AI 정리가 다시 덮지 않게 한다
+#[tauri::command]
+fn set_title(app: AppHandle, state: State<AppState>, id: String, title: String) -> CmdResult<Recording> {
+    let title = title.trim().to_string();
+    if title.is_empty() {
+        return Err("제목이 비어 있습니다".into());
+    }
+    let recording = state
+        .store
+        .update(&id, |r| {
+            if r.title != title {
+                r.title_edited_at = Some(chrono::Utc::now());
+            }
+            r.title = title;
+        })
+        .map_err(err)?;
+    sync::request(&app);
+    Ok(recording)
+}
+
 /// 사람이 태그를 고친다. 고친 시각을 남겨 AI 자동 분류가 덮어쓰지 않게 한다(docs/organize.md)
 #[tauri::command]
 fn set_tags(app: AppHandle, state: State<AppState>, id: String, tags: Vec<String>) -> CmdResult<Recording> {
@@ -591,7 +611,7 @@ async fn organize_recording(app: AppHandle, id: String, force: Option<bool>) -> 
                 r.tags = organized.tags;
             }
             if let Some(title) = organized.title {
-                if r.title_edited_at.is_none() && tagger::is_default_title(&r.title) {
+                if r.title_edited_at.is_none() && tagger::is_default_title(&r.title, &r.source_name) {
                     r.title = title;
                 }
             }
@@ -1310,6 +1330,7 @@ pub fn run() {
             import_recordings,
             get_recording,
             update_recording,
+            set_title,
             set_tags,
             organize_recording,
             get_todos,

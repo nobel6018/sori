@@ -197,6 +197,11 @@ export default function App() {
           }
           return refresh();
         }
+        case "setTitle":
+          return api
+            .setTitle(a.id, a.title)
+            .catch((e) => setError(`제목을 바꾸지 못했습니다: ${e}`))
+            .finally(refresh);
         case "addReminders":
           return api
             .addTodosToReminders(a.id, a.todoIds)

@@ -202,6 +202,7 @@ export type AppAction =
     }
   | { type: "summarize"; id: string; template: string | null }
   | { type: "nameSpeakers"; id: string; names: [number, string][] }
+  | { type: "setTitle"; id: string; title: string }
   | { type: "addReminders"; id: string; todoIds: string[] }
   | { type: "blocked"; message: string };
 
@@ -309,6 +310,7 @@ export const api = {
   importRecordings: (paths: string[]) => invoke<Recording[]>("import_recordings", { paths }),
   getRecording: (id: string) => invoke<RecordingDetail>("get_recording", { id }),
   updateRecording: (recording: Recording) => invoke<void>("update_recording", { recording }),
+  setTitle: (id: string, title: string) => invoke<Recording>("set_title", { id, title }),
   setTags: (id: string, tags: string[]) => invoke<Recording>("set_tags", { id, tags }),
   /** AI로 제목, 태그, 할 일 후보를 정리한다. 이미 정리했으면(force가 아니면) null */
   organize: (id: string, force = false) => invoke<Recording | null>("organize_recording", { id, force }),

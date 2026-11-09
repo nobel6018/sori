@@ -62,6 +62,7 @@ sori가 앞에 없어도 동작합니다. 설정에서 바꾸고, Backspace로 �
 | `sori://process?id=<녹음 id>&speakers=<n>&lang=<코드>&diarize=1&summarize=1&token=<토큰>` | 녹음을 받아 적고, `summarize=1`이면 이어서 요약. `lang`은 여러 번 줄 수 있음. 빠진 값은 앱 설정을 따름 | 아니요 |
 | `sori://summarize?id=<녹음 id>&template=<템플릿 id>&token=<토큰>` | 이미 받아 적은 녹음을 다시 요약. `template`은 생략 가능 | 아니요 |
 | `sori://speakers?id=<녹음 id>&name=<화자 번호>:<이름>&token=<토큰>` | 화자 이름 붙이기. 화자 번호는 0부터, `name`은 여러 번. 빈 이름은 지움 | 아니요 |
+| `sori://title?id=<녹음 id>&title=<제목>&token=<토큰>` | 제목 바꾸기(1~120자). 사람이 고친 제목으로 남아 AI 정리가 덮지 않음 | 아니요 |
 | `sori://reminders?id=<녹음 id>&todo=<할 일 id>&token=<토큰>` | 고른 할 일을 미리 알림에 넣음 | 아니요 |
 
 처리와 요약 링크는 MCP 서버(`mcp/`)가 씁니다. 창을 앞으로 가져오지 않고 뒤에서 처리하며, 진행 표시는 목록과 녹음 화면에 평소처럼 나옵니다(`App.tsx` `handleAction`, `processOne`). 화면 버튼과 달리 링크는 아무 때나 오므로, 녹음 중이거나 이미 처리 중인 녹음은 건너뛰고 알립니다.

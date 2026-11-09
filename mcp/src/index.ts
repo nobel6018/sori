@@ -30,7 +30,7 @@ import {
 // 토큰을 붙인 sori:// 링크로 앱에 맡긴다(엔진과 설정이 앱에 있고, 파일을 앱과 동시에 쓰면 충돌한다)
 // @see ../README.md
 
-const server = new McpServer({ name: "sori", version: "0.6.0" });
+const server = new McpServer({ name: "sori", version: "0.7.0" });
 
 const text = (s: string) => ({ content: [{ type: "text" as const, text: s }] });
 const fail = (s: string) => ({ ...text(s), isError: true });
@@ -509,6 +509,30 @@ server.registerTool(
     const ok = await waitUntil(async () => want(await getRecording(r.id)), 30);
     if (!ok) return fail(NOT_RECEIVED("0.11.0"));
     return text(`${label(r)} 화자 이름을 붙였습니다: ${names.map((n) => `화자 ${n.speaker} → ${n.name.trim() || "(지움)"}`).join(", ")}`);
+  },
+);
+
+server.registerTool(
+  "set_title",
+  {
+    title: "sori 녹음 제목 바꾸기",
+    description:
+      "녹음 제목을 바꾼다. 앱에서 제목을 고치는 것과 같아, 이후 AI 정리가 이 제목을 다시 바꾸지 않는다. " +
+      "제목을 지어 붙일 때는 get_recording으로 내용을 보고 짓는다",
+    inputSchema: {
+      id: ID,
+      title: z.string().trim().min(1).max(120).describe("새 제목"),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  },
+  async ({ id, title }) => {
+    const r = await findRecording(id);
+    if (!r) return notFound(id);
+    const error = await send("title", new URLSearchParams({ id: r.id, title }));
+    if (error) return fail(error);
+    const ok = await waitUntil(async () => (await getRecording(r.id))?.title === title, 30);
+    if (!ok) return fail(NOT_RECEIVED("0.13.0"));
+    return text(`#${r.number ?? "?"} 제목을 바꿨습니다: ${r.title} → ${title}`);
   },
 );
 

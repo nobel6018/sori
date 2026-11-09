@@ -91,8 +91,13 @@ fn excerpt(transcript: &str, has_summary: bool) -> String {
     format!("{}\n(중간 생략)\n{}", head(transcript, EXCERPT_HEAD), tail(transcript, EXCERPT_TAIL))
 }
 
-/// 앱이 붙이는 기본 제목("녹음 2026-10-31 12:00")인지. AI는 이 제목만 바꾼다. 예전에 손으로 바꾼 제목을 지키려는 것이다
-pub fn is_default_title(title: &str) -> bool {
+/// 앱이 붙이는 기본 제목인지. AI는 이 제목만 바꾼다. 예전에 손으로 바꾼 제목을 지키려는 것이다.
+/// 기본 제목은 두 가지다. 녹음하면 "녹음 2026-10-31 12:00", 가져오면 원래 파일 이름에서 확장자를 뗀 것("음성 261106_142115")
+pub fn is_default_title(title: &str, source_name: &str) -> bool {
+    let stem = std::path::Path::new(source_name).file_stem().map(|s| s.to_string_lossy());
+    if stem.is_some_and(|s| !s.is_empty() && s == title) {
+        return true;
+    }
     let Some(rest) = title.strip_prefix("녹음 ") else { return false };
     chrono::NaiveDateTime::parse_from_str(rest, "%Y-%m-%d %H:%M").is_ok()
 }
@@ -269,9 +274,18 @@ mod tests {
 
     #[test]
     fn 기본_제목만_ai가_바꾼다() {
-        assert!(is_default_title("녹음 2026-10-31 12:00"));
-        assert!(!is_default_title("한빛로보틱스 미팅"));
-        assert!(!is_default_title("녹음 메모"));
+        assert!(is_default_title("녹음 2026-10-31 12:00", "녹음 2026-10-31 12:00"));
+        assert!(is_default_title("녹음 2026-10-31 12:00", ""));
+        assert!(!is_default_title("한빛로보틱스 미팅", "음성 261106_142115.m4a"));
+        assert!(!is_default_title("녹음 메모", ""));
+    }
+
+    #[test]
+    fn 가져온_파일_이름_그대로인_제목도_기본_제목이다() {
+        assert!(is_default_title("음성 261106_142115", "음성 261106_142115.m4a"));
+        assert!(is_default_title("meeting", "meeting.wav"));
+        assert!(!is_default_title("음성 261106_142115 협약 설명회", "음성 261106_142115.m4a"));
+        assert!(!is_default_title("", ""));
     }
 
     #[test]

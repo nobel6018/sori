@@ -43,6 +43,8 @@ pub enum Action {
     Summarize { id: String, template: Option<String> },
     /// 화자 이름을 붙인다. 빈 이름은 이름을 지운다. 화면의 이름 바꾸기와 같아 목소리 기억도 따른다
     NameSpeakers { id: String, names: Vec<(u32, String)> },
+    /// 제목을 바꾼다. 화면에서 고친 것과 같아 AI 정리가 다시 덮지 않는다
+    SetTitle { id: String, title: String },
     /// AI가 뽑은 할 일 중 고른 것을 미리 알림에 넣는다
     #[serde(rename_all = "camelCase")]
     AddReminders { id: String, todo_ids: Vec<String> },
@@ -63,6 +65,7 @@ impl Action {
                 | Action::Process { .. }
                 | Action::Summarize { .. }
                 | Action::NameSpeakers { .. }
+                | Action::SetTitle { .. }
                 | Action::AddReminders { .. }
         )
     }
@@ -215,9 +218,13 @@ fn needs_token(action: &Action) -> bool {
             | Action::Process { .. }
             | Action::Summarize { .. }
             | Action::NameSpeakers { .. }
+            | Action::SetTitle { .. }
             | Action::AddReminders { .. }
     )
 }
+
+/// 링크로 받는 제목의 최대 글자 수
+const TITLE_MAX: usize = 120;
 
 /// 요약 템플릿 id(meeting, one-on-one 같은 영문 소문자, 숫자, -, _)만 받는다
 fn template_id(v: Option<String>) -> Option<String> {
@@ -235,7 +242,8 @@ fn flag(v: Option<String>) -> Option<bool> {
 
 /// sori://record/toggle, sori://open?id=..&t=12.5, sori://import?path=..&path=..&process=1, sori://search?q=..,
 /// sori://process?id=..&speakers=3&lang=ko&diarize=1&summarize=1&template=meeting, sori://summarize?id=..&template=..,
-/// sori://speakers?id=..&name=0:영훈&name=1:시안, sori://reminders?id=..&todo=<할 일 id>
+/// sori://speakers?id=..&name=0:영훈&name=1:시안, sori://title?id=..&title=..,
+/// sori://reminders?id=..&todo=<할 일 id>
 pub fn parse_url(url: &Url) -> Option<Action> {
     if url.scheme() != "sori" {
         return None;
@@ -306,6 +314,10 @@ pub fn parse_url(url: &Url) -> Option<Action> {
                 return None;
             }
             Some(Action::NameSpeakers { id: query("id").filter(|id| uuid::Uuid::parse_str(id).is_ok())?, names })
+        }
+        ("title", "") => {
+            let title = query("title").map(|t| t.trim().to_string()).filter(|t| (1..=TITLE_MAX).contains(&t.chars().count()))?;
+            Some(Action::SetTitle { id: query("id").filter(|id| uuid::Uuid::parse_str(id).is_ok())?, title })
         }
         ("reminders", "") => {
             let todo_ids: Vec<String> = url
@@ -423,6 +435,7 @@ mod tests {
         assert!(needs_token(&Action::Import { paths: vec![], process: None }));
         assert!(needs_token(&Action::Summarize { id: String::new(), template: None }));
         assert!(needs_token(&Action::NameSpeakers { id: String::new(), names: vec![] }));
+        assert!(needs_token(&Action::SetTitle { id: String::new(), title: String::new() }));
         assert!(needs_token(&Action::AddReminders { id: String::new(), todo_ids: vec![] }));
         assert!(needs_token(&Action::Process {
             id: String::new(),
@@ -499,6 +512,18 @@ mod tests {
     }
 
     #[test]
+    fn 제목_링크는_앞뒤_공백을_떼고_빈_제목과_긴_제목은_받지_않는다() {
+        let id = "0b8e7c52-3f7a-4c3e-9d55-2a7f0b9a1c11";
+
+        let action = parse(&format!("sori://title?id={id}&title=%20%ED%98%91%EC%95%BD%20%EC%84%A4%EB%AA%85%ED%9A%8C%20"));
+
+        assert_eq!(action, Some(Action::SetTitle { id: id.into(), title: "협약 설명회".into() }));
+        assert_eq!(parse(&format!("sori://title?id={id}&title=%20")), None);
+        assert_eq!(parse(&format!("sori://title?id={id}&title={}", "a".repeat(121))), None);
+        assert_eq!(parse("sori://title?id=nope&title=a"), None);
+    }
+
+    #[test]
     fn 미리_알림_링크는_할_일_id를_여러_개_받는다() {
         let id = "0b8e7c52-3f7a-4c3e-9d55-2a7f0b9a1c11";
 
@@ -512,6 +537,7 @@ mod tests {
     fn 처리_요청은_창을_띄우지_않는다() {
         assert!(!Action::Summarize { id: String::new(), template: None }.shows_window());
         assert!(!Action::NameSpeakers { id: String::new(), names: vec![] }.shows_window());
+        assert!(!Action::SetTitle { id: String::new(), title: String::new() }.shows_window());
     }
 
     #[test]
