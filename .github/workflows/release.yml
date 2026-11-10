@@ -148,6 +148,18 @@ jobs:
           mkdir -p ipa/Payload && cp -R "$app" ipa/Payload/
           (cd ipa && zip -qry ../sori-ios.ipa Payload)
           ls -la sori-ios.ipa
+      # 앱 안 새 버전 알림은 Release 태그와 앱 버전을 비교한다(src/updateCheck.ts).
+      # 모바일 버전을 올리지 않고 태그를 달면 iPhone이 영영 새 버전이 있다고 알리고 AltStore는 업데이트를 띄우지 않는다(v0.13.0)
+      - name: 앱 버전이 태그와 같은지 확인
+        if: env.IS_TAG == 'true'
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          version=$(/usr/bin/plutil -extract CFBundleShortVersionString raw -o - ipa/Payload/sori.app/Info.plist)
+          if [ "v$version" != "$TAG" ]; then
+            echo "iPhone 앱 버전 $version이 태그 $TAG와 다릅니다. mobile/의 버전도 올리세요"
+            exit 1
+          fi
       # AltStore 소스. iPhone AltStore가 releases/latest/download/apps.json을 읽어 새 버전을 알린다(docs/mobile.md)
       - name: AltStore 소스 만들기
         env:

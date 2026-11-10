@@ -24,6 +24,8 @@ iOS 18 이상이 필요합니다. 녹음 중 화면(Live Activity)을 그리는 
 
 앱을 켜면 GitHub API(`releases/latest`)로 최신 버전을 확인하고, `sori-ios.ipa`가 붙은 더 새 버전이 있으면 목록 위에 알립니다(`src/updateCheck.ts`, `mobile/src/App.tsx`). Release 다운로드 주소는 CORS 헤더가 없어 웹뷰에서 읽지 못하므로 CORS를 허용하는 API를 씁니다. 설정 화면 맨 아래에 설치된 버전이 보입니다.
 
+iPhone 앱 버전은 데스크톱과 같이 올립니다(`mobile/package.json`, `mobile/src-tauri/tauri.conf.json`, `Cargo.toml`, `Cargo.lock`, `gen/apple`의 Info.plist 2개). 앱 안 알림은 Release 태그와 앱 버전을 비교하므로, 모바일만 그대로 두면 앱은 새 버전이 있다고 알리는데 AltStore는 같은 버전이라 업데이트를 띄우지 않습니다. release.yml ios 작업이 빌드된 앱 버전과 태그가 다르면 실패합니다.
+
 새 버전 태그를 올리면 release.yml이 `sori-ios.ipa`와 함께 AltStore 소스 `apps.json`을 Release에 붙입니다(`.github/scripts/altstore-source.sh`). 위 소스 주소는 늘 최신 Release로 이어지므로, AltStore를 열면 My Apps에 sori의 Update 버튼이 뜹니다. 버튼을 누르면 Mac의 AltServer가 Wi-Fi로 서명해 설치합니다. iOS가 사이드로딩 앱의 무인 설치를 막으므로 이 버튼 한 번은 남습니다.
 
 AltStore는 소스에 적힌 권한이 받은 ipa와 다르면 설치를 거부합니다. 그래서 소스의 버전과 권한(`…UsageDescription` 키)은 손으로 적지 않고, 스크립트가 빌드된 앱과 앱 확장의 Info.plist에서 읽습니다. 서명 없이 빌드해 바이너리에 entitlements가 없으므로 entitlements는 빈 배열입니다. 앱에 entitlements를 넣게 되면 스크립트도 함께 고쳐야 합니다.
