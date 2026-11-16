@@ -10,8 +10,8 @@ import { AppCommand, Command, IS_MAC, matchShortcut, sendCommand } from "./short
 import { allTagPaths, tagCounts } from "./tags";
 import { ModelSetup } from "./components/ModelSetup";
 import { Recorder } from "./components/Recorder";
-import { Sidebar } from "./components/Sidebar";
-import { SidebarResizer, useSidebarWidth } from "./components/SidebarResizer";
+import { Sidebar, SidebarToggle } from "./components/Sidebar";
+import { SidebarResizer, useSidebarCollapsed, useSidebarWidth } from "./components/SidebarResizer";
 import { RecordingView } from "./components/RecordingView";
 import { showRecordingMenu } from "./recordingMenu";
 import { SettingsDialog } from "./components/SettingsDialog";
@@ -29,6 +29,7 @@ export default function App() {
   const [catalog, setCatalog] = useState<ModelCatalog | null>(null);
   const [setupLater, setSetupLater] = useState(false);
   const appUpdate = useAppUpdate();
+  const [sidebarCollapsed, toggleSidebar] = useSidebarCollapsed();
   /** null이면 빠른 찾기 창을 닫은 상태. 문자열은 처음 넣을 검색어 */
   const [quickOpen, setQuickOpenState] = useState<{ query: string; nonce: number } | null>(null);
   // 이미 열려 있어도 새 검색어로 다시 열리도록 매번 새 값을 만든다
@@ -248,6 +249,8 @@ export default function App() {
         return window.location.reload();
       case "ask-all":
         return setAskOpen(true);
+      case "toggle-sidebar":
+        return toggleSidebar();
       case "prev":
       case "next": {
         if (recordings.length === 0) return;
@@ -348,9 +351,18 @@ export default function App() {
   const allTags = useMemo(() => tagCounts(recordings), [recordings]);
 
   return (
-    <div className="app" style={{ gridTemplateColumns: `${sidebarWidth}px 1fr` }}>
-      <SidebarResizer width={sidebarWidth} onResize={setSidebarWidth} />
+    <div
+      className={`app ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}
+      style={{ gridTemplateColumns: sidebarCollapsed ? "1fr" : `${sidebarWidth}px 1fr` }}
+    >
+      {sidebarCollapsed ? (
+        <SidebarToggle collapsed onToggle={toggleSidebar} className="sidebar-expand" />
+      ) : (
+        <SidebarResizer width={sidebarWidth} onResize={setSidebarWidth} />
+      )}
       <Sidebar
+        collapsed={sidebarCollapsed}
+        onToggle={toggleSidebar}
         recordings={recordings}
         selectedId={selectedId}
         progress={progress}

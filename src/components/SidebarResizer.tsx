@@ -29,6 +29,31 @@ export function useSidebarWidth() {
   return [width, update] as const;
 }
 
+const COLLAPSED_KEY = "sori.sidebarCollapsed";
+
+/** 사이드바를 접었는지. 다음 실행에도 기억한다 */
+export function useSidebarCollapsed() {
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem(COLLAPSED_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const toggle = useCallback(() => {
+    setCollapsed((current) => {
+      try {
+        if (current) localStorage.removeItem(COLLAPSED_KEY);
+        else localStorage.setItem(COLLAPSED_KEY, "1");
+      } catch {
+        // 저장하지 못해도 이번 실행에서는 접힌다
+      }
+      return !current;
+    });
+  }, []);
+  return [collapsed, toggle] as const;
+}
+
 interface Props {
   width: number;
   onResize: (width: number, persist: boolean) => void;

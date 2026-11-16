@@ -2,7 +2,7 @@ import { BulkBadge } from "./BulkProgress";
 import { ReactNode, useEffect, useMemo, useState } from "react";
 import { api, formatTime, ProgressEvent, Recording, Status, SyncStatus } from "../api";
 import { describe } from "./SyncSettings";
-import { IS_MAC } from "../shortcuts";
+import { IS_MAC, SHORTCUTS, shortcutLabel } from "../shortcuts";
 import { buildTagTree, matchesTag } from "../tags";
 import { TagTree } from "./TagTree";
 
@@ -27,9 +27,45 @@ interface Props {
   /** 녹음 항목을 우클릭했다 */
   onContextMenu: (recording: Recording) => void;
   recorder: ReactNode;
+  /** 접으면 화면에서만 숨긴다. 녹음기가 진행 중인 녹음을 놓치지 않게 컴포넌트는 그대로 둔다 */
+  collapsed: boolean;
+  onToggle: () => void;
 }
 
-export function Sidebar({ recordings, selectedId, progress, onSelect, onImport, onSearch, onOpenSettings, onContextMenu, recorder }: Props) {
+/** 사이드바를 접고 펴는 버튼. 펴진 동안은 사이드바 머리줄에, 접힌 동안은 창 왼쪽 위에 놓인다 */
+export function SidebarToggle({ collapsed, onToggle, className = "" }: { collapsed: boolean; onToggle: () => void; className?: string }) {
+  const shortcut = SHORTCUTS.find((s) => s.run === "toggle-sidebar");
+  const label = collapsed ? "사이드바 펴기" : "사이드바 접기";
+  return (
+    <button
+      className={`ghost sidebar-toggle ${className}`}
+      onClick={onToggle}
+      data-shortcut="toggle-sidebar"
+      aria-label={label}
+      aria-expanded={!collapsed}
+      title={shortcut ? `${label} (${shortcutLabel(shortcut)})` : label}
+    >
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" aria-hidden>
+        <rect x="1.65" y="2.65" width="12.7" height="10.7" rx="2.35" />
+        <path d="M6 3v10" />
+      </svg>
+    </button>
+  );
+}
+
+export function Sidebar({
+  recordings,
+  selectedId,
+  progress,
+  onSelect,
+  onImport,
+  onSearch,
+  onOpenSettings,
+  onContextMenu,
+  recorder,
+  collapsed,
+  onToggle,
+}: Props) {
   const [filter, setFilter] = useState<string | null>(() => {
     try {
       return localStorage.getItem(FILTER_KEY);
@@ -53,7 +89,7 @@ export function Sidebar({ recordings, selectedId, progress, onSelect, onImport, 
   };
 
   return (
-    <aside className="sidebar">
+    <aside className="sidebar" hidden={collapsed}>
       <header className="sidebar-header">
         <span className="brand">
           <img src="/favicon.svg" width="24" height="24" alt="" />
@@ -66,6 +102,7 @@ export function Sidebar({ recordings, selectedId, progress, onSelect, onImport, 
           <button onClick={onImport} data-shortcut="import" title={`가져오기 (${IS_MAC ? "⌘O" : "Ctrl+O"})`}>
             가져오기
           </button>
+          <SidebarToggle collapsed={collapsed} onToggle={onToggle} />
         </div>
       </header>
       {recorder}

@@ -162,13 +162,40 @@ body.col-resizing {
   border-right: 1px solid var(--border);
   min-height: 0;
 }
+/* 접으면 숨기기만 한다. 녹음기가 안에 있어 컴포넌트를 없애지 않는다 */
+.sidebar[hidden] {
+  display: none;
+}
 .sidebar-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 6px;
   padding: 14px 14px 10px;
 }
+.sidebar-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 7px;
+  color: var(--muted);
+}
+.sidebar-toggle:hover:not(:disabled) {
+  color: var(--text);
+}
+/* 접힌 동안 펴기 버튼은 창 왼쪽 위에 뜨고, 본문은 버튼 자리만큼 비켜 준다 */
+.sidebar-expand {
+  position: absolute;
+  top: 12px;
+  left: 8px;
+  z-index: 5;
+}
+.app.sidebar-collapsed .main {
+  padding-left: 36px;
+}
 .brand {
+  min-width: 0;
+  overflow: hidden;
   display: flex;
   align-items: center;
   gap: 6px;
