@@ -1126,13 +1126,23 @@ kbd {
   cursor: pointer;
   vertical-align: baseline;
 }
+/* 입력창은 스크롤 영역 맨 아래에 붙는다. sticky는 스크롤 영역의 아래 패딩만큼 위에 멈춰서
+   그 틈으로 답이 비쳐 보였다. 질문 영역은 아래 패딩을 0으로 두고 간격을 입력창 패딩으로 옮긴다 */
 .ask-form {
   position: sticky;
   bottom: 0;
   display: flex;
   gap: 6px;
-  padding: 8px 0;
+  padding: 8px 0 20px;
+  /* 감싸는 면과 같은 색이어야 띠로 보이지 않는다. 투명하면 스크롤한 답이 비친다 */
+  background: var(--bg);
+}
+.ask-modal .ask-form {
   background: var(--panel);
+}
+.recording-view > .tab-scroll.ask-scroll,
+.modal.ask-modal {
+  padding-bottom: 0;
 }
 .ask-form input {
   flex: 1;

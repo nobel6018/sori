@@ -505,7 +505,7 @@ export function RecordingView({ recording, allTags, progress, seekTo, onSeekDone
         </div>
       )}
       {transcript && (
-        <div className="tab-scroll" hidden={tab !== "ask"}>
+        <div className="tab-scroll ask-scroll" hidden={tab !== "ask"}>
           <AskPanel
             recordingId={rec.id}
             onCite={(_, time) => {
