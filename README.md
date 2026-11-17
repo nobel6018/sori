@@ -16,7 +16,7 @@
 
 질문하기. 답에 달린 시각을 누르면 그 구간이 재생됩니다.
 
-![질문하기](docs/images/ask.png)
+![질문하기](docs/images/ask-answer.png)
 
 ## 설치
 
