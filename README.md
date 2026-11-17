@@ -2,6 +2,22 @@
 
 녹음 파일을 이 컴퓨터 안에서만 받아 적고(whisper.cpp) 화자를 나누는(sherpa-onnx) 데스크탑 앱입니다. Tauri 2 + React.
 
+## 화면
+
+아래는 TTS로 만든 데모 회의(3명, 1분 48초)를 처리한 화면입니다.
+
+받아 적기와 화자 나누기. 화자 이름을 한 번 붙이면 다음 녹음부터 목소리로 알아봅니다. 태그와 할 일 후보는 AI가 붙입니다.
+
+![전사와 화자 구분](docs/images/transcript.png)
+
+요약. 회의록, 1:1 면담, 인터뷰, 강의, 할 일만 템플릿 중에서 고릅니다.
+
+![요약](docs/images/summary.png)
+
+질문하기. 답에 달린 시각을 누르면 그 구간이 재생됩니다.
+
+![질문하기](docs/images/ask.png)
+
 ## 설치
 
 [Releases](https://github.com/nobel6018/sori/releases/latest)에서 받습니다. macOS(Apple Silicon)는 `.dmg`, Windows는 `.msi` 또는 `-setup.exe`입니다.
