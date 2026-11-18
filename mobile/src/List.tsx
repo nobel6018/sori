@@ -76,7 +76,7 @@ export function List({
                       <StatusChip item={r} previewing={previewing === r.id} />
                       {r.duration != null && <span>{formatTime(r.duration)}</span>}
                       <span>{startedAt(r).toLocaleDateString("ko-KR", { month: "short", day: "numeric" })}</span>
-                      {!r.audioAvailable && r.status !== "recording" && <span className="muted">클라우드</span>}
+                      {!r.audioAvailable && r.status !== "recording" && r.status !== "finishing" && <span className="muted">클라우드</span>}
                     </span>
                     {!!r.tags?.length && <span className="row-tags">{r.tags.join(", ")}</span>}
                   </button>
@@ -155,6 +155,7 @@ function TagBar({
 
 function StatusChip({ item, previewing }: { item: RecordingItem; previewing: boolean }) {
   if (item.status === "recording") return <span className="chip rec">녹음 중</span>;
+  if (item.status === "finishing") return <span className="chip">저장 중</span>;
   if (item.hasTranscript) return <span className="chip done">전사</span>;
   if (previewing) return <span className="chip">iPhone 전사 중</span>;
   if (item.hasPreview) return <span className="chip">미리 전사</span>;

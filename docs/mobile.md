@@ -39,7 +39,7 @@ AltStore는 소스에 적힌 권한이 받은 ipa와 다르면 설치를 거부�
 
 | 기능 | 방법 |
 |---|---|
-| 녹음 | AVAudioRecorder, AAC 모노 64kbps(1시간 약 28MB). 화면을 끄거나 다른 앱으로 가도 이어진다(백그라운드 오디오). 전화가 오면 멈췄다가 끝나면 이어서 녹음한다 |
+| 녹음 | 구간 WAV로 녹음하고 멈춘 뒤 16kHz AAC m4a로 합친다(1시간 약 15MB). 화면을 끄거나 다른 앱으로 가도 이어진다(백그라운드 오디오). 전화가 오면 그 구간을 닫고, 끝나면 새 구간으로 이어 녹음한다. 앱이 죽어도 녹음한 데까지 남는다(docs/recording-safety.md) |
 | 메모, 북마크 | 녹음 중에는 녹음한 시각에, 녹음 뒤에는 재생 위치에 남긴다. 기기별 메모 파일로 Mac과 합친다 |
 | 전사, 요약 | Mac이 만든 transcript.json, summaries.json을 읽기만 한다 |
 | 오디오 | 다른 기기에서 온 녹음은 "오디오 받기"를 눌러야 받는다 |
@@ -121,7 +121,8 @@ iOS 27.2부터는 `AudioRecordingIntent`가 Live Activity 없이 오디오 세�
 | `mobile/src-tauri/src/lib.rs` | 화면이 부르는 명령: 목록, 상세, 제목, 메모, 녹음 시작과 멈춤, 동기화 |
 | `mobile/src-tauri/src/store.rs` `Store` | 기기 저장소(데스크톱과 같은 폴더 구조, meta.json은 JSON 값 그대로) |
 | `mobile/src-tauri/src/sync.rs` `MobileLocal`, `remote` | 동기화 엔진(crates/sori-sync) 연결, 폴더 권한 열기 |
-| `mobile/plugin/ios/Sources/SoriNativePlugin.swift` | 녹음, 폴더 고르기와 권한 저장, iCloud 파일 받기 |
+| `mobile/plugin/ios/Sources/SoriNativePlugin.swift` | 녹음 호출, 폴더 고르기와 권한 저장, iCloud 파일 받기 |
+| `mobile/plugin/ios/Sources/SegmentedRecorder.swift`, `RecordingFiles.swift` | 구간 녹음, 인터럽션 뒤 이어 녹음, 구간 합치기와 복구(docs/recording-safety.md) |
 | `mobile/src/useEdgeSwipeBack.ts`, `App.tsx` `SwipeBack`, `open` | 가장자리 스와이프로 뒤로, 목록 층과 스크롤 위치 옮기기. 미는 동안만 transform을 건다(평소에 걸면 안쪽 fixed 요소의 기준이 바뀐다) |
 | `mobile/src/PullToRefresh.tsx`, 플러그인 `haptic` | 당겨서 새로고침. 웹뷰는 문서 전체가 스크롤되고 바운스를 꺼 두어 터치를 직접 다룬다. 고무줄 저항, 살 8개 스피너, 기준선(64px)을 넘을 때 가벼운 진동(웹뷰 `navigator.vibrate`는 iOS에서 안 돼 네이티브 `UIImpactFeedbackGenerator`). 놓으면 동기화가 끝날 때까지(최소 0.7초) 스피너가 머문다 |
 | `mobile/src-tauri/src/intents.rs` | 단축어 인텐트가 부르는 C 함수, Live Activity 훅 보관 |

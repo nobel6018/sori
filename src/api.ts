@@ -2,7 +2,8 @@ import { getVersion } from "@tauri-apps/api/app";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
-export type Status = "recording" | "new" | "processing" | "done" | "failed";
+/** finishing: iPhone이 녹음 구간 파일을 audio.m4a로 합치는 중(이 기기에만 있고 동기화하지 않는다) */
+export type Status = "recording" | "finishing" | "new" | "processing" | "done" | "failed";
 export type Stage = "waiting" | "decoding" | "diarizing" | "transcribing";
 
 /** 화면에 보여 줄 녹음 시각. 가져온 파일은 가져온 시각이 아니라 실제 녹음 시각을 쓴다 */
@@ -23,6 +24,8 @@ export interface Recording {
   audioFile: string;
   status: Status;
   error: string | null;
+  /** iPhone이 녹음 구간을 합치지 못한 이유. 구간은 남아 있고 다음 실행 때 다시 합친다 */
+  finishError?: string | null;
   duration: number | null;
   speakerNames: Record<string, string>;
   numSpeakers: number | null;

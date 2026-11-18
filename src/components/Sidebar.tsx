@@ -10,6 +10,7 @@ const FILTER_KEY = "sori.tagFilter";
 
 const STATUS_LABEL: Record<Status, string> = {
   recording: "녹음 중",
+  finishing: "iPhone 저장 중",
   new: "대기",
   processing: "처리 중",
   done: "완료",

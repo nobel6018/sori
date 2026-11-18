@@ -6,6 +6,7 @@ mod intents;
 mod store;
 mod sync;
 
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
@@ -13,7 +14,7 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tauri::{AppHandle, Emitter, Manager, State};
-use tauri_plugin_sori_native::{RecorderState, SoriNativeExt};
+use tauri_plugin_sori_native::{FinalizeOutcome, RecorderState, SoriNativeExt};
 
 use store::Store;
 
@@ -27,6 +28,8 @@ pub(crate) struct AppState {
     store: Store,
     /// 지금 녹음 중인 녹음 id
     recording: Mutex<Option<String>>,
+    /// 지금 구간 파일을 합치고 있는 녹음 id
+    finishing: Mutex<HashSet<String>>,
     syncer: sync::Syncer,
 }
 
@@ -243,6 +246,9 @@ fn delete_recording(app: AppHandle, state: State<AppState>, id: String) -> CmdRe
     if state.recording.lock().unwrap().as_deref() == Some(id.as_str()) {
         return Err("녹음 중인 항목은 지울 수 없습니다".into());
     }
+    if state.finishing.lock().unwrap().contains(&id) {
+        return Err("녹음 파일을 저장하는 중입니다. 끝난 뒤 지워 주세요".into());
+    }
     state.store.delete(&id).map_err(err)?;
     sync::request(&app);
     Ok(())
@@ -345,20 +351,134 @@ pub(crate) fn begin_recording(app: &AppHandle, from_intent: bool) -> CmdResult<V
 pub(crate) fn end_recording(app: &AppHandle) -> CmdResult<Value> {
     let state = app.state::<AppState>();
     let id = state.recording.lock().unwrap().clone().ok_or("녹음 중이 아닙니다")?;
-    let duration = app.sori_native().stop_recording().map_err(err)?;
-    *state.recording.lock().unwrap() = None;
-    intents::activity_stopped();
-    let _ = app.emit("recorder-changed", json!({ "id": id }));
+    let stopped = app.sori_native().stop_recording().map_err(err)?;
+    let device = sync::device_id(&state.store);
+    let gap_notes: Vec<Value> = stopped
+        .gaps
+        .iter()
+        .map(|g| json!({ "time": g.time, "text": gap_note_text(&g.reason, g.seconds), "id": uuid::Uuid::new_v4().to_string(), "device": device }))
+        .collect();
+    // 녹음 중 표시를 내리기 전에 "합치는 중"으로 바꿔, 그 사이 동기화가 아직 없는 audio.m4a를 찾지 않게 한다
     let meta = state
         .store
         .update(&id, &mut |m| {
-            m["status"] = json!("new");
-            m["duration"] = json!(duration);
+            m["status"] = json!("finishing");
+            m["duration"] = json!(stopped.duration);
+            // 오디오는 끊긴 곳을 이어 붙여 시간이 건너뛴 걸 알 수 없다. 그 자리에 메모를 남긴다(docs/recording-safety.md)
+            if !gap_notes.is_empty() {
+                if !m["notes"].is_array() {
+                    m["notes"] = json!([]);
+                }
+                let notes = m["notes"].as_array_mut().unwrap();
+                for note in &gap_notes {
+                    let time = note["time"].as_f64().unwrap_or(0.0);
+                    let at = notes.partition_point(|n| n["time"].as_f64().unwrap_or(0.0) <= time);
+                    notes.insert(at, note.clone());
+                }
+            }
+        })
+        .map_err(err)?;
+    *state.recording.lock().unwrap() = None;
+    intents::activity_stopped();
+    let _ = app.emit("recorder-changed", json!({ "id": id }));
+    let _ = app.emit("recording-changed", json!({ "id": id }));
+    // 합치기는 수십 초 걸릴 수 있어 멈춤(동작 버튼 인텐트)을 붙잡지 않는다
+    finish_in_background(app, id);
+    Ok(meta)
+}
+
+/// 녹음이 멈췄던 곳에 남기는 메모. "통화로 녹음이 2분 10초 멈췄습니다"
+fn gap_note_text(reason: &str, seconds: f64) -> String {
+    let total = seconds.round() as u64;
+    let (m, s) = (total / 60, total % 60);
+    let length = match (m, s) {
+        (0, s) => format!("{s}초"),
+        (m, 0) => format!("{m}분"),
+        (m, s) => format!("{m}분 {s}초"),
+    };
+    format!("{reason}{} 녹음이 {length} 멈췄습니다", euro(reason))
+}
+
+/// 조사 "로"와 "으로". 받침이 없거나 ㄹ이면 "로"
+fn euro(word: &str) -> &'static str {
+    match word.chars().last().map(|c| c as u32) {
+        Some(c @ 0xAC00..=0xD7A3) => match (c - 0xAC00) % 28 {
+            0 | 8 => "로",
+            _ => "으로",
+        },
+        _ => "로",
+    }
+}
+
+#[cfg(test)]
+mod gap_note_tests {
+    use super::*;
+
+    #[test]
+    fn 빠진_구간_메모는_이유와_길이를_적는다() {
+        assert_eq!(gap_note_text("통화", 130.4), "통화로 녹음이 2분 10초 멈췄습니다");
+        assert_eq!(gap_note_text("통화", 45.0), "통화로 녹음이 45초 멈췄습니다");
+        assert_eq!(gap_note_text("다른 앱 소리", 120.0), "다른 앱 소리로 녹음이 2분 멈췄습니다");
+    }
+
+    #[test]
+    fn 받침에_따라_로와_으로를_고른다() {
+        assert_eq!(euro("오디오 서비스 재시작"), "으로");
+        assert_eq!(euro("녹음 오류"), "로");
+        assert_eq!(euro("서울"), "로");
+    }
+}
+
+/// 녹음 구간 파일을 audio.m4a로 합치고 올린다. @see docs/recording-safety.md
+pub(crate) fn finish_in_background(app: &AppHandle, id: String) {
+    let app = app.clone();
+    std::thread::spawn(move || {
+        let state = app.state::<AppState>();
+        // 시작할 때 복구와 멈춤이 겹쳐도 한 번만 합친다
+        if !state.finishing.lock().unwrap().insert(id.clone()) {
+            return;
+        }
+        let result = finish_recording(&app, &id);
+        state.finishing.lock().unwrap().remove(&id);
+        if let Err(e) = result {
+            // 구간 파일은 남아 있다. 다음에 앱을 켤 때 다시 합친다
+            eprintln!("sori: 녹음 {id}를 합치지 못했습니다: {e}");
+            let _ = state.store.update(&id, &mut |m| m["finishError"] = json!(e));
+            let _ = app.emit("recording-changed", json!({ "id": id }));
+        }
+    });
+}
+
+fn finish_recording(app: &AppHandle, id: &str) -> CmdResult<()> {
+    let state = app.state::<AppState>();
+    let meta = state.store.read(id).map_err(err)?;
+    let path = state.store.audio_path(&meta).map_err(err)?;
+    let finalized = app.sori_native().finalize_recording(&path.to_string_lossy()).map_err(err)?;
+    let recorded = meta["duration"].as_f64().unwrap_or(0.0);
+    state
+        .store
+        .update(id, &mut |m| {
+            let obj = m.as_object_mut().expect("meta는 객체");
+            obj.remove("finishError");
+            match finalized.outcome {
+                FinalizeOutcome::Done => {
+                    obj.insert("status".into(), json!("new"));
+                    obj.insert("duration".into(), json!(if finalized.duration > 0.0 { finalized.duration } else { recorded }));
+                }
+                FinalizeOutcome::Empty => {
+                    obj.insert("status".into(), json!("failed"));
+                    obj.insert("error".into(), json!("녹음된 소리가 없습니다"));
+                }
+                FinalizeOutcome::Broken => {
+                    obj.insert("status".into(), json!("failed"));
+                    obj.insert("error".into(), json!("녹음이 중간에 끊겨 오디오 파일을 읽을 수 없습니다"));
+                }
+            }
         })
         .map_err(err)?;
     // 녹음은 이 기기에만 있는 동안 잃을 수 있어(앱 서명 만료 등) 바로 올린다
-    changed(app, &id);
-    Ok(meta)
+    changed(app, id);
+    Ok(())
 }
 
 pub(crate) fn is_recording(app: &AppHandle) -> bool {
@@ -449,17 +569,27 @@ pub fn run() {
         .plugin(tauri_plugin_sori_native::init())
         .setup(|app| {
             let store = Store::new(app.path().app_data_dir()?)?;
-            // 녹음 도중 앱이 꺼졌으면 녹음된 데까지 남아 있다. 이어서 쓸 수 있게 상태를 돌려 둔다
+            // 녹음 도중 앱이 꺼졌거나 합치기를 마치지 못했으면 구간 파일이 남아 있다. 합치는 중으로 두고 아래에서 다시 합친다
+            let mut unfinished = Vec::new();
             for meta in store.list()? {
-                if meta["status"] == "recording" {
+                if matches!(meta["status"].as_str(), Some("recording") | Some("finishing")) {
                     if let Some(id) = meta["id"].as_str() {
-                        store.update(id, &mut |m| m["status"] = json!("new"))?;
+                        store.update(id, &mut |m| m["status"] = json!("finishing"))?;
+                        unfinished.push(id.to_string());
                     }
                 }
             }
             // 녹음 도중 앱이 꺼졌으면 Live Activity만 남아 있다
             intents::activity_stopped();
-            app.manage(AppState { store, recording: Mutex::new(None), syncer: sync::Syncer::new() });
+            app.manage(AppState {
+                store,
+                recording: Mutex::new(None),
+                finishing: Mutex::new(HashSet::new()),
+                syncer: sync::Syncer::new(),
+            });
+            for id in unfinished {
+                finish_in_background(app.handle(), id);
+            }
             sync::start(app.handle().clone());
             // 단축어가 앱을 띄웠으면 이 시점부터 녹음을 시작할 수 있다
             intents::set_app(app.handle().clone());

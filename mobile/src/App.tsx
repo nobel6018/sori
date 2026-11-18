@@ -65,7 +65,7 @@ export function App() {
   useEffect(() => {
     if (previewing || recorder?.id || document.visibilityState !== "visible") return;
     const next = recordings.find(
-      (r) => r.audioAvailable && !r.hasTranscript && !r.hasPreview && r.status !== "recording" && !previewFailed.current.has(r.id),
+      (r) => r.audioAvailable && !r.hasTranscript && !r.hasPreview && r.status !== "recording" && r.status !== "finishing" && !previewFailed.current.has(r.id),
     );
     if (!next) return;
     let cancelled = false;
@@ -119,7 +119,7 @@ export function App() {
     setError(null);
     try {
       const meta = await api.startRecording();
-      setRecorder({ id: meta.id, recording: true, time: 0, level: 0 });
+      setRecorder({ id: meta.id, recording: true, paused: false, time: 0, level: 0 });
       refresh();
     } catch (e) {
       setError(String(e));

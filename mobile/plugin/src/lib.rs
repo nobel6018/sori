@@ -1,6 +1,6 @@
 //! sori iPhone 앱의 네이티브 기능(Swift, ios/Sources/SoriNativePlugin.swift).
 //! 화면에서 직접 부르지 않고 앱의 Rust 코드가 부른다.
-//! - 녹음: AVAudioRecorder로 AAC m4a. 화면이 꺼져도 이어진다(백그라운드 오디오)
+//! - 녹음: 구간 WAV로 쓰고 멈춘 뒤 AAC m4a로 합친다. 화면이 꺼져도 이어지고, 전화가 와도 앞부분을 잃지 않는다(docs/recording-safety.md)
 //! - iCloud Drive 폴더: 파일 선택 창으로 고르고 접근 권한(bookmark)을 저장해 다음 실행에도 쓴다
 //! - iCloud 파일 받기: 받지 않은 파일을 읽기 전에 NSFileCoordinator로 받아 온다
 
@@ -29,10 +29,55 @@ pub struct Folder {
 #[serde(rename_all = "camelCase")]
 pub struct RecorderState {
     pub recording: bool,
+    /// 전화 같은 인터럽션으로 멈춰 있다. 녹음은 끝나지 않았고 이어지기를 기다린다
+    #[serde(default)]
+    pub paused: bool,
     /// 녹음한 초
     pub time: f64,
     /// 0~1 입력 크기
     pub level: f32,
+}
+
+/// 녹음이 멈췄다 이어진 곳. 통화 중에는 iOS가 마이크를 넘겨주지 않아 녹음할 수 없다(docs/recording-safety.md)
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecordingGap {
+    /// 이어 붙인 오디오에서 끊긴 위치(초)
+    pub time: f64,
+    /// 녹음하지 못한 시간(초)
+    pub seconds: f64,
+    /// 통화, 다른 앱 소리, 녹음 오류 등
+    pub reason: String,
+}
+
+/// 녹음을 멈춘 결과
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Stopped {
+    /// 녹음한 길이(초)
+    pub duration: f64,
+    #[serde(default)]
+    pub gaps: Vec<RecordingGap>,
+}
+
+/// 구간 파일을 audio.m4a로 합친 결과(docs/recording-safety.md)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum FinalizeOutcome {
+    /// audio.m4a가 준비됐다
+    Done,
+    /// 녹음된 소리가 없다. 구간 파일은 남겨 둔다
+    Empty,
+    /// 구간 없이 옛 형식 audio.m4a만 있는데 읽히지 않는다(0.15.0 이하에서 끊긴 녹음)
+    Broken,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Finalized {
+    pub outcome: FinalizeOutcome,
+    /// 합친 오디오 길이(초)
+    pub duration: f64,
 }
 
 /// 녹음을 시작한 곳. 못 받았으면 found가 false다
@@ -100,11 +145,6 @@ mod native {
         name: Option<String>,
     }
 
-    #[derive(Deserialize)]
-    struct Duration {
-        duration: f64,
-    }
-
     impl<R: Runtime> SoriNative<R> {
         fn call<T: DeserializeOwned>(&self, method: &str, payload: impl Serialize) -> crate::Result<T> {
             self.0.run_mobile_plugin(method, payload).map_err(|e| Error::Native(e.to_string()))
@@ -115,13 +155,18 @@ mod native {
             self.call::<Empty>("startRecording", serde_json::json!({ "path": path, "background": background })).map(|_| ())
         }
 
-        /// 녹음한 길이(초)
-        pub fn stop_recording(&self) -> crate::Result<f64> {
-            self.call::<Duration>("stopRecording", ()).map(|d| d.duration)
+        /// 녹음한 길이와 멈췄다 이어진 곳
+        pub fn stop_recording(&self) -> crate::Result<Stopped> {
+            self.call("stopRecording", ())
         }
 
         pub fn recorder_state(&self) -> crate::Result<RecorderState> {
             self.call("recorderState", ())
+        }
+
+        /// 녹음 구간 파일을 path(audio.m4a)로 합친다. 다시 불러도 안전하다. 오류면 구간은 남아 있다
+        pub fn finalize_recording(&self, path: &str) -> crate::Result<Finalized> {
+            self.call("finalizeRecording", serde_json::json!({ "path": path }))
         }
 
         /// 파일 선택 창으로 폴더를 고른다. 취소하면 None
@@ -187,10 +232,13 @@ mod native {
         pub fn start_recording(&self, _: &str, _: bool) -> crate::Result<()> {
             Err(Error::Unsupported)
         }
-        pub fn stop_recording(&self) -> crate::Result<f64> {
+        pub fn stop_recording(&self) -> crate::Result<Stopped> {
             Err(Error::Unsupported)
         }
         pub fn recorder_state(&self) -> crate::Result<RecorderState> {
+            Err(Error::Unsupported)
+        }
+        pub fn finalize_recording(&self, _: &str) -> crate::Result<Finalized> {
             Err(Error::Unsupported)
         }
         pub fn pick_folder(&self) -> crate::Result<Option<Folder>> {

@@ -6,6 +6,7 @@ import { api, Note } from "./api";
 export function Recorder({ id, onStopped, onError }: { id: string; onStopped: (id: string) => void; onError: (e: string) => void }) {
   const [time, setTime] = useState(0);
   const [level, setLevel] = useState(0);
+  const [paused, setPaused] = useState(false);
   const [notes, setNotes] = useState<Note[]>([]);
   const [text, setText] = useState("");
   const [stopping, setStopping] = useState(false);
@@ -16,6 +17,7 @@ export function Recorder({ id, onStopped, onError }: { id: string; onStopped: (i
       api.recorderState().then((s) => {
         setTime(s.time);
         setLevel(s.level);
+        setPaused(s.paused);
       });
     }, 250);
     return () => window.clearInterval(timer);
@@ -46,13 +48,23 @@ export function Recorder({ id, onStopped, onError }: { id: string; onStopped: (i
     <div className="recorder" role="dialog" aria-label="녹음 중">
       <div className="recorder-top">
         <span className="rec-label">
-          <span className="record-dot small" /> 녹음 중
+          {paused ? (
+            "일시정지"
+          ) : (
+            <>
+              <span className="record-dot small" /> 녹음 중
+            </>
+          )}
         </span>
         <div className="timer">{formatTime(time)}</div>
         <div className="meter" aria-hidden>
           <div className="meter-fill" style={{ transform: `scaleX(${Math.max(0.02, level)})` }} />
         </div>
-        <p className="muted small">화면을 끄거나 다른 앱으로 가도 녹음은 이어집니다.</p>
+        <p className="muted small">
+          {paused
+            ? "통화나 다른 앱 때문에 멈췄습니다. 지금까지 녹음한 부분은 저장돼 있고, 곧 이어서 녹음합니다."
+            : "화면을 끄거나 다른 앱으로 가도 녹음은 이어집니다."}
+        </p>
       </div>
 
       <ul className="recorder-notes">

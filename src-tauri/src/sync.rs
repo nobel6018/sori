@@ -465,4 +465,23 @@ mod tests {
         let samples = crate::engine::audio::load_mono_16k(&upload.path).unwrap();
         assert!((samples.len() as i64 - 48_000).abs() < 3200, "{}", samples.len());
     }
+
+    /// iPhone은 구간 WAV를 16kHz 모노 AAC 32kbps m4a로 합친다(mobile/plugin/ios/Sources/RecordingFiles.swift).
+    /// 같은 AudioToolbox 인코더와 설정으로 만든 파일을 전사 엔진이 읽는지 본다. @see docs/recording-safety.md
+    #[test]
+    fn iphone_녹음_형식_16khz_aac를_전사_엔진이_읽는다() {
+        let wav = scratch("c.wav");
+        sine_wav(&wav, 3);
+        let m4a = wav.with_extension("m4a");
+        let status = std::process::Command::new("/usr/bin/afconvert")
+            .args(["-f", "m4af", "-d", "aac@16000", "-c", "1", "-b", "32000"])
+            .arg(&wav)
+            .arg(&m4a)
+            .status()
+            .unwrap();
+        assert!(status.success());
+
+        let samples = crate::engine::audio::load_mono_16k(&m4a).unwrap();
+        assert!((samples.len() as i64 - 48_000).abs() < 3200, "{}", samples.len());
+    }
 }

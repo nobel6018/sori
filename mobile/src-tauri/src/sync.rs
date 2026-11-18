@@ -309,9 +309,15 @@ impl Local for MobileLocal<'_> {
         self.store.dir(id).unwrap_or_default()
     }
 
-    /// 지금 녹음 중인 항목만 건너뛴다. 휴대폰은 처리(받아 적기)를 하지 않는다
+    /// 녹음 중이거나 구간 파일을 아직 audio.m4a로 합치지 못한 항목은 건너뛴다. 덜 된 오디오를 올리면
+    /// 클라우드에 오디오가 이미 있다고 보고 다시 올리지 않아, 완성본이 영영 올라가지 않는다(docs/recording-safety.md).
+    /// 휴대폰은 처리(받아 적기)를 하지 않는다
     fn is_busy(&self, id: &str) -> bool {
-        self.app.state::<AppState>().recording.lock().unwrap().as_deref() == Some(id)
+        let state = self.app.state::<AppState>();
+        if state.recording.lock().unwrap().as_deref() == Some(id) || state.finishing.lock().unwrap().contains(id) {
+            return true;
+        }
+        self.store.read(id).is_ok_and(|m| matches!(m["status"].as_str(), Some("recording") | Some("finishing")))
     }
 
     fn read_meta(&self, id: &str) -> Result<Value> {

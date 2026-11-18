@@ -109,6 +109,11 @@ export function Detail({ id, allTags, onBack }: { id: string; allTags: [string, 
 
         {detail.audioAvailable ? (
           <audio ref={attachAudio} className="player" controls preload="metadata" src={convertFileSrc(detail.audioPath)} />
+        ) : meta.status === "finishing" ? (
+          <p className="muted small">
+            녹음 파일을 저장하는 중입니다.
+            {meta.finishError && ` 저장하지 못했지만 녹음은 이 iPhone에 남아 있고, 앱을 다시 열면 다시 저장합니다. (${meta.finishError})`}
+          </p>
         ) : (
           <AudioDownload id={id} onDone={load} />
         )}

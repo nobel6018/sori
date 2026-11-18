@@ -22,6 +22,8 @@ export interface RecordingDetail {
 export interface RecorderState {
   id: string | null;
   recording: boolean;
+  /** 전화 같은 인터럽션으로 멈춰 있다. 통화가 끝나거나 앱을 열면 이어진다 */
+  paused: boolean;
   time: number;
   level: number;
 }
