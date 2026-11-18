@@ -60,6 +60,9 @@ export const api = {
   getPreferences: () => invoke<Preferences>("get_preferences"),
   setPreferences: (preferences: Preferences) => invoke<void>("set_preferences", { preferences }),
   deleteRecording: (id: string) => invoke<void>("delete_recording", { id }),
+  /** iOS 알림창으로 묻는다. window.confirm은 iOS 웹뷰에서 창 없이 늘 false라 쓰지 않는다 */
+  confirm: (title: string, message: string | null, ok: string, destructive = false) =>
+    invoke<boolean>("confirm_dialog", { title, message, ok, destructive }),
   addNote: (id: string, time: number | null, text: string) => invoke<Recording>("add_note", { id, time, text }),
   deleteNote: (id: string, noteId: string) => invoke<Recording>("delete_note", { id, noteId }),
   startRecording: () => invoke<Recording>("start_recording"),

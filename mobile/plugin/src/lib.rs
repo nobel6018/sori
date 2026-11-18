@@ -209,6 +209,19 @@ mod native {
             self.call("transcribePreview", serde_json::json!({ "path": path }))
         }
 
+        /// iOS 알림창으로 묻는다. 확인을 누르면 true. 웹뷰의 window.confirm은 iOS에서 창 없이 늘 false다
+        pub fn confirm(&self, title: &str, message: Option<&str>, ok: &str, destructive: bool) -> crate::Result<bool> {
+            #[derive(serde::Deserialize)]
+            struct Answer {
+                ok: bool,
+            }
+            self.call::<Answer>(
+                "confirm",
+                serde_json::json!({ "title": title, "message": message, "ok": ok, "destructive": destructive }),
+            )
+            .map(|a| a.ok)
+        }
+
         /// 가벼운 진동(당겨서 새로고침)
         pub fn haptic(&self) -> crate::Result<()> {
             self.call::<Empty>("haptic", serde_json::json!({})).map(|_| ())
@@ -261,6 +274,9 @@ mod native {
         }
         pub fn haptic(&self) -> crate::Result<()> {
             Ok(())
+        }
+        pub fn confirm(&self, _: &str, _: Option<&str>, _: &str, _: bool) -> crate::Result<bool> {
+            Err(Error::Unsupported)
         }
         pub fn current_location(&self) -> crate::Result<Fix> {
             Ok(Fix::default())

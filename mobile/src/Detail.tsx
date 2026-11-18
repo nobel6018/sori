@@ -61,8 +61,9 @@ export function Detail({ id, allTags, onBack }: { id: string; allTags: [string, 
 
   const meta = detail.meta;
   const remove = async () => {
-    if (!confirm(`"${meta.title}" 녹음을 지울까요? 동기화하면 다른 기기에서도 지워집니다.`)) return;
     try {
+      const ok = await api.confirm(`"${meta.title}" 녹음을 지울까요?`, "동기화하면 다른 기기에서도 지워집니다.", "지우기", true);
+      if (!ok) return;
       await api.deleteRecording(id);
       onBack();
     } catch (e) {

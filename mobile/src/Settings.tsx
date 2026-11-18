@@ -28,8 +28,13 @@ export function Settings({ sync, onBack }: { sync: SyncStatus | null; onBack: ()
   };
 
   const useLocal = async () => {
-    if (!confirm("동기화를 끌까요? 이미 받은 녹음은 이 기기에 남습니다.")) return;
-    await api.useLocalOnly().catch((e) => setError(String(e)));
+    try {
+      const ok = await api.confirm("동기화를 끌까요?", "이미 받은 녹음은 이 기기에 남습니다.", "끄기");
+      if (!ok) return;
+      await api.useLocalOnly();
+    } catch (e) {
+      setError(String(e));
+    }
   };
 
   return (

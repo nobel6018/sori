@@ -17,6 +17,15 @@ class UrlArgs: Decodable {
   let url: String
 }
 
+class ConfirmArgs: Decodable {
+  let title: String
+  let message: String?
+  /// 확인 버튼 글자(예: "지우기")
+  let ok: String
+  /// 확인 버튼을 빨갛게(지우기처럼 되돌릴 수 없는 일)
+  let destructive: Bool?
+}
+
 class StartArgs: Decodable {
   let path: String
   /// 단축어, 동작 버튼으로 앱 밖에서 시작했다
@@ -302,6 +311,26 @@ extension SoriNativePlugin {
     onMain {
       UIImpactFeedbackGenerator(style: .light).impactOccurred()
       invoke.resolve()
+    }
+  }
+
+  /// iOS 알림창으로 묻는다. 웹뷰(wry)가 iOS에서 window.confirm을 구현하지 않아 confirm()은 창 없이 늘 false였다.
+  /// 그래서 녹음 삭제, 동기화 끄기 버튼이 아무 반응이 없었다(0.15.1까지)
+  @objc public func confirm(_ invoke: Invoke) throws {
+    let args = try invoke.parseArgs(ConfirmArgs.self)
+    onMain {
+      guard var top = self.manager.viewController else {
+        invoke.reject("확인 창을 띄울 화면이 없습니다")
+        return
+      }
+      while let presented = top.presentedViewController { top = presented }
+      let alert = UIAlertController(title: args.title, message: args.message, preferredStyle: .alert)
+      alert.addAction(UIAlertAction(title: "취소", style: .cancel) { _ in invoke.resolve(["ok": false]) })
+      alert.addAction(
+        UIAlertAction(title: args.ok, style: args.destructive == true ? .destructive : .default) { _ in
+          invoke.resolve(["ok": true])
+        })
+      top.present(alert, animated: true)
     }
   }
 

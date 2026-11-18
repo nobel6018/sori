@@ -230,6 +230,16 @@ async fn haptic(app: AppHandle) {
     let _ = tauri::async_runtime::spawn_blocking(move || app.sori_native().haptic()).await;
 }
 
+/// iOS 알림창으로 묻는다. 웹뷰의 window.confirm은 iOS에서 창 없이 늘 false라 쓰지 않는다
+#[tauri::command]
+async fn confirm_dialog(app: AppHandle, title: String, message: Option<String>, ok: String, destructive: bool) -> CmdResult<bool> {
+    tauri::async_runtime::spawn_blocking(move || {
+        app.sori_native().confirm(&title, message.as_deref(), &ok, destructive).map_err(err)
+    })
+    .await
+    .map_err(err)?
+}
+
 /// 지도 같은 바깥 링크를 연다. 화면(WebView) 안에서 열면 앱 화면이 그 페이지로 바뀐다
 #[tauri::command]
 async fn open_url(app: AppHandle, url: String) -> CmdResult<()> {
@@ -602,6 +612,7 @@ pub fn run() {
             set_tags,
             open_url,
             haptic,
+            confirm_dialog,
             get_preferences,
             set_preferences,
             preview_transcribe,
