@@ -1,6 +1,6 @@
 import { BulkBadge } from "./BulkProgress";
 import { ReactNode, useEffect, useMemo, useState } from "react";
-import { api, formatTime, ProgressEvent, Recording, Status, SyncStatus } from "../api";
+import { api, formatTime, startedAt, ProgressEvent, Recording, Status, SyncStatus } from "../api";
 import { describe } from "./SyncSettings";
 import { IS_MAC, SHORTCUTS, shortcutLabel } from "../shortcuts";
 import { buildTagTree, matchesTag } from "../tags";
@@ -133,7 +133,7 @@ export function Sidebar({
                       : STATUS_LABEL[r.status]}
                   </span>
                   {r.duration != null && <span>{formatTime(r.duration)}</span>}
-                  <span>{new Date(r.createdAt).toLocaleDateString("ko-KR")}</span>
+                  <span>{startedAt(r).toLocaleDateString("ko-KR")}</span>
                 </span>
                 {!!r.tags?.length && (
                   <span className="recording-tags" title={r.tags.join(", ")}>

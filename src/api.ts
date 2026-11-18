@@ -5,12 +5,20 @@ import { listen } from "@tauri-apps/api/event";
 export type Status = "recording" | "new" | "processing" | "done" | "failed";
 export type Stage = "waiting" | "decoding" | "diarizing" | "transcribing";
 
+/** 화면에 보여 줄 녹음 시각. 가져온 파일은 가져온 시각이 아니라 실제 녹음 시각을 쓴다 */
+export function startedAt(r: Pick<Recording, "createdAt" | "recordedAt">): Date {
+  return new Date(r.recordedAt ?? r.createdAt);
+}
+
 export interface Recording {
   id: string;
   /** 사람이 부르기 쉬운 번호(#12). 만든 순서대로 붙는다 */
   number: number;
   title: string;
+  /** 녹음 폴더를 만든(가져온) 시각. 목록 순서와 번호가 이것을 따른다 */
   createdAt: string;
+  /** 가져온 파일의 실제 녹음 시작 시각. 앱에서 녹음했거나 찾지 못하면 없다. @see docs/recorded-at.md */
+  recordedAt?: string;
   sourceName: string;
   audioFile: string;
   status: Status;

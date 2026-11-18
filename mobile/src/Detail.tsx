@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { formatBytes, formatTime } from "../../src/api";
-import { toBlocks } from "../../src/markdown";
+import { formatBytes, formatTime, startedAt } from "../../src/api";
+import { Block, findActive, toBlocks } from "../../src/markdown";
 import { TagEditor } from "../../src/components/TagEditor";
 import { mapUrl } from "../../src/tags";
 import { api, Recording, RecordingDetail } from "./api";
@@ -18,7 +18,13 @@ export function Detail({ id, allTags, onBack }: { id: string; allTags: [string, 
   const [detail, setDetail] = useState<RecordingDetail | null>(null);
   const [tab, setTab] = useState<Tab>("transcript");
   const [error, setError] = useState<string | null>(null);
-  const audio = useRef<HTMLAudioElement>(null);
+  const audio = useRef<HTMLAudioElement | null>(null);
+  // 전사 화면이 재생 위치를 따라가려면 오디오 요소가 붙은 때를 알아야 해서 상태로도 둔다
+  const [audioEl, setAudioEl] = useState<HTMLAudioElement | null>(null);
+  const attachAudio = useCallback((el: HTMLAudioElement | null) => {
+    audio.current = el;
+    setAudioEl(el);
+  }, []);
 
   const load = useCallback(() => {
     api.getRecording(id).then(setDetail).catch((e) => setError(String(e)));
@@ -79,7 +85,7 @@ export function Detail({ id, allTags, onBack }: { id: string; allTags: [string, 
         <Title meta={meta} onError={setError} />
         <p className="meta-line muted small">
           <span>#{meta.number}</span>
-          <span>{new Date(meta.createdAt).toLocaleString("ko-KR", { dateStyle: "medium", timeStyle: "short" })}</span>
+          <span>{startedAt(meta).toLocaleString("ko-KR", { dateStyle: "medium", timeStyle: "short" })}</span>
           {meta.duration != null && <span>{formatTime(meta.duration)}</span>}
         </p>
         <TagEditor
@@ -102,7 +108,7 @@ export function Detail({ id, allTags, onBack }: { id: string; allTags: [string, 
         {error && <p className="error">{error}</p>}
 
         {detail.audioAvailable ? (
-          <audio ref={audio} className="player" controls preload="metadata" src={convertFileSrc(detail.audioPath)} />
+          <audio ref={attachAudio} className="player" controls preload="metadata" src={convertFileSrc(detail.audioPath)} />
         ) : (
           <AudioDownload id={id} onDone={load} />
         )}
@@ -121,7 +127,7 @@ export function Detail({ id, allTags, onBack }: { id: string; allTags: [string, 
           ))}
         </nav>
 
-        {tab === "transcript" && <TranscriptView detail={detail} onSeek={seek} onReload={load} />}
+        {tab === "transcript" && <TranscriptView detail={detail} audio={audioEl} onSeek={seek} onReload={load} />}
         {tab === "summary" && <SummaryView detail={detail} />}
         {tab === "notes" && (
           <NotesView detail={detail} onSeek={seek} currentTime={() => audio.current?.currentTime ?? 0} onError={setError} />
@@ -198,8 +204,112 @@ function AudioDownload({ id, onDone }: { id: string; onDone: () => void }) {
   );
 }
 
-function TranscriptView({ detail, onSeek, onReload }: { detail: RecordingDetail; onSeek: (t: number) => void; onReload: () => void }) {
+const FOLLOW_KEY = "sori.follow";
+
+/**
+ * 재생 중 말하는 블록을 칠하고, 화면 밖으로 나가면 따라 내려간다(데스크톱 자동 스크롤과 같은 설정 이름).
+ * 손으로 스크롤하면 그동안은 따라가지 않고 "지금 위치로" 버튼을 띄운다. 터치 화면에서는 따라가기가
+ * 몇 초마다 손가락과 싸우기 때문이다. @see docs/mobile.md
+ */
+function usePlaybackFollow(audio: HTMLAudioElement | null, blocks: Block[]) {
+  const [active, setActive] = useState(-1);
+  const [playing, setPlaying] = useState(false);
+  const [follow, setFollow] = useState(() => {
+    try {
+      return localStorage.getItem(FOLLOW_KEY) !== "off";
+    } catch {
+      return true;
+    }
+  });
+  const [detached, setDetached] = useState(false);
+  const refs = useRef<(HTMLElement | null)[]>([]);
+
+  useEffect(() => {
+    if (!audio) return;
+    // timeupdate는 초에 4번쯤 오지만 블록이 바뀔 때만 다시 그린다
+    const update = () => setActive(findActive(blocks, audio.currentTime));
+    const play = () => setPlaying(true);
+    const stop = () => setPlaying(false);
+    update();
+    setPlaying(!audio.paused);
+    audio.addEventListener("timeupdate", update);
+    audio.addEventListener("seeked", update);
+    audio.addEventListener("play", play);
+    audio.addEventListener("pause", stop);
+    audio.addEventListener("ended", stop);
+    return () => {
+      audio.removeEventListener("timeupdate", update);
+      audio.removeEventListener("seeked", update);
+      audio.removeEventListener("play", play);
+      audio.removeEventListener("pause", stop);
+      audio.removeEventListener("ended", stop);
+    };
+  }, [audio, blocks]);
+
+  const following = follow && playing && !detached;
+
+  // 코드로 하는 스크롤은 touchmove를 내지 않으므로 손가락으로 민 것만 잡힌다
+  useEffect(() => {
+    if (!follow || !playing) return;
+    const leave = () => setDetached(true);
+    window.addEventListener("touchmove", leave, { passive: true });
+    return () => window.removeEventListener("touchmove", leave);
+  }, [follow, playing]);
+
+  const scrollToActive = useCallback(
+    (always: boolean) => {
+      const el = refs.current[active];
+      if (!el) return;
+      // 위에 붙어 있는 막대와 탭 아래부터가 보이는 곳이다
+      const tabs = document.querySelector<HTMLElement>(".tabs");
+      const top = tabs?.getBoundingClientRect().bottom ?? 0;
+      const box = el.getBoundingClientRect();
+      if (always || box.top < top || box.bottom > window.innerHeight) {
+        // 블록 시작을 탭 바로 아래에 둔다. 다음 블록들이 아래에 보여 스크롤이 덜 잦다.
+        // 맨 위에서 내려가면 탭이 스크롤 도중에 위로 붙으므로, 지금 위치가 아니라 붙었을 때 위치로 잰다
+        const stuck = tabs ? parseFloat(getComputedStyle(tabs).top) + tabs.offsetHeight : 0;
+        window.scrollBy({ top: box.top - stuck - 8, behavior: "smooth" });
+      }
+    },
+    [active],
+  );
+
+  useEffect(() => {
+    if (following && active >= 0) scrollToActive(false);
+  }, [following, active, scrollToActive]);
+
+  const toggleFollow = () => {
+    const next = !follow;
+    setFollow(next);
+    setDetached(false);
+    try {
+      localStorage.setItem(FOLLOW_KEY, next ? "on" : "off");
+    } catch {
+      // 저장하지 못해도 이번 화면에서는 켜고 끈 대로 동작한다
+    }
+  };
+
+  const resume = () => {
+    setDetached(false);
+    scrollToActive(true);
+  };
+
+  return { active, refs, follow, toggleFollow, showResume: follow && playing && detached && active >= 0, resume };
+}
+
+function TranscriptView({
+  detail,
+  audio,
+  onSeek,
+  onReload,
+}: {
+  detail: RecordingDetail;
+  audio: HTMLAudioElement | null;
+  onSeek: (t: number) => void;
+  onReload: () => void;
+}) {
   const blocks = useMemo(() => toBlocks(detail.transcript?.utterances ?? []), [detail.transcript]);
+  const { active, refs, follow, toggleFollow, showResume, resume } = usePlaybackFollow(audio, blocks);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   if (!detail.transcript) {
@@ -233,20 +343,62 @@ function TranscriptView({ detail, onSeek, onReload }: { detail: RecordingDetail;
       {detail.transcriptPreview && (
         <p className="preview-note muted small">iPhone에서 만든 미리 전사입니다. 화자는 나누지 않았습니다. Mac의 sori가 받아 적으면 화자를 나눈 전사로 바뀝니다.</p>
       )}
-      {blocks.map((b) => (
-        <section key={`${b.start}-${b.speaker}`} className="block">
-          <button className="block-head" onClick={() => onSeek(b.start)}>
-            <span className="speaker" style={{ color: `var(--spk-${b.speaker % 8})` }}>
-              {speakerName(detail.meta, b.speaker)}
-            </span>
-            <span className="muted">{formatTime(b.start)}</span>
-          </button>
-          <p>{b.utterances.map((u) => u.text.trim()).join(" ")}</p>
-        </section>
+      {audio && (
+        <button className={`follow-toggle ${follow ? "on" : ""}`} aria-pressed={follow} onClick={toggleFollow}>
+          자동 스크롤 {follow ? "켬" : "끔"}
+        </button>
+      )}
+      {blocks.map((b, i) => (
+        <BlockView
+          key={`${b.start}-${b.speaker}`}
+          block={b}
+          name={speakerName(detail.meta, b.speaker)}
+          active={i === active}
+          onSeek={onSeek}
+          blockRef={(el) => {
+            refs.current[i] = el;
+          }}
+        />
       ))}
+      {showResume && (
+        <button className="follow-resume" onClick={resume}>
+          지금 위치로
+        </button>
+      )}
     </div>
   );
 }
+
+/** 재생 중 블록이 바뀔 때 바뀐 두 블록만 다시 그린다. 1시간 회의면 블록이 수백 개다 */
+const BlockView = memo(
+  function BlockView({
+    block,
+    name,
+    active,
+    onSeek,
+    blockRef,
+  }: {
+    block: Block;
+    name: string;
+    active: boolean;
+    onSeek: (t: number) => void;
+    blockRef: (el: HTMLElement | null) => void;
+  }) {
+    return (
+      <section ref={blockRef} className={`block ${active ? "active" : ""}`}>
+        <button className="block-head" onClick={() => onSeek(block.start)}>
+          <span className="speaker" style={{ color: `var(--spk-${block.speaker % 8})` }}>
+            {name}
+          </span>
+          <span className="muted">{formatTime(block.start)}</span>
+        </button>
+        <p>{block.utterances.map((u) => u.text.trim()).join(" ")}</p>
+      </section>
+    );
+  },
+  // blockRef, onSeek은 그릴 때마다 새로 만들어지지만 하는 일은 같으므로 비교하지 않는다
+  (a, b) => a.block === b.block && a.name === b.name && a.active === b.active,
+);
 
 function SummaryView({ detail }: { detail: RecordingDetail }) {
   const [index, setIndex] = useState(detail.summaries.length - 1);

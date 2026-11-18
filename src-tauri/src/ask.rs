@@ -59,7 +59,7 @@ pub fn all_prompt(question: &str, candidates: &[Candidate]) -> (String, Vec<Sour
         let mut part = format!(
             "<recording id=\"{key}\" title=\"{}\" date=\"{}\">\n",
             c.recording.title,
-            c.recording.created_at.with_timezone(&chrono::Local).format("%Y-%m-%d %H:%M")
+            c.recording.started_at().with_timezone(&chrono::Local).format("%Y-%m-%d %H:%M")
         );
         match (c.summary, c.transcript) {
             (Some(s), _) => part.push_str(&format!("요약:\n{}\n", truncate(&s.markdown, SUMMARY_CHARS))),

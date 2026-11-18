@@ -496,6 +496,44 @@ button.note-time {
 .transcript .block {
   margin: 14px 0;
 }
+/* 지금 재생 중인 블록. 그림자로 칠해 둘레가 늘어나도 줄이 밀리지 않는다 */
+.transcript .block.active {
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 8px var(--accent-soft);
+  border-radius: 2px;
+}
+.follow-toggle {
+  display: block;
+  margin: 10px 0 0 auto;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 14px;
+}
+.follow-toggle.on {
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+/* 손으로 스크롤해 따라가기를 멈췄을 때 다시 붙는 버튼 */
+.follow-resume {
+  position: fixed;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom) + 20px);
+  transform: translateX(-50%);
+  z-index: 6;
+  min-height: 44px;
+  padding: 0 20px;
+  border: none;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
 .block-head {
   display: inline-flex;
   align-items: baseline;

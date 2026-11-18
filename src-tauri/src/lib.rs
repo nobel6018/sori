@@ -14,6 +14,7 @@ pub mod search;
 pub mod summarize;
 mod tagger;
 mod sync;
+mod recorded_at;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -568,7 +569,7 @@ async fn organize_recording(app: AppHandle, id: String, force: Option<bool>) -> 
     // 겹치는 일정은 후보로만 넘기고, 대화와 맞는지는 AI가 확인해 고른다(같은 시간 다른 일정에 갔을 수 있다).
     // 정리할 때마다 다시 찾는다. 처음에는 macOS가 캘린더 허락을 묻는다. @see docs/organize.md
     let events = if settings.use_calendar {
-        let start = recording.created_at;
+        let start = recording.started_at();
         let end = start + chrono::Duration::milliseconds((recording.duration.unwrap_or(0.0) * 1000.0) as i64);
         tauri::async_runtime::spawn_blocking(move || calendar::events_for(start, end)).await.unwrap_or_default()
     } else {
@@ -1262,6 +1263,7 @@ pub fn run() {
             let voices_path = store.voices_path();
 
             store.assign_missing_numbers()?;
+            store.fill_recorded_at();
             // 처리 도중 앱이 꺼졌던 녹음은 다시 시작할 수 있게 실패로 돌려 둔다
             for mut r in store.list()?.into_iter() {
                 match r.status {

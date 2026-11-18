@@ -151,7 +151,7 @@ export function Recordings({ searchable }: { searchable: boolean }) {
       {groups?.length === 0 && <List.EmptyView title={query ? "찾은 내용이 없습니다" : "녹음이 없습니다"} />}
       {query
         ? groups?.map((g) => (
-            <List.Section key={g.recording.id} title={g.recording.title} subtitle={new Date(g.recording.createdAt).toLocaleDateString("ko-KR")}>
+            <List.Section key={g.recording.id} title={g.recording.title} subtitle={new Date(g.recording.recordedAt ?? g.recording.createdAt).toLocaleDateString("ko-KR")}>
               <List.Item id={g.recording.id} title={g.recording.title} icon={Icon.Microphone} detail={<List.Item.Detail markdown={markdown} />} actions={actions(g.recording)} />
               {g.hits.map((h, i) => (
                 <List.Item
@@ -177,7 +177,7 @@ export function Recordings({ searchable }: { searchable: boolean }) {
                 { tag: { value: STATUS[r.status].text, color: STATUS[r.status].color } },
                 ...(r.duration != null ? [{ text: formatTime(r.duration) }] : []),
               ]}
-              keywords={[new Date(r.createdAt).toLocaleDateString("ko-KR"), ...(r.number ? [`#${r.number}`, String(r.number)] : [])]}
+              keywords={[new Date(r.recordedAt ?? r.createdAt).toLocaleDateString("ko-KR"), ...(r.number ? [`#${r.number}`, String(r.number)] : [])]}
               detail={<List.Item.Detail markdown={markdown} />}
               actions={actions(r)}
             />

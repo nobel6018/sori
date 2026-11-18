@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { formatTime } from "../../src/api";
+import { formatTime, startedAt } from "../../src/api";
 import { buildTagTree, matchesTag, TagNode, UNTAGGED } from "../../src/tags";
 import { RecordingItem, SyncStatus, syncLabel } from "./api";
 import { PullToRefresh } from "./PullToRefresh";
@@ -75,7 +75,7 @@ export function List({
                     <span className="row-meta">
                       <StatusChip item={r} previewing={previewing === r.id} />
                       {r.duration != null && <span>{formatTime(r.duration)}</span>}
-                      <span>{new Date(r.createdAt).toLocaleDateString("ko-KR", { month: "short", day: "numeric" })}</span>
+                      <span>{startedAt(r).toLocaleDateString("ko-KR", { month: "short", day: "numeric" })}</span>
                       {!r.audioAvailable && r.status !== "recording" && <span className="muted">클라우드</span>}
                     </span>
                     {!!r.tags?.length && <span className="row-tags">{r.tags.join(", ")}</span>}

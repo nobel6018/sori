@@ -1,10 +1,23 @@
-import { formatTime, RecordingDetail, Recording, speakerName, Utterance } from "./api";
+import { formatTime, startedAt, RecordingDetail, Recording, speakerName, Utterance } from "./api";
 
 export interface Block {
   speaker: number;
   start: number;
   end: number;
   utterances: Utterance[];
+}
+
+/** 지금 재생 위치가 들어 있는 블록. 블록은 시간순이라 이진 탐색한다 */
+export function findActive(blocks: Block[], time: number): number {
+  let lo = 0;
+  let hi = blocks.length - 1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (time < blocks[mid].start) hi = mid - 1;
+    else if (time >= blocks[mid].end) lo = mid + 1;
+    else return mid;
+  }
+  return -1;
 }
 
 /** 같은 화자가 이어서 말한 발화를 한 덩어리로 묶는다 */
@@ -36,7 +49,7 @@ export function transcriptMarkdown(recording: Recording, utterances: Utterance[]
 export function recordingMarkdown(detail: RecordingDetail): string {
   const { recording, transcript, summary } = detail;
   const lines = [`# ${recording.title}`, ""];
-  const date = new Date(recording.createdAt).toLocaleString("ko-KR", { dateStyle: "medium", timeStyle: "short" });
+  const date = startedAt(recording).toLocaleString("ko-KR", { dateStyle: "medium", timeStyle: "short" });
   if (recording.number) lines.push(`- 번호: #${recording.number}`);
   lines.push(`- 날짜: ${date}`);
   if (recording.duration != null) lines.push(`- 길이: ${formatTime(recording.duration)}`);

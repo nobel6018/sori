@@ -29,7 +29,12 @@ pub struct Recording {
     #[serde(default)]
     pub number: u32,
     pub title: String,
+    /// 녹음 폴더를 만든 시각. 가져온 파일이면 가져온 시각이다. 목록 순서와 번호가 이것을 따른다
     pub created_at: DateTime<Utc>,
+    /// 가져온 파일의 실제 녹음 시작 시각(파일 이름, mp4 헤더에서 찾음). 앱에서 녹음했거나 못 찾으면 없다
+    /// @see docs/recorded-at.md
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recorded_at: Option<DateTime<Utc>>,
     pub source_name: String,
     /// 녹음 폴더 안의 파일 이름. 원본을 복사해 두므로 원본을 지워도 재생된다
     pub audio_file: String,
@@ -124,11 +129,22 @@ pub struct Location {
 }
 
 impl Recording {
+    /// 실제로 녹음을 시작한 시각. 캘린더 일정 찾기, AI에 넘기는 날짜에 쓴다
+    pub fn started_at(&self) -> DateTime<Utc> {
+        self.recorded_at.unwrap_or(self.created_at)
+    }
+
+    /// 파일을 가져와 만든 녹음인지. 앱 녹음의 sourceName은 "마이크 녹음", "iPhone"처럼 확장자가 없다
+    fn imported(&self) -> bool {
+        self.tracks.is_empty() && Path::new(&self.source_name).extension().is_some()
+    }
+
     /// sori-sync의 SHARED 필드가 같은지
     fn same_shared(&self, other: &Recording) -> bool {
         self.number == other.number
             && self.title == other.title
             && self.created_at == other.created_at
+            && self.recorded_at == other.recorded_at
             && self.source_name == other.source_name
             && self.duration == other.duration
             && self.speaker_names == other.speaker_names
@@ -320,6 +336,18 @@ impl Store {
         Ok(())
     }
 
+    /// 0.14.1 이하에서 가져온 녹음에 녹음 시각을 채운다. 찾지 못한 녹음은 다음 시작 때 다시 보는데,
+    /// 파일 이름과 mp4 머리만 읽어 녹음 수십 개도 금방 끝난다
+    pub fn fill_recorded_at(&self) {
+        let Ok(all) = self.list() else { return };
+        for r in all.iter().filter(|r| r.recorded_at.is_none() && r.imported()) {
+            let Ok(audio) = self.audio_path(r) else { continue };
+            if let Some(t) = crate::recorded_at::detect(&r.source_name, &audio) {
+                let _ = self.update(&r.id, |m| m.recorded_at = Some(t));
+            }
+        }
+    }
+
     /// "#12", "12", 또는 id로 녹음을 찾는다
     pub fn resolve(&self, key: &str) -> Result<Recording> {
         let key = key.trim();
@@ -414,11 +442,15 @@ impl Store {
         let audio_file = if ext.is_empty() { "audio".to_string() } else { format!("audio.{ext}") };
         let title = source.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_else(|| source_name.clone());
 
-        let recording = self.create(title, source_name, audio_file, Status::New)?;
+        let recorded_at = crate::recorded_at::detect(&source_name, source);
+        let mut recording = self.create(title, source_name, audio_file, Status::New)?;
         let dest = self.audio_path(&recording)?;
         if let Err(e) = fs::copy(source, &dest) {
             let _ = self.delete(&recording.id);
             return Err(e).wrap_err_with(|| format!("파일을 복사하지 못했습니다: {}", source.display()));
+        }
+        if recorded_at.is_some() {
+            recording = self.update(&recording.id, |r| r.recorded_at = recorded_at)?;
         }
         Ok(recording)
     }
@@ -446,6 +478,7 @@ impl Store {
             number,
             title,
             created_at: Utc::now(),
+            recorded_at: None,
             source_name,
             audio_file,
             status,

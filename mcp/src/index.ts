@@ -65,7 +65,7 @@ function activityText(a: Activity | null): string | null {
 }
 
 function dateOf(r: Recording): string {
-  return new Date(r.createdAt).toLocaleString("ko-KR", { dateStyle: "medium", timeStyle: "short" });
+  return new Date(r.recordedAt ?? r.createdAt).toLocaleString("ko-KR", { dateStyle: "medium", timeStyle: "short" });
 }
 
 async function statusLine(r: Recording): Promise<string> {
@@ -205,7 +205,7 @@ server.registerTool(
     const wanted = tag ? normalize(tag).replace(/\/+$/, "") : null;
     const all = (await listRecordings())
       .filter((r) => {
-        const t = new Date(r.createdAt).getTime();
+        const t = new Date(r.recordedAt ?? r.createdAt).getTime();
         if (t < from || t > to) return false;
         if (status && r.status !== status) return false;
         if (wanted && !(r.tags ?? []).some((x) => normalize(x) === wanted || normalize(x).startsWith(`${wanted}/`))) return false;

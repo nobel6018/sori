@@ -1,4 +1,4 @@
-import { formatTime, RecordingDetail, speakerName, Utterance } from "./api";
+import { formatTime, startedAt, RecordingDetail, speakerName, Utterance } from "./api";
 import { recordingMarkdown, toBlocks } from "./markdown";
 
 // 녹음을 파일로 내보낸다. 자막(SRT, VTT)은 발화 하나를 자막 한 칸으로 쓴다
@@ -83,7 +83,7 @@ async function docx(detail: RecordingDetail): Promise<Uint8Array> {
         : new TextRun({ text: part, ...base }),
     );
   const children: InstanceType<typeof Paragraph>[] = [new Paragraph({ text: recording.title, heading: HeadingLevel.TITLE })];
-  const info = [new Date(recording.createdAt).toLocaleString("ko-KR")];
+  const info = [startedAt(recording).toLocaleString("ko-KR")];
   if (recording.duration != null) info.push(`길이 ${formatTime(recording.duration)}`);
   children.push(new Paragraph({ children: [new TextRun({ text: info.join(", "), color: "777777" })] }));
 

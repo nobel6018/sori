@@ -1,7 +1,7 @@
 import { memo, useEffect, useMemo, useRef } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { formatTime, Note, Recording, speakerName } from "../api";
-import { Block } from "../markdown";
+import { Block, findActive } from "../markdown";
 
 interface Props {
   blocks: Block[];
@@ -14,19 +14,6 @@ interface Props {
   /** 블록 안에 메모 표시를 단다 */
   notes: Note[];
   onSeek: (time: number) => void;
-}
-
-/** 지금 재생 위치가 들어 있는 블록. 블록은 시간순이라 이진 탐색한다 */
-function findActive(blocks: Block[], time: number): number {
-  let lo = 0;
-  let hi = blocks.length - 1;
-  while (lo <= hi) {
-    const mid = (lo + hi) >> 1;
-    if (time < blocks[mid].start) hi = mid - 1;
-    else if (time >= blocks[mid].end) lo = mid + 1;
-    else return mid;
-  }
-  return -1;
 }
 
 /**

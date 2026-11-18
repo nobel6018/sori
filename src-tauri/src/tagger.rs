@@ -164,7 +164,7 @@ pub fn build_prompt(
 쓰던 태그(녹음 수):\n{vocab_lines}\n\n\
 지금 제목: {}\n녹음 날짜: {}\n{place}{event}{}\n{summary_block}<transcript>\n{}\n</transcript>\n",
         recording.title,
-        recording.created_at.with_timezone(&chrono::Local).format("%Y-%m-%d (%a) %H:%M"),
+        recording.started_at().with_timezone(&chrono::Local).format("%Y-%m-%d (%a) %H:%M"),
         summarize::format_notes(recording),
         excerpt(&text, summary.is_some()),
     )

@@ -1,7 +1,7 @@
 import { KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { api, formatTime, RecordingDetail, RecordingHits, speakerName } from "../api";
+import { api, formatTime, startedAt, RecordingDetail, RecordingHits, speakerName } from "../api";
 import { recordingMarkdown, toBlocks, transcriptMarkdown } from "../markdown";
 import { IS_MAC } from "../shortcuts";
 
@@ -161,7 +161,7 @@ export function QuickOpen({ initialQuery, onClose, onOpen }: Props) {
                         <Highlight text={rec.title} query={r.group.titleMatch ? query : ""} />
                       </span>
                       <span className="quick-meta">
-                        #{rec.number}, {new Date(rec.createdAt).toLocaleDateString("ko-KR")}
+                        #{rec.number}, {startedAt(rec).toLocaleDateString("ko-KR")}
                         {rec.duration != null && `, ${formatTime(rec.duration)}`}
                         {r.group.total > r.group.hits.length && `, ${r.group.total}곳 중 ${r.group.hits.length}곳`}
                       </span>

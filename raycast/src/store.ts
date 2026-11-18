@@ -12,6 +12,8 @@ export interface Recording {
   number?: number;
   title: string;
   createdAt: string;
+  /** 가져온 파일의 실제 녹음 시각 */
+  recordedAt?: string;
   status: "recording" | "new" | "processing" | "done" | "failed";
   duration: number | null;
   speakerNames: Record<string, string>;
